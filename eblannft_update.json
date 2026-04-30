@@ -1,6 +1,6 @@
 {
-  "version": "1.1.6",
-  "notes": "Fix runtime reload after updates and refine TON gift sheet layout",
+  "version": "1.1.7",
+  "notes": "Fix mojibake Cyrillic in settings screens and keep update reload fix",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.6"
+__version__ = "1.1.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -4930,23 +4930,44 @@ class NftClonerPlugin(BasePlugin):
             text = text.replace("\ufeff", "")
         except:
             pass
+        return self._repair_mojibake_text(text)
+
+    def _repair_mojibake_text(self, value, fallback=""):
+        try:
+            text = str(value if value is not None else fallback)
+        except:
+            text = str(fallback or "")
+        if not text:
+            text = str(fallback or "")
+        try:
+            text = text.replace("\ufeff", "")
+        except:
+            pass
 
         def _noise_score(src):
             try:
                 score = 0
-                for token in ["Ãƒ", "Ã", "Ã‘", "Ã¢", "â„¢"]:
-                    score += src.count(token)
+                for ch in str(src or ""):
+                    code = ord(ch)
+                    if 0x0400 <= code <= 0x04FF:
+                        score -= 3
+                    elif ch in ["Ã", "Ð", "Ñ", "â", "€", "™", "œ", "ž", "Ÿ", "¢", "Â"]:
+                        score += 12
+                    elif 0x80 <= code <= 0x9F:
+                        score += 8
+                    elif 0x00C0 <= code <= 0x017F:
+                        score += 4
                 return score
             except:
                 return 0
 
         cur = text
-        for _ in range(3):
+        for _ in range(4):
             best = cur
             best_score = _noise_score(cur)
-            for enc in ["latin-1", "cp1252"]:
+            for enc in ["cp1252", "latin-1"]:
                 try:
-                    cand = cur.encode(enc, errors="ignore").decode("utf-8", errors="ignore")
+                    cand = cur.encode(enc).decode("utf-8")
                 except:
                     continue
                 if not cand:
@@ -4961,16 +4982,47 @@ class NftClonerPlugin(BasePlugin):
 
         try:
             replacements = {
-                "Ã¢â‚¬Â¢": "\u2022",
-                "Ã¢â€žâ€“": "\u2116",
-                "Ã¢â‚¬â€": "-",
-                "Ã¢â‚¬â€œ": "-",
+                "â€¢": "\u2022",
+                "â€º": "\u203a",
+                "â„–": "\u2116",
+                "â€”": "-",
+                "â€“": "-",
+                "âœ“": "\u2713",
             }
             for src, dst in replacements.items():
                 cur = cur.replace(src, dst)
         except:
             pass
         return cur
+
+    def _normalize_settings_items(self, items):
+        def _fix_scalar(raw):
+            if isinstance(raw, str):
+                return self._repair_mojibake_text(raw)
+            return raw
+
+        def _fix_sequence(raw):
+            if isinstance(raw, list):
+                return [_fix_scalar(v) for v in raw]
+            if isinstance(raw, tuple):
+                return tuple(_fix_scalar(v) for v in raw)
+            return _fix_scalar(raw)
+
+        for item in list(items or []):
+            if item is None:
+                continue
+            for attr in ["text", "subtext", "title", "hint", "description", "placeholder"]:
+                try:
+                    if hasattr(item, attr):
+                        setattr(item, attr, _fix_scalar(getattr(item, attr)))
+                except:
+                    pass
+            try:
+                if hasattr(item, "options"):
+                    setattr(item, "options", _fix_sequence(getattr(item, "options")))
+            except:
+                pass
+        return items
 
 
 
@@ -12097,7 +12149,7 @@ class NftClonerPlugin(BasePlugin):
             gifts_text = f"{len(self.gift_library or [])} NFT"
         except:
             gifts_text = "\u043e\u0442\u043a\u0440\u044b\u0442\u044c"
-        return [
+        return self._normalize_settings_items([
             Divider(),
             Text(
                 text="ÐŸÐ¾Ð´Ð°Ñ€ÐºÐ¸",
@@ -12127,13 +12179,13 @@ class NftClonerPlugin(BasePlugin):
                 create_sub_fragment=self._create_service_settings_subfragment,
                 link_alias="eblannft_service_subfragment",
             ),
-        ]
+        ])
 
     def _create_profile_settings_subfragment(self, parent_view=None):
         username_status = self._display_nft_username() if self._is_nft_username_active() else self._state_short_text(False)
         number_status = self._display_nft_number() if self._is_nft_number_active() else self._state_short_text(False)
         rating_status = self._get_local_rating_label()
-        return [
+        return self._normalize_settings_items([
             Divider(text="Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð¿Ð¾Ð»Ñ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ Ð¸ Ð¾Ñ‚Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð²."),
             Text(
                 text="Username",
@@ -12163,10 +12215,10 @@ class NftClonerPlugin(BasePlugin):
                 icon="msg_delete",
                 on_change=lambda v: self._set_hide_official_gifts_local(v),
             ),
-        ]
+        ])
 
     def _create_data_settings_subfragment(self, parent_view=None):
-        return [
+        return self._normalize_settings_items([
             Divider(text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€ÑƒÐ¹Ñ‚Ðµ Ñ‚ÐµÐºÑƒÑ‰ÑƒÑŽ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½ÑƒÑŽ ÐºÐ¾Ð½Ñ„Ð¸Ð³ÑƒÑ€Ð°Ñ†Ð¸ÑŽ Ð¸Ð»Ð¸ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚Ðµ Ð³Ð¾Ñ‚Ð¾Ð²Ñ‹Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ."),
             Text(
                 text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ .profile",
@@ -12180,11 +12232,11 @@ class NftClonerPlugin(BasePlugin):
                 icon="msg_download",
                 on_click=lambda _: self._show_profile_import_dialog(),
             ),
-        ]
+        ])
 
     def _create_service_settings_subfragment(self, parent_view=None):
         rating_status = self._get_local_rating_label()
-        return [
+        return self._normalize_settings_items([
             Divider(text=f"ÐžÐ±ÑÐ»ÑƒÐ¶Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð° Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ñ‹Ðµ ÑÐ¸ÑÑ‚ÐµÐ¼Ð½Ñ‹Ðµ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ. Ð ÐµÐ¹Ñ‚Ð¸Ð½Ð³ ÑÐµÐ¹Ñ‡Ð°Ñ: {rating_status}."),
             Text(
                 text="ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³",
@@ -12199,7 +12251,7 @@ class NftClonerPlugin(BasePlugin):
                 on_click=lambda _: self._clear_cache(),
                 red=True,
             ),
-        ]
+        ])
 
     def _create_username_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_username_tokens()
@@ -12236,7 +12288,7 @@ class NftClonerPlugin(BasePlugin):
         if tokens:
             items.append(Text(text="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ", subtext="Ð£Ð±Ñ€Ð°Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ username Ð¸Ð· ÑÐ¿Ð¸ÑÐºÐ°", icon="msg_delete", on_click=lambda _: self._open_remove_nft_username_menu()))
             items.append(Text(text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÑ‘", subtext="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²ÑÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ðµ username", icon="msg_delete", on_click=lambda _: self._clear_all_nft_usernames(), red=True))
-        return items
+        return self._normalize_settings_items(items)
 
     def _create_number_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_number_tokens()
@@ -12273,25 +12325,25 @@ class NftClonerPlugin(BasePlugin):
         if tokens:
             items.append(Text(text="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ", subtext="Ð£Ð±Ñ€Ð°Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ Ð½Ð¾Ð¼ÐµÑ€ Ð¸Ð· ÑÐ¿Ð¸ÑÐºÐ°", icon="msg_delete", on_click=lambda _: self._open_remove_nft_number_menu()))
             items.append(Text(text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÑ‘", subtext="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²ÑÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ðµ Ð½Ð¾Ð¼ÐµÑ€Ð°", icon="msg_delete", on_click=lambda _: self._clear_all_nft_numbers(), red=True))
-        return items
+        return self._normalize_settings_items(items)
 
     def _create_username_details_subfragment(self, parent_view=None):
         date_text = self.nft_username_purchase_date if self.nft_username_purchase_date else "ÐÐµ Ð·Ð°Ð´Ð°Ð½Ð°"
-        return [
+        return self._normalize_settings_items([
             Divider(text="Ð¦ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸ Ð´Ð»Ñ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ Ð¿Ñ€ÐµÐ²ÑŒÑŽ username."),
             Text(text="TON", subtext=str(self.nft_username_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² TON", self.nft_username_price_ton, lambda text: self._save_nft_username_detail("ton", text))),
             Text(text="USD", subtext=str(self.nft_username_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² USD", self.nft_username_price_usd, lambda text: self._save_nft_username_detail("usd", text))),
             Text(text="Ð”Ð°Ñ‚Ð°", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Ð”Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸", self.nft_username_purchase_date, lambda text: self._save_nft_username_detail("date", text))),
-        ]
+        ])
 
     def _create_number_details_subfragment(self, parent_view=None):
         date_text = self.nft_number_purchase_date if self.nft_number_purchase_date else "ÐÐµ Ð·Ð°Ð´Ð°Ð½Ð°"
-        return [
+        return self._normalize_settings_items([
             Divider(text="Ð¦ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸ Ð´Ð»Ñ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ Ð¿Ñ€ÐµÐ²ÑŒÑŽ number."),
             Text(text="TON", subtext=str(self.nft_number_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² TON", self.nft_number_price_ton, lambda text: self._save_nft_number_detail("ton", text))),
             Text(text="USD", subtext=str(self.nft_number_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² USD", self.nft_number_price_usd, lambda text: self._save_nft_number_detail("usd", text))),
             Text(text="Ð”Ð°Ñ‚Ð°", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Ð”Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸", self.nft_number_purchase_date, lambda text: self._save_nft_number_detail("date", text))),
-        ]
+        ])
 
     def _set_nft_username_enabled(self, enabled):
         self.nft_username_enabled = bool(enabled)
@@ -14898,7 +14950,7 @@ class NftClonerPlugin(BasePlugin):
                     pass
 
     def _create_update_settings_subfragment(self, parent_view=None):
-        return [
+        return self._normalize_settings_items([
             Divider(text="ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ° Ð°Ð²Ñ‚Ð¾Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ loader/runtime Ð¸Ð· GitHub Ñ€ÐµÐ¿Ð¾Ð·Ð¸Ñ‚Ð¾Ñ€Ð¸Ñ."),
             Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} â€¢ {self._get_update_branch()}"),
             Switch(
@@ -14923,7 +14975,7 @@ class NftClonerPlugin(BasePlugin):
                 icon="msg_download",
                 on_click=lambda _: self._check_for_plugin_updates(show_no_updates=True, auto_download=False),
             ),
-        ]
+        ])
         return None
 
     def _open_gift_actions_menu(self, key):
