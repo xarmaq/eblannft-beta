@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -14451,7 +14451,7 @@ class NftClonerPlugin(BasePlugin):
             pass
 
         title = TextView(ctx)
-        title.setText("?????????? eblanNFT")
+        title.setText("Update eblanNFT")
         title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21)
         try:
             title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
@@ -14462,7 +14462,7 @@ class NftClonerPlugin(BasePlugin):
 
         repo_line = TextView(ctx)
         try:
-            repo_line.setText(f"{info.get('repo', '')} ? {info.get('branch', '')}")
+            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
             repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
             repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
@@ -14471,7 +14471,7 @@ class NftClonerPlugin(BasePlugin):
 
         desc = TextView(ctx)
         try:
-            desc.setText(f"??????? ?????? {info.get('version', '?')}. ??????? ??????: {__version__}.")
+            desc.setText(f"Version {info.get('version', '?')} is available. Current version: {__version__}.")
             desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
             desc.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
         except:
@@ -14481,7 +14481,7 @@ class NftClonerPlugin(BasePlugin):
 
         status = TextView(ctx)
         try:
-            status.setText("?????? ? ????????.")
+            status.setText("Ready to download.")
             status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
             status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
@@ -14492,7 +14492,7 @@ class NftClonerPlugin(BasePlugin):
         root.addView(progress, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 0, AndroidUtilities.dp(16), 0, 0))
 
         btn = TextView(ctx)
-        btn.setText("??????? ??????????")
+        btn.setText("Download update")
         btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
         btn.setGravity(Gravity.CENTER)
         try:
@@ -14511,7 +14511,7 @@ class NftClonerPlugin(BasePlugin):
         root.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(18), 0, 0))
 
         close_btn = TextView(ctx)
-        close_btn.setText("???????")
+        close_btn.setText("Close")
         close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
         close_btn.setGravity(Gravity.CENTER)
         try:
@@ -14528,6 +14528,31 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         root.addView(close_btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(10), 0, 0))
+
+        try:
+            hero.setAlpha(0.0)
+            hero.setTranslationY(float(AndroidUtilities.dp(18)))
+            hero.animate().alpha(1.0).translationY(0.0).setDuration(260).start()
+        except:
+            pass
+        try:
+            status.setAlpha(0.0)
+            status.setTranslationY(float(AndroidUtilities.dp(12)))
+            status.animate().alpha(1.0).translationY(0.0).setStartDelay(70).setDuration(220).start()
+        except:
+            pass
+        try:
+            btn.setAlpha(0.0)
+            btn.setScaleX(0.96)
+            btn.setScaleY(0.96)
+            btn.animate().alpha(1.0).scaleX(1.0).scaleY(1.0).setStartDelay(120).setDuration(240).start()
+        except:
+            pass
+        try:
+            close_btn.setAlpha(0.0)
+            close_btn.animate().alpha(1.0).setStartDelay(170).setDuration(220).start()
+        except:
+            pass
 
         state = {"started": False, "done": False}
 
@@ -14552,45 +14577,45 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
             try:
-                BulletinHelper.show_info(f"???????? ?????????? {info.get('version', '?')}...")
+                BulletinHelper.show_info(f"Downloading update {info.get('version', '?')}...")
             except:
                 pass
-            run_on_ui_thread(lambda: _apply_status("????????????? ????? ??????????...", False))
+            run_on_ui_thread(lambda: _apply_status("Preparing update files...", False))
 
             def _progress(done_idx, total, path, written):
-                phase = "??????????" if written else "????????"
-                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} ? {p}", False))
+                phase = "Applying" if written else "Downloading"
+                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} • {p}", False))
 
             def _worker():
                 try:
                     self._download_and_apply_update(info, progress_cb=_progress)
                     def _done_ok():
                         state["done"] = True
-                        _apply_status("?????????? ???????. ??????? ? ?????? ??????.", True)
+                        _apply_status("Update downloaded. Disable and enable the plugin.", True)
                         try:
-                            btn.setText("??????")
+                            btn.setText("Done")
                             btn.setEnabled(False)
                             btn.setAlpha(1.0)
                         except:
                             pass
                         try:
-                            BulletinHelper.show_success(f"eblanNFT ???????? ?? {info.get('version', '?')}")
+                            BulletinHelper.show_success(f"eblanNFT updated to {info.get('version', '?')}")
                         except:
                             pass
                     run_on_ui_thread(_done_ok)
                 except Exception as e:
                     def _done_err():
                         state["started"] = False
-                        _apply_status(f"?????? ??????????: {e}", True)
+                        _apply_status(f"Update error: {e}", True)
                         try:
-                            btn.setText("????????? ????????")
+                            btn.setText("Retry download")
                             btn.setEnabled(True)
                             btn.setAlpha(1.0)
                             progress.setVisibility(View.VISIBLE)
                         except:
                             pass
                         try:
-                            BulletinHelper.show_error(f"??????????: {e}")
+                            BulletinHelper.show_error(f"Update: {e}")
                         except:
                             pass
                     run_on_ui_thread(_done_err)
