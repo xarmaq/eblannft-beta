@@ -1,6 +1,6 @@
 {
-  "version": "1.1.1",
-  "notes": "Test update for auto-updater",
+  "version": "1.1.2",
+  "notes": "Second test update for auto-updater",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
