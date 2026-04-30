@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -554,6 +554,10 @@ class AppResumeRefreshHook(MethodHook):
             pass
         try:
             self.plugin._debug_state_snapshot("app_resume:after")
+        except:
+            pass
+        try:
+            self.plugin._maybe_auto_check_updates(reason="resume")
         except:
             pass
 
@@ -2276,7 +2280,7 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"Welcome bootstrap error: {inner_e}")
 
             try:
-                self._maybe_auto_check_updates()
+                self._maybe_auto_check_updates(reason="load")
             except Exception as inner_e:
                 _log(f"Auto update bootstrap error: {inner_e}")
 
@@ -14422,16 +14426,64 @@ class NftClonerPlugin(BasePlugin):
             pass
         return True
 
+    def _schedule_update_popup_show(self, info, auto_start=False, delays=None):
+        if info is not None:
+            try:
+                self._eblannft_pending_update_info = dict(info)
+            except:
+                self._eblannft_pending_update_info = info
+            self._eblannft_pending_update_auto_start = bool(auto_start)
+        if getattr(self, "_eblannft_update_popup_visible", False):
+            return True
+
+        def _try_show():
+            if getattr(self, "_plugin_unloading", False):
+                return
+            if getattr(self, "_eblannft_update_popup_visible", False):
+                return
+            payload = getattr(self, "_eblannft_pending_update_info", None)
+            if not payload:
+                return
+            try:
+                frag = get_last_fragment()
+                ctx = frag.getParentActivity() if frag and frag.getParentActivity() else None
+            except:
+                ctx = None
+            if not ctx:
+                return
+            try:
+                self._show_update_bottom_sheet(
+                    payload,
+                    auto_start=bool(getattr(self, "_eblannft_pending_update_auto_start", False))
+                )
+            except Exception as e:
+                _log(f"Update popup show error: {e}")
+
+        scheduled = False
+        for delay_ms in list(delays or [0, 450, 1200, 2600, 5200]):
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_try_show), int(delay_ms))
+                scheduled = True
+            except:
+                try:
+                    run_on_ui_thread(_try_show)
+                    scheduled = True
+                except:
+                    pass
+        return scheduled
+
     def _show_update_bottom_sheet(self, info, auto_start=False):
         frag = get_last_fragment()
         ctx = frag.getParentActivity() if frag and frag.getParentActivity() else ApplicationLoader.applicationContext
         if not ctx:
+            self._schedule_update_popup_show(info, auto_start=auto_start, delays=[500, 1400, 3200, 6000])
             return
         try:
             from android_utils import OnClickListener
         except:
             OnClickListener = None
         sheet = BottomSheet(ctx, True)
+        self._eblannft_update_popup_visible = True
         root = LinearLayout(ctx)
         root.setOrientation(LinearLayout.VERTICAL)
         try:
@@ -14622,17 +14674,33 @@ class NftClonerPlugin(BasePlugin):
 
             threading.Thread(target=_worker, daemon=True).start()
 
+        def _clear_popup_state():
+            try:
+                self._eblannft_update_popup_visible = False
+            except:
+                pass
+
+        def _dismiss():
+            _clear_popup_state()
+            try:
+                sheet.dismiss()
+            except:
+                pass
+
         if OnClickListener:
             btn.setOnClickListener(OnClickListener(lambda _v: _download()))
-            close_btn.setOnClickListener(OnClickListener(lambda _v: sheet.dismiss()))
+            close_btn.setOnClickListener(OnClickListener(lambda _v: _dismiss()))
         else:
             btn.setOnClickListener(lambda _v: _download())
-            close_btn.setOnClickListener(lambda _v: sheet.dismiss())
+            close_btn.setOnClickListener(lambda _v: _dismiss())
 
         sheet.setCustomView(root)
         run_on_ui_thread(sheet.show)
         if auto_start:
-            run_on_ui_thread(_download)
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_download), 180)
+            except:
+                run_on_ui_thread(_download)
 
     def _check_for_plugin_updates(self, show_no_updates=False, auto_download=None):
         if getattr(self, "_eblannft_update_check_running", False):
@@ -14648,35 +14716,54 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 if not info:
                     if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_error("GitHub repo для обновлений не настроен"))
+                        run_on_ui_thread(lambda: BulletinHelper.show_error("GitHub update repo is not configured"))
                     return
                 if not self._is_remote_version_newer(info.get("version", __version__), __version__):
                     if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_info(f"У вас уже последняя версия: {__version__}"))
+                        run_on_ui_thread(lambda: BulletinHelper.show_info(f"You already have the latest version: {__version__}"))
                     return
                 auto_flag = self._is_auto_update_enabled() if auto_download is None else bool(auto_download)
-                run_on_ui_thread(lambda: self._show_update_bottom_sheet(info, auto_start=auto_flag))
+                self._schedule_update_popup_show(info, auto_start=auto_flag)
             except Exception as e:
                 if show_no_updates:
-                    run_on_ui_thread(lambda: BulletinHelper.show_error(f"Проверка обновления: {e}"))
+                    run_on_ui_thread(lambda: BulletinHelper.show_error(f"Update check: {e}"))
             finally:
                 self._eblannft_update_check_running = False
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _maybe_auto_check_updates(self):
+    def _maybe_auto_check_updates(self, reason="load"):
         if not self._is_update_check_on_load_enabled():
             return
         repo = self._get_update_repo()
         if not repo:
             return
+        if getattr(self, "_eblannft_update_popup_visible", False):
+            return
         try:
             last_ts = int(self.get_setting("eblannft_update_last_check_ts", 0) or 0)
         except:
             last_ts = 0
-        if last_ts > 0 and (time.time() - last_ts) < EBLANNFT_UPDATE_CHECK_INTERVAL_SEC:
+        min_interval = EBLANNFT_UPDATE_CHECK_INTERVAL_SEC
+        if str(reason or "") == "resume":
+            min_interval = min(15 * 60, EBLANNFT_UPDATE_CHECK_INTERVAL_SEC)
+        if last_ts > 0 and (time.time() - last_ts) < min_interval:
             return
-        self._check_for_plugin_updates(show_no_updates=False, auto_download=self._is_auto_update_enabled())
+        def _kick():
+            try:
+                self._check_for_plugin_updates(show_no_updates=False, auto_download=self._is_auto_update_enabled())
+            except Exception as e:
+                _log(f"Auto update kick error: {e}")
+
+        delays = [900, 2600, 5200] if str(reason or "") == "load" else [300]
+        for delay_ms in delays:
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_kick), int(delay_ms))
+            except:
+                try:
+                    run_on_ui_thread(_kick)
+                except:
+                    pass
 
     def _create_update_settings_subfragment(self, parent_view=None):
         return [
