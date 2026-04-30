@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.9"
+__version__ = "1.1.10"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -23089,6 +23089,20 @@ class GiftSheetLocalValueHook(MethodHook):
             self.plugin._inject_local_gift_release_badge(sheet, gift=gift)
             self.plugin._rebuild_local_ton_identity_rows(sheet, gift=gift)
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
+            try:
+                def _late_pass(target_sheet=sheet, target_gift=gift, plugin_self=self.plugin):
+                    try:
+                        plugin_self._apply_local_ton_blockchain_line(target_sheet, gift=target_gift)
+                    except Exception as inner_e:
+                        _log(f"GiftSheet late TON line error: {inner_e}")
+                    try:
+                        plugin_self._rebuild_local_ton_identity_rows(target_sheet, gift=target_gift)
+                    except Exception as inner_e:
+                        _log(f"GiftSheet late TON rows error: {inner_e}")
+                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 120)
+                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 320)
+            except Exception as inner_e:
+                _log(f"GiftSheet late pass schedule error: {inner_e}")
         except Exception as e:
             _log(f"GiftSheetLocalValueHook error: {e}")
 

@@ -1,6 +1,6 @@
 {
-  "version": "1.1.9",
-  "notes": "Fix TON line placement and remove duplicate owner row in gift sheet",
+  "version": "1.1.10",
+  "notes": "Re-apply TON line and owner rows after late gift-sheet layout updates",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
