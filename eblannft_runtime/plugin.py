@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.8"
+__version__ = "1.1.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -5629,10 +5629,11 @@ class NftClonerPlugin(BasePlugin):
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         enabled = bool(cfg.get("enabled", False))
+        owner_text = self._format_visual_ton_owner_text(e, cfg) if enabled else ""
         gift_address = self._get_visual_ton_gift_address(e, cfg) if enabled else ""
         patched = False
         for field_name, field_value in [
-            ("owner_address", gift_address),
+            ("owner_address", owner_text),
             ("gift_address", gift_address),
         ]:
             try:
@@ -19984,6 +19985,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         enabled = bool(ton_cfg.get("enabled", False))
         try:
+            table = get_val(sheet, "tableView", None)
+        except:
+            table = None
+        try:
             after_view = get_val(sheet, "afterTableTextView", None)
         except:
             after_view = None
@@ -20015,6 +20020,35 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                     target_view.setOnClickListener(JOnClickListener(_open_blockchain))
+                try:
+                    parent = table.getParent() if table is not None else None
+                except:
+                    parent = None
+                try:
+                    target_parent = target_view.getParent() if target_view is not None else None
+                except:
+                    target_parent = None
+                try:
+                    if parent is not None and isinstance(parent, ViewGroup):
+                        insert_index = int(parent.indexOfChild(table))
+                        if target_parent is not None and isinstance(target_parent, ViewGroup):
+                            try:
+                                target_parent.removeView(target_view)
+                            except:
+                                pass
+                        try:
+                            lp = target_view.getLayoutParams()
+                        except:
+                            lp = None
+                        try:
+                            if lp is not None:
+                                parent.addView(target_view, insert_index, lp)
+                            else:
+                                parent.addView(target_view, insert_index)
+                        except:
+                            pass
+                except Exception as inner_ex:
+                    _log(f"Local TON line move error: {inner_ex}")
                 if before_view is not None and target_view is not before_view:
                     try:
                         before_view.setVisibility(View.GONE)
@@ -20123,6 +20157,15 @@ class NftClonerPlugin(BasePlugin):
                 return True
         return False
 
+    def _is_local_trait_table_row(self, row):
+        low = self._extract_table_row_title_text(row).lower()
+        if not low:
+            return False
+        for token in ["model", "pattern", "background", "backdrop", "supply", "count", "value", "price", "Ð¼Ð¾Ð´ÐµÐ»", "ÑƒÐ·Ð¾Ñ€", "Ñ„Ð¾Ð½", "ÐºÐ¾Ð»Ð¸Ñ‡", "Ñ†ÐµÐ½Ð½Ð¾ÑÑ‚"]:
+            if token in low:
+                return True
+        return False
+
     def _rebuild_local_ton_identity_rows(self, sheet, gift=None):
         if sheet is None:
             return False
@@ -20161,19 +20204,33 @@ class NftClonerPlugin(BasePlugin):
         except:
             account = 0
         profile_did = self._resolve_local_gift_sheet_profile_entity_id(entry=entry, gift=gift)
-        owner_address = self._get_visual_ton_gift_address(entry, ton_cfg)
-        preserved_rows = []
+        owner_address = self._format_visual_ton_owner_text(entry, ton_cfg)
+        rows_snapshot = []
         try:
             for idx in range(row_count):
                 row = table.getChildAt(idx)
                 if row is None:
                     continue
-                if self._is_local_identity_table_row(row):
-                    continue
-                preserved_rows.append(row)
+                rows_snapshot.append(row)
         except Exception as ex:
             _log(f"Local TON table snapshot error: {ex}")
             return False
+        preserved_rows = []
+        first_trait_idx = -1
+        try:
+            for idx, row in enumerate(rows_snapshot):
+                if self._is_local_trait_table_row(row):
+                    first_trait_idx = idx
+                    break
+        except:
+            first_trait_idx = -1
+        if first_trait_idx >= 0:
+            preserved_rows = rows_snapshot[first_trait_idx:]
+        else:
+            for row in rows_snapshot:
+                if self._is_local_identity_table_row(row):
+                    continue
+                preserved_rows.append(row)
         try:
             table.removeAllViews()
         except Exception as ex:

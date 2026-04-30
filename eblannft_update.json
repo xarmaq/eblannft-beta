@@ -1,6 +1,6 @@
 {
-  "version": "1.1.8",
-  "notes": "Fix remaining mojibake, make restart button apply updates, and show real download progress",
+  "version": "1.1.9",
+  "notes": "Fix TON line placement and remove duplicate owner row in gift sheet",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
