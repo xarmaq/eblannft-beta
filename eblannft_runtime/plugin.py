@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -2329,6 +2329,13 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         self._shutdown_bg_executor()
+        try:
+            runtime_prefix = "_eblannft_runtime_pkg"
+            for module_name in tuple(sys.modules.keys()):
+                if module_name == runtime_prefix or module_name.startswith(runtime_prefix + "."):
+                    sys.modules.pop(module_name, None)
+        except:
+            pass
 
     def create_settings(self):
         username_status = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»"
@@ -5472,11 +5479,10 @@ class NftClonerPlugin(BasePlugin):
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         enabled = bool(cfg.get("enabled", False))
-        owner_text = self._format_visual_ton_owner_text(e, cfg) if enabled else ""
         gift_address = self._get_visual_ton_gift_address(e, cfg) if enabled else ""
         patched = False
         for field_name, field_value in [
-            ("owner_address", owner_text),
+            ("owner_address", gift_address),
             ("gift_address", gift_address),
         ]:
             try:
@@ -19781,10 +19787,11 @@ class NftClonerPlugin(BasePlugin):
             return False
         try:
             if enabled:
-                after_view.setText("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º")
-                after_view.setVisibility(View.VISIBLE)
+                target_view = before_view if before_view is not None else after_view
+                target_view.setText("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º")
+                target_view.setVisibility(View.VISIBLE)
                 try:
-                    after_view.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton))
+                    target_view.setTextColor(Theme.getColor(Theme.key_dialogTextGray2))
                 except:
                     pass
                 gift_address = self._get_visual_ton_gift_address(e, ton_cfg)
@@ -19799,23 +19806,201 @@ class NftClonerPlugin(BasePlugin):
                             Browser.openUrlInSystemBrowser(v.getContext(), "{0}{1}".format(base, address) if base else address)
                         except:
                             pass
-                    after_view.setOnClickListener(JOnClickListener(_open_blockchain))
+                    target_view.setOnClickListener(JOnClickListener(_open_blockchain))
+                if before_view is not None and target_view is not before_view:
+                    try:
+                        before_view.setVisibility(View.GONE)
+                    except:
+                        pass
+                try:
+                    after_view.setVisibility(View.GONE)
+                except:
+                    pass
+            else:
                 if before_view is not None:
                     try:
                         before_view.setVisibility(View.GONE)
                     except:
                         pass
-            else:
                 after_view.setVisibility(View.GONE)
         except Exception as ex:
             _log(f"Local TON blockchain line error: {ex}")
             return False
         return True
 
+    def _open_profile_from_gift_sheet_entity(self, did, sheet=None):
+        try:
+            did = int(did or 0)
+        except:
+            did = 0
+        if did == 0:
+            return False
+        try:
+            if sheet is not None and hasattr(sheet, "dismiss") and callable(getattr(sheet, "dismiss", None)):
+                sheet.dismiss()
+        except:
+            pass
+        try:
+            fragment = get_last_fragment()
+        except:
+            fragment = None
+        if fragment is None:
+            return False
+        try:
+            Bundle = jclass("android.os.Bundle")
+            ProfileActivity = jclass("org.telegram.ui.ProfileActivity")
+            args = Bundle()
+            if did > 0:
+                args.putLong("user_id", did)
+                try:
+                    if did == int(self._get_my_user_id() or 0):
+                        args.putBoolean("my_profile", True)
+                except:
+                    pass
+            else:
+                args.putLong("chat_id", int(-did))
+            args.putBoolean("open_gifts", True)
+            fragment.presentFragment(ProfileActivity(args))
+            return True
+        except Exception as ex:
+            _log(f"Gift sheet open profile error: {ex}")
+            return False
+
+    def _resolve_local_gift_sheet_profile_entity_id(self, entry=None, gift=None):
+        for field_name in ["owner_id", "owner", "ownerId", "host_id", "host", "hostId"]:
+            try:
+                raw = get_val(gift, field_name, None) if gift is not None else None
+            except:
+                raw = None
+            try:
+                did = int(self._extract_entity_id_from_obj(raw) or 0)
+            except:
+                did = 0
+            if did != 0:
+                return did
+        try:
+            did = int(self._get_entry_target_entity_id(entry, fallback_to_self=True) or 0) if isinstance(entry, dict) else 0
+        except:
+            did = 0
+        if did != 0:
+            return did
+        try:
+            return int(self._get_my_user_id() or 0)
+        except:
+            return 0
+
+    def _extract_table_row_title_text(self, row):
+        if row is None:
+            return ""
+        try:
+            if row.getChildCount() <= 0:
+                return ""
+            title_view = row.getChildAt(0)
+        except:
+            title_view = None
+        if title_view is None:
+            return ""
+        try:
+            text = title_view.getText()
+        except:
+            text = ""
+        return str(text or "").strip()
+
+    def _is_local_identity_table_row(self, row):
+        low = self._extract_table_row_title_text(row).lower()
+        if not low:
+            return False
+        for token in ["telegram", "host", "owner", "Ð²Ð»Ð°Ð´ÐµÐ»", "Ñ‚ÐµÐ»ÐµÐ³Ñ€Ð°Ð¼"]:
+            if token in low:
+                return True
+        return False
+
+    def _rebuild_local_ton_identity_rows(self, sheet, gift=None):
+        if sheet is None:
+            return False
+        key = None
+        try:
+            key = self._resolve_library_key_from_gift_sheet(sheet)
+        except:
+            key = None
+        if not key and gift is not None:
+            try:
+                key = self._resolve_library_key_for_gift(gift)
+            except:
+                key = None
+        if not key:
+            return False
+        entry = self._library_find_entry(key)
+        if not entry:
+            return False
+        ton_cfg = self._sanitize_ton_display_config(entry.get("ton_display_config", None))
+        if not bool(ton_cfg.get("enabled", False)):
+            return False
+        try:
+            table = get_val(sheet, "tableView", None)
+        except:
+            table = None
+        if table is None:
+            return False
+        try:
+            row_count = int(table.getChildCount() or 0)
+        except:
+            row_count = 0
+        if row_count <= 0:
+            return False
+        try:
+            account = int(get_user_config().selectedAccount or 0)
+        except:
+            account = 0
+        profile_did = self._resolve_local_gift_sheet_profile_entity_id(entry=entry, gift=gift)
+        owner_address = self._get_visual_ton_gift_address(entry, ton_cfg)
+        preserved_rows = []
+        try:
+            for idx in range(row_count):
+                row = table.getChildAt(idx)
+                if row is None:
+                    continue
+                if self._is_local_identity_table_row(row):
+                    continue
+                preserved_rows.append(row)
+        except Exception as ex:
+            _log(f"Local TON table snapshot error: {ex}")
+            return False
+        try:
+            table.removeAllViews()
+        except Exception as ex:
+            _log(f"Local TON table clear error: {ex}")
+            return False
+        rebuilt = False
+        try:
+            if owner_address:
+                def _copy_owner_address():
+                    try:
+                        BulletinHelper.show_success("TON address copied")
+                    except:
+                        pass
+                table.addWalletAddressRow(self._ui_text("Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ†"), self._ui_text(owner_address), JRunnable(_copy_owner_address))
+                rebuilt = True
+        except Exception as ex:
+            _log(f"Local TON owner wallet row error: {ex}")
+        try:
+            if int(profile_did or 0) != 0:
+                def _open_profile(did=profile_did, target_sheet=sheet):
+                    self._open_profile_from_gift_sheet_entity(did, sheet=target_sheet)
+                table.addRowUserWithEmojiStatus(self._ui_text("Telegram"), to_java_int(account), int(profile_did), JRunnable(_open_profile))
+                rebuilt = True
+        except Exception as ex:
+            _log(f"Local TON telegram row error: {ex}")
+        try:
+            for row in preserved_rows:
+                if row is not None:
+                    table.addView(row)
+        except Exception as ex:
+            _log(f"Local TON table restore error: {ex}")
+        return rebuilt
+
     def _resolve_local_gift_release_badge_text(self, entry=None, gift=None):
         ton_cfg = self._sanitize_ton_display_config(entry.get("ton_display_config", None) if isinstance(entry, dict) else None)
-        if bool(ton_cfg.get("enabled", False)):
-            return "ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º"
         probes = []
         if isinstance(entry, dict):
             try:
@@ -22637,6 +22822,7 @@ class GiftSheetLocalValueHook(MethodHook):
                 gift = None
             self.plugin._apply_local_ton_blockchain_line(sheet, gift=gift)
             self.plugin._inject_local_gift_release_badge(sheet, gift=gift)
+            self.plugin._rebuild_local_ton_identity_rows(sheet, gift=gift)
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook error: {e}")

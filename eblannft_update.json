@@ -1,6 +1,6 @@
 {
-  "version": "1.1.5",
-  "notes": "Update apply-state fix and Material progress redesign",
+  "version": "1.1.6",
+  "notes": "Fix runtime reload after updates and refine TON gift sheet layout",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

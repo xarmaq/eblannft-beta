@@ -10,7 +10,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Local runtime-loader for eblanNFT.\n\nUpdates and main logic are loaded from the embedded runtime."
 __author__ = "@xarmaq"
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 __icon__ = "HappyHappyPepe/31"
 
 _EMBEDDED_RUNTIME_B64 = (
@@ -1588,6 +1588,13 @@ def _load_eblannft_impl():
         init_py = os.path.join(pkg_dir, '__init__.py')
         plugin_py = os.path.join(pkg_dir, 'plugin.py')
         if os.path.isfile(plugin_py):
+            stale_runtime_modules = [
+                name for name in tuple(sys.modules.keys())
+                if name == package_name or name.startswith(package_name + '.')
+            ]
+            for module_name in stale_runtime_modules:
+                sys.modules.pop(module_name, None)
+
             if package_name not in sys.modules:
                 if os.path.isfile(init_py):
                     pkg_spec = importlib.util.spec_from_file_location(
