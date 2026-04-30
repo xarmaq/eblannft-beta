@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -79,6 +79,35 @@ EBLANNFT_UPDATE_DEFAULT_FILES = [
     "eblannft_runtime/__init__.py",
     "eblannft_runtime/plugin.py",
 ]
+MOJIBAKE_REVERSE_CP1252 = {
+    "\u20ac": 0x80,
+    "\u201a": 0x82,
+    "\u0192": 0x83,
+    "\u201e": 0x84,
+    "\u2026": 0x85,
+    "\u2020": 0x86,
+    "\u2021": 0x87,
+    "\u02c6": 0x88,
+    "\u2030": 0x89,
+    "\u0160": 0x8A,
+    "\u2039": 0x8B,
+    "\u0152": 0x8C,
+    "\u017d": 0x8E,
+    "\u2018": 0x91,
+    "\u2019": 0x92,
+    "\u201c": 0x93,
+    "\u201d": 0x94,
+    "\u2022": 0x95,
+    "\u2013": 0x96,
+    "\u2014": 0x97,
+    "\u02dc": 0x98,
+    "\u2122": 0x99,
+    "\u0161": 0x9A,
+    "\u203a": 0x9B,
+    "\u0153": 0x9C,
+    "\u017e": 0x9E,
+    "\u0178": 0x9F,
+}
 EBLANNFT_UPDATE_CHECK_INTERVAL_SEC = 6 * 60 * 60
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -4961,17 +4990,27 @@ class NftClonerPlugin(BasePlugin):
             except:
                 return 0
 
+        def _decode_mojibake_once(src):
+            try:
+                raw = bytearray()
+                for ch in str(src or ""):
+                    code = ord(ch)
+                    if code <= 0xFF:
+                        raw.append(code)
+                    elif ch in MOJIBAKE_REVERSE_CP1252:
+                        raw.append(MOJIBAKE_REVERSE_CP1252[ch])
+                    else:
+                        return None
+                return raw.decode("utf-8")
+            except:
+                return None
+
         cur = text
         for _ in range(4):
             best = cur
             best_score = _noise_score(cur)
-            for enc in ["cp1252", "latin-1"]:
-                try:
-                    cand = cur.encode(enc).decode("utf-8")
-                except:
-                    continue
-                if not cand:
-                    continue
+            cand = _decode_mojibake_once(cur)
+            if cand:
                 cand_score = _noise_score(cand)
                 if cand_score < best_score:
                     best = cand
@@ -5001,6 +5040,21 @@ class NftClonerPlugin(BasePlugin):
                 return self._repair_mojibake_text(raw)
             return raw
 
+        def _fix_container(obj):
+            if obj is None:
+                return
+            for attr in ["text", "subtext", "title", "hint", "description", "placeholder"]:
+                try:
+                    if hasattr(obj, attr):
+                        setattr(obj, attr, _fix_scalar(getattr(obj, attr)))
+                except:
+                    pass
+            try:
+                if hasattr(obj, "options"):
+                    setattr(obj, "options", _fix_sequence(getattr(obj, "options")))
+            except:
+                pass
+
         def _fix_sequence(raw):
             if isinstance(raw, list):
                 return [_fix_scalar(v) for v in raw]
@@ -5011,18 +5065,62 @@ class NftClonerPlugin(BasePlugin):
         for item in list(items or []):
             if item is None:
                 continue
-            for attr in ["text", "subtext", "title", "hint", "description", "placeholder"]:
-                try:
-                    if hasattr(item, attr):
-                        setattr(item, attr, _fix_scalar(getattr(item, attr)))
-                except:
-                    pass
+            _fix_container(item)
             try:
-                if hasattr(item, "options"):
-                    setattr(item, "options", _fix_sequence(getattr(item, "options")))
+                _fix_container(getattr(item, "settingItem", None))
             except:
                 pass
         return items
+
+    def _format_progress_bytes(self, raw_bytes):
+        try:
+            value = float(raw_bytes or 0)
+        except:
+            value = 0.0
+        units = ["B", "KB", "MB", "GB"]
+        idx = 0
+        while value >= 1024.0 and idx < len(units) - 1:
+            value /= 1024.0
+            idx += 1
+        if idx == 0:
+            return f"{int(value)} {units[idx]}"
+        return f"{value:.1f} {units[idx]}"
+
+    def _restart_app_for_update(self):
+        try:
+            fragment = get_last_fragment()
+        except:
+            fragment = None
+        try:
+            ctx = fragment.getParentActivity() if fragment is not None and hasattr(fragment, "getParentActivity") else None
+        except:
+            ctx = None
+        if ctx is None:
+            return False
+        try:
+            PendingIntent = jclass("android.app.PendingIntent")
+            AlarmManager = jclass("android.app.AlarmManager")
+            ProcessCls = jclass("android.os.Process")
+            SystemCls = jclass("java.lang.System")
+            launch_intent = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName())
+            if launch_intent is None:
+                return False
+            launch_intent.addFlags(0x10000000 | 0x04000000 | 0x00008000)
+            flags = int(PendingIntent.FLAG_CANCEL_CURRENT)
+            try:
+                flags |= int(PendingIntent.FLAG_IMMUTABLE)
+            except:
+                pass
+            pending_intent = PendingIntent.getActivity(ctx, 27118, launch_intent, flags)
+            alarm = ctx.getSystemService("alarm")
+            if alarm is not None:
+                alarm.set(AlarmManager.RTC, int(SystemCls.currentTimeMillis()) + 250, pending_intent)
+            ProcessCls.killProcess(ProcessCls.myPid())
+            SystemCls.exit(0)
+            return True
+        except Exception as e:
+            _log(f"restart app for update fail: {e}")
+            return False
 
 
 
@@ -14356,6 +14454,10 @@ class NftClonerPlugin(BasePlugin):
         return self._version_key(remote_version) > self._version_key(local_version)
 
     def _fetch_url_bytes(self, url, timeout=20):
+        raw, _size = self._fetch_url_bytes_with_progress(url, timeout=timeout, progress_cb=None)
+        return raw
+
+    def _fetch_url_bytes_with_progress(self, url, timeout=20, progress_cb=None):
         req = Request(
             str(url),
             headers={
@@ -14365,7 +14467,30 @@ class NftClonerPlugin(BasePlugin):
             },
         )
         with urlopen(req, timeout=timeout) as resp:
-            return resp.read()
+            try:
+                total_bytes = int(resp.headers.get("Content-Length", "0") or 0)
+            except:
+                total_bytes = 0
+            chunks = []
+            loaded = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                loaded += len(chunk)
+                if callable(progress_cb):
+                    try:
+                        progress_cb(loaded, total_bytes)
+                    except:
+                        pass
+            raw = b"".join(chunks)
+            if callable(progress_cb):
+                try:
+                    progress_cb(len(raw), total_bytes or len(raw))
+                except:
+                    pass
+            return raw, (total_bytes or len(raw))
 
     def _fetch_url_text(self, url, timeout=20):
         raw = self._fetch_url_bytes(url, timeout=timeout)
@@ -14492,11 +14617,18 @@ class NftClonerPlugin(BasePlugin):
         total = len(entries)
         for idx, entry in enumerate(entries, 1):
             try:
-                raw = self._fetch_url_bytes(entry["url"], timeout=25)
+                def _on_bytes(loaded, total_bytes, _idx=idx, _entry=entry):
+                    if callable(progress_cb):
+                        try:
+                            progress_cb(_idx, total, _entry["path"], False, int(loaded or 0), int(total_bytes or 0))
+                        except:
+                            pass
+                raw, raw_total = self._fetch_url_bytes_with_progress(entry["url"], timeout=25, progress_cb=_on_bytes)
             except Exception as e:
                 pth = str(entry.get("path", "") or "")
                 if pth.endswith("__init__.py"):
                     raw = bytes([10])
+                    raw_total = len(raw)
                 else:
                     raise RuntimeError(f"Download failed for {pth}: {e}")
             if not raw:
@@ -14504,7 +14636,7 @@ class NftClonerPlugin(BasePlugin):
             payloads.append((entry["path"], raw))
             if callable(progress_cb):
                 try:
-                    progress_cb(idx, total, entry["path"], False)
+                    progress_cb(idx, total, entry["path"], False, len(raw), int(raw_total or len(raw)))
                 except:
                     pass
         for idx, (rel_path, raw) in enumerate(payloads, 1):
@@ -14516,7 +14648,7 @@ class NftClonerPlugin(BasePlugin):
             os.replace(tmp_path, dest)
             if callable(progress_cb):
                 try:
-                    progress_cb(idx, total, rel_path, True)
+                    progress_cb(idx, total, rel_path, True, len(raw), len(raw))
                 except:
                     pass
         try:
@@ -14627,7 +14759,7 @@ class NftClonerPlugin(BasePlugin):
 
         repo_line = TextView(ctx)
         try:
-            repo_line.setText(f"{info.get('repo', '')} â€¢ {info.get('branch', '')}")
+            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
             repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
             repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
@@ -14664,7 +14796,7 @@ class NftClonerPlugin(BasePlugin):
 
         status = TextView(ctx)
         try:
-            status.setText("Update files are already on disk. Restart the plugin to apply them." if pending_apply else "Ready to download.")
+            status.setText("Update files are already on disk. Restart the app to apply them." if pending_apply else "Ready to download.")
             status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
             status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
@@ -14764,7 +14896,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-        state = {"started": False, "done": False}
+        state = {"started": False, "done": False, "pending_apply": bool(pending_apply)}
 
         def _apply_status(text, done=False):
             try:
@@ -14779,27 +14911,42 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
-        def _apply_progress(done_idx, total, written=False):
+        def _apply_progress(done_idx, total, written=False, current_bytes=0, total_bytes=0):
             try:
                 total = max(1, int(total or 1))
                 done_idx = max(0, min(int(done_idx or 0), total))
-                width_dp = 18 + int((done_idx / float(total)) * 250)
+                ratio = 1.0 if written and total <= 1 else (done_idx / float(total))
+                try:
+                    current_bytes = int(current_bytes or 0)
+                    total_bytes = int(total_bytes or 0)
+                except:
+                    current_bytes = 0
+                    total_bytes = 0
+                if (not written) and total_bytes > 0:
+                    ratio = max(0.0, min(1.0, current_bytes / float(total_bytes)))
+                width_dp = 18 + int(ratio * 250)
                 lp = progress_fill.getLayoutParams()
                 lp.width = AndroidUtilities.dp(width_dp if not written else min(268, width_dp + 8))
                 progress_fill.setLayoutParams(lp)
-                chip.setText("Applying" if written else "Downloading")
+                if written:
+                    chip.setText("Applying")
+                elif total_bytes > 0:
+                    chip.setText(f"Downloading {int(round(ratio * 100.0))}%")
+                else:
+                    chip.setText("Downloading")
             except:
                 pass
 
         def _download():
-            if state["started"]:
-                return
-            if pending_apply:
+            if state.get("pending_apply") or pending_apply:
                 try:
-                    BulletinHelper.show_info("Update is already downloaded. Restart the plugin to apply it.")
+                    if self._restart_app_for_update():
+                        return
+                    BulletinHelper.show_info("Update is already downloaded. Restart the app to apply it.")
                 except:
                     pass
-                _dismiss()
+                return
+            if state["started"]:
                 return
             state["started"] = True
             try:
@@ -14813,21 +14960,30 @@ class NftClonerPlugin(BasePlugin):
                 pass
             run_on_ui_thread(lambda: _apply_status("Preparing update files...", False))
 
-            def _progress(done_idx, total, path, written):
+            def _progress(done_idx, total, path, written, current_bytes=0, total_bytes=0):
                 phase = "Applying" if written else "Downloading"
-                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase, w=written: (_apply_progress(d, t, w), _apply_status(f"{ph}: {d}/{t} â€¢ {p}", False)))
+                if (not written) and int(total_bytes or 0) > 0:
+                    loaded_text = self._format_progress_bytes(current_bytes)
+                    total_text = self._format_progress_bytes(total_bytes)
+                    left_text = self._format_progress_bytes(max(0, int(total_bytes or 0) - int(current_bytes or 0)))
+                    status_text = f"{phase}: {loaded_text} / {total_text} • left {left_text} • {path}"
+                else:
+                    status_text = f"{phase}: {done_idx}/{total} • {path}"
+                run_on_ui_thread(lambda d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, st=status_text: (_apply_progress(d, t, w, cb, tb), _apply_status(st, False)))
 
             def _worker():
                 try:
                     self._download_and_apply_update(info, progress_cb=_progress)
                     def _done_ok():
                         state["done"] = True
-                        _apply_progress(1, 1, True)
+                        state["started"] = False
+                        state["pending_apply"] = True
+                        _apply_progress(1, 1, True, 1, 1)
                         chip.setText("Restart required")
-                        _apply_status("Update downloaded. Restart the plugin to apply it.", True)
+                        _apply_status("Update downloaded. Restart the app to apply it.", True)
                         try:
                             btn.setText("Restart to apply")
-                            btn.setEnabled(False)
+                            btn.setEnabled(True)
                             btn.setAlpha(1.0)
                         except:
                             pass
@@ -29793,11 +29949,11 @@ CatalogNftSheet.on_click = _catalog_sheet_on_click_clean
 
 def _service_settings_subfragment_with_updates(self, parent_view=None):
     rating_status = self._get_local_rating_label()
-    return [
+    return self._normalize_settings_items([
         Divider(text=f"ÐžÐ±ÑÐ»ÑƒÐ¶Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð° Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ñ‹Ðµ ÑÐ¸ÑÑ‚ÐµÐ¼Ð½Ñ‹Ðµ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ. Ð ÐµÐ¹Ñ‚Ð¸Ð½Ð³ ÑÐµÐ¹Ñ‡Ð°Ñ: {rating_status}."),
         Text(
             text="ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ",
-            subtext=f"v{__version__} â€¢ GitHub loader/runtime",
+            subtext=f"v{__version__} • GitHub loader/runtime",
             icon="msg_download",
             create_sub_fragment=self._create_update_settings_subfragment,
             link_alias="eblannft_update_subfragment",
@@ -29815,7 +29971,7 @@ def _service_settings_subfragment_with_updates(self, parent_view=None):
             on_click=lambda _: self._clear_cache(),
             red=True,
         ),
-    ]
+    ])
 
 
 NftClonerPlugin._create_service_settings_subfragment = _service_settings_subfragment_with_updates

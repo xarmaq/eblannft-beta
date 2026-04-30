@@ -1,6 +1,6 @@
 {
-  "version": "1.1.7",
-  "notes": "Fix mojibake Cyrillic in settings screens and keep update reload fix",
+  "version": "1.1.8",
+  "notes": "Fix remaining mojibake, make restart button apply updates, and show real download progress",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
