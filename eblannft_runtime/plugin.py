@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -19996,11 +19996,32 @@ class NftClonerPlugin(BasePlugin):
             before_view = get_val(sheet, "beforeTableTextView", None)
         except:
             before_view = None
-        if after_view is None:
+        if after_view is None and before_view is None:
             return False
         try:
             if enabled:
-                target_view = before_view if before_view is not None else after_view
+                target_view = None
+                try:
+                    target_view = get_val(sheet, "_eblannftTonLineView", None)
+                except:
+                    target_view = None
+                try:
+                    parent = table.getParent() if table is not None else None
+                except:
+                    parent = None
+                if target_view is None and parent is not None and isinstance(parent, ViewGroup):
+                    try:
+                        ctx = parent.getContext()
+                        target_view = TextView(ctx)
+                        target_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                        target_view.setGravity(Gravity.CENTER_HORIZONTAL)
+                        target_view.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8), AndroidUtilities.dp(12), AndroidUtilities.dp(10))
+                        self._set_field(sheet, "_eblannftTonLineView", target_view)
+                    except Exception as inner_ex:
+                        _log(f"Local TON line create error: {inner_ex}")
+                        target_view = before_view if before_view is not None else after_view
+                if target_view is None:
+                    target_view = before_view if before_view is not None else after_view
                 target_view.setText("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º")
                 target_view.setVisibility(View.VISIBLE)
                 try:
@@ -20020,10 +20041,6 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                     target_view.setOnClickListener(JOnClickListener(_open_blockchain))
-                try:
-                    parent = table.getParent() if table is not None else None
-                except:
-                    parent = None
                 try:
                     target_parent = target_view.getParent() if target_view is not None else None
                 except:
@@ -20049,13 +20066,15 @@ class NftClonerPlugin(BasePlugin):
                             pass
                 except Exception as inner_ex:
                     _log(f"Local TON line move error: {inner_ex}")
-                if before_view is not None and target_view is not before_view:
+                if before_view is not None:
                     try:
                         before_view.setVisibility(View.GONE)
                     except:
                         pass
                 try:
-                    after_view.setVisibility(View.GONE)
+                    if after_view is not None:
+                        after_view.setText("")
+                        after_view.setVisibility(View.GONE)
                 except:
                     pass
             else:
@@ -20064,7 +20083,17 @@ class NftClonerPlugin(BasePlugin):
                         before_view.setVisibility(View.GONE)
                     except:
                         pass
-                after_view.setVisibility(View.GONE)
+                try:
+                    custom_view = get_val(sheet, "_eblannftTonLineView", None)
+                except:
+                    custom_view = None
+                if custom_view is not None:
+                    try:
+                        custom_view.setVisibility(View.GONE)
+                    except:
+                        pass
+                if after_view is not None:
+                    after_view.setVisibility(View.GONE)
         except Exception as ex:
             _log(f"Local TON blockchain line error: {ex}")
             return False
@@ -20134,19 +20163,33 @@ class NftClonerPlugin(BasePlugin):
     def _extract_table_row_title_text(self, row):
         if row is None:
             return ""
-        try:
-            if row.getChildCount() <= 0:
-                return ""
-            title_view = row.getChildAt(0)
-        except:
-            title_view = None
-        if title_view is None:
+        texts = []
+
+        def _walk(node, depth=0):
+            if node is None or depth > 4:
+                return
+            try:
+                if hasattr(node, "getText"):
+                    raw = node.getText()
+                    plain = self._charsequence_to_plain_text(raw).strip()
+                    if plain:
+                        texts.append(plain)
+            except:
+                pass
+            try:
+                count = int(node.getChildCount() or 0)
+            except:
+                count = 0
+            for idx in range(count):
+                try:
+                    _walk(node.getChildAt(idx), depth + 1)
+                except:
+                    pass
+
+        _walk(row, 0)
+        if not texts:
             return ""
-        try:
-            text = title_view.getText()
-        except:
-            text = ""
-        return str(text or "").strip()
+        return str(texts[0] or "").strip()
 
     def _is_local_identity_table_row(self, row):
         low = self._extract_table_row_title_text(row).lower()
@@ -23101,6 +23144,7 @@ class GiftSheetLocalValueHook(MethodHook):
                         _log(f"GiftSheet late TON rows error: {inner_e}")
                 AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 120)
                 AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 320)
+                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 650)
             except Exception as inner_e:
                 _log(f"GiftSheet late pass schedule error: {inner_e}")
         except Exception as e:

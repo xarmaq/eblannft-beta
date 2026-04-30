@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "notes": "Re-apply TON line and owner rows after late gift-sheet layout updates",
   "files": [
     "eblannft.plugin",
