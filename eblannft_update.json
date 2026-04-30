@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "notes": "Re-apply TON line and owner rows after late gift-sheet layout updates",
+  "version": "1.4.0",
+  "notes": "Fix pinned NFT reorder persistence after reopening profile and add Random action for NFT Number",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

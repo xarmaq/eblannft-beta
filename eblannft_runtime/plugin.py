@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -13361,11 +13361,45 @@ class NftClonerPlugin(BasePlugin):
         self._patch_my_cached_user()
         BulletinHelper.show_success(f"\u0423\u0434\u0430\u043b\u0435\u043d: {self._format_nft_number(token)}")
 
+    def _generate_random_nft_number(self, total_length=11):
+        try:
+            total_length = int(total_length or 0)
+        except:
+            total_length = 0
+        if total_length < 7 or total_length > 15:
+            try:
+                primary = self._get_primary_nft_number()
+                total_length = len(self._normalize_nft_number(primary)) if primary else 11
+            except:
+                total_length = 11
+        total_length = max(7, min(15, total_length))
+        suffix_length = max(4, total_length - 3)
+        existing = set(self._get_nft_number_tokens())
+        for _ in range(96):
+            suffix = "".join([str(random.randint(0, 9)) for _ in range(suffix_length)])
+            token = self._normalize_nft_number("888" + suffix)
+            if token and token not in existing:
+                return token
+        return ""
+
+    def _add_random_nft_number(self):
+        try:
+            primary = self._get_primary_nft_number()
+            preferred_length = len(self._normalize_nft_number(primary)) if primary else 11
+        except:
+            preferred_length = 11
+        token = self._generate_random_nft_number(preferred_length)
+        if not token:
+            BulletinHelper.show_error("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c NFT Number")
+            return
+        self._add_nft_number(token)
+
     def _open_nft_number_menu(self, context=None):
         try:
             tokens = self._get_nft_number_tokens()
             actions = [
                 ("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", lambda: self._show_text_input_dialog("Number (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 +888 0413 6929)", "", self._add_nft_number)),
+                ("\u0420\u0430\u043d\u0434\u043e\u043c", self._add_random_nft_number),
                 (f"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u2022 {self._state_short_text(self.nft_number_enabled)}", self._toggle_nft_number_enabled),
                 (f"\u0421\u043f\u0438\u0441\u043e\u043a \u2022 {len(tokens)}", self._show_number_tokens_info),
                 ("\u0414\u0435\u0442\u0430\u043b\u0438", self._open_nft_number_details_menu),
@@ -21735,6 +21769,93 @@ class NftClonerPlugin(BasePlugin):
                 continue
         return 0
 
+    def _resolve_library_entry_for_wrapper(self, wrapper):
+        if wrapper is None:
+            return None
+        try:
+            sid = int(self._extract_saved_id_from_wrapper(wrapper) or 0)
+        except:
+            sid = 0
+        if sid > 0:
+            try:
+                entry = self._library_find_entry_by_saved_id(sid)
+                if entry is not None:
+                    return entry
+            except:
+                pass
+        gift = None
+        try:
+            gift = self._extract_wrapper_gift(wrapper)
+        except:
+            gift = None
+        try:
+            unique_id = int(self._to_int(get_val(gift, "id", 0), 0) or 0) if gift is not None else 0
+        except:
+            unique_id = 0
+        if unique_id > 0:
+            try:
+                entry = self._library_find_entry_by_unique_id(unique_id)
+                if entry is not None:
+                    return entry
+            except:
+                pass
+        try:
+            slug = str(get_val(gift, "slug", "") or "") if gift is not None else ""
+        except:
+            slug = ""
+        if slug:
+            try:
+                entry = self._library_find_entry_by_slug(slug)
+                if entry is not None:
+                    return entry
+            except:
+                pass
+        return None
+
+    def _resolve_saved_gift_order_hint(self, wrapper, entry=None):
+        try:
+            hint = int(self._saved_gift_order_hint(wrapper) or 0)
+        except:
+            hint = 0
+        if hint != 0:
+            return int(hint)
+        try:
+            if entry is None:
+                entry = self._resolve_library_entry_for_wrapper(wrapper)
+        except:
+            entry = None
+        try:
+            return int(entry.get("order_hint", 0) or 0) if isinstance(entry, dict) else 0
+        except:
+            return 0
+
+    def _apply_saved_gift_order_hint(self, wrapper, order_hint):
+        if wrapper is None:
+            return False
+        try:
+            order_hint = int(self._to_int(order_hint, 0) or 0)
+        except:
+            order_hint = 0
+        changed = False
+        for name in [
+            "order",
+            "position",
+            "sort",
+            "sort_id",
+            "sortId",
+            "rank",
+            "pinned_order",
+            "pinnedOrder",
+            "pinned_index",
+            "pinnedIndex",
+        ]:
+            try:
+                if self._set_field(wrapper, name, int(order_hint)):
+                    changed = True
+            except:
+                pass
+        return bool(changed)
+
     def _saved_gift_sort_key(self, wrapper):
         # Lower key = earlier in list.
         try:
@@ -21751,11 +21872,11 @@ class NftClonerPlugin(BasePlugin):
             date = 0
         hint = 0
         try:
-            hint = int(self._saved_gift_order_hint(wrapper) or 0)
+            hint = int(self._resolve_saved_gift_order_hint(wrapper) or 0)
         except:
             hint = 0
-        # If hint is 0, push it after items with explicit order.
-        hint_norm = hint if hint != 0 else 1000000000
+        # Manual order is meaningful only for the pinned block.
+        hint_norm = hint if (pinned and hint > 0) else 1000000000
         # Keep hidden items after visible ones but still stable inside their group.
         return (0 if pinned else 1, 1 if hidden else 0, hint_norm, -int(date))
 
@@ -21868,9 +21989,24 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
             try:
-                oh = int(self._saved_gift_order_hint(wrapper) or 0)
-                if int(entry.get("order_hint", 0) or 0) != int(oh):
-                    entry["order_hint"] = int(oh)
+                direct_oh = int(self._saved_gift_order_hint(wrapper) or 0)
+            except:
+                direct_oh = 0
+            try:
+                existing_oh = int(entry.get("order_hint", 0) or 0)
+            except:
+                existing_oh = 0
+            try:
+                has_pin, pin_val = self._saved_gift_pinned_value(wrapper)
+                is_pinned_now = bool(pin_val) if has_pin else bool(entry.get("pinned_override", False))
+            except:
+                is_pinned_now = bool(entry.get("pinned_override", False))
+            try:
+                new_oh = int(direct_oh or 0)
+                if new_oh == 0:
+                    new_oh = int(existing_oh or 0) if is_pinned_now else 0
+                if existing_oh != int(new_oh):
+                    entry["order_hint"] = int(new_oh)
                     changed = True
             except:
                 pass
@@ -21988,14 +22124,22 @@ class NftClonerPlugin(BasePlugin):
         """
         Extract identifiers from batched InputSavedStarGift vectors used by
         toggleStarGiftsPinnedToTop / updateStarGiftCollection requests.
-        Returns (list_present, saved_ids:set[int], slugs:set[str], unique_ids:set[int]).
+        Returns (
+            list_present,
+            saved_ids:set[int],
+            slugs:set[str],
+            unique_ids:set[int],
+            ordered_saved_ids:dict[int, int],
+            ordered_slugs:dict[str, int],
+            ordered_unique_ids:dict[int, int],
+        ).
         """
         list_present = False
         saved_ids = set()
         slugs = set()
         unique_ids = set()
         if req is None:
-            return list_present, saved_ids, slugs, unique_ids
+            return list_present, saved_ids, slugs, unique_ids, {}, {}, {}
 
         candidates = []
         for field_name in ["stargift", "stargifts", "order", "gifts"]:
@@ -22039,7 +22183,44 @@ class NftClonerPlugin(BasePlugin):
                         v = 0
                     if v > 0:
                         unique_ids.add(v)
-        return list_present, saved_ids, slugs, unique_ids
+        ordered_saved_ids = {}
+        ordered_slugs = {}
+        ordered_unique_ids = {}
+        order_index = 0
+        for container in candidates:
+            try:
+                size = int(container.size() or 0)
+            except:
+                continue
+            for i in range(size):
+                try:
+                    item = container.get(i)
+                except:
+                    continue
+                if item is None:
+                    continue
+                order_index += 1
+                for name in ["saved_id", "savedId", "savedID", "saved_gift_id", "savedGiftId", "msg_id", "msgId"]:
+                    try:
+                        v = int(self._to_int(get_val(item, name, 0), 0) or 0)
+                    except:
+                        v = 0
+                    if v > 0 and v not in ordered_saved_ids:
+                        ordered_saved_ids[v] = int(order_index)
+                try:
+                    slug = str(get_val(item, "slug", "") or "").strip()
+                except:
+                    slug = ""
+                if slug and slug not in ordered_slugs:
+                    ordered_slugs[slug] = int(order_index)
+                for name in ["collectible_id", "unique_id", "gift_unique_id", "giftUniqueId", "id"]:
+                    try:
+                        v = int(self._to_int(get_val(item, name, 0), 0) or 0)
+                    except:
+                        v = 0
+                    if v > 0 and v not in ordered_unique_ids:
+                        ordered_unique_ids[v] = int(order_index)
+        return list_present, saved_ids, slugs, unique_ids, ordered_saved_ids, ordered_slugs, ordered_unique_ids
 
     def _apply_pinned_overrides_from_toggle_req(self, req, req_name_l=""):
         """
@@ -22052,7 +22233,7 @@ class NftClonerPlugin(BasePlugin):
         if ("toggle" not in req_name_l) or ("pin" not in req_name_l):
             return []
 
-        list_present, saved_ids, slugs, unique_ids = self._collect_input_saved_gift_tokens(req)
+        list_present, saved_ids, slugs, unique_ids, ordered_saved_ids, ordered_slugs, ordered_unique_ids = self._collect_input_saved_gift_tokens(req)
         if not list_present:
             return []
 
@@ -22090,15 +22271,38 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     should_pin = False
 
+            desired_order_hint = 0
+            if should_pin:
+                if sid > 0:
+                    try:
+                        desired_order_hint = int(ordered_saved_ids.get(sid, 0) or 0)
+                    except:
+                        desired_order_hint = 0
+                if desired_order_hint <= 0 and slugs:
+                    try:
+                        desired_order_hint = int(ordered_slugs.get(str(entry.get("slug", "") or ""), 0) or 0)
+                    except:
+                        desired_order_hint = 0
+                if desired_order_hint <= 0 and unique_ids:
+                    try:
+                        desired_order_hint = int(ordered_unique_ids.get(int(entry.get("unique_id", 0) or 0), 0) or 0)
+                    except:
+                        desired_order_hint = 0
+
             try:
                 prev_override = entry.get("pinned_override", None)
             except:
                 prev_override = None
-            if prev_override is not None and bool(prev_override) == bool(should_pin):
+            try:
+                prev_order_hint = int(entry.get("order_hint", 0) or 0)
+            except:
+                prev_order_hint = 0
+            if prev_override is not None and bool(prev_override) == bool(should_pin) and prev_order_hint == int(desired_order_hint or 0):
                 continue
 
             try:
                 entry["pinned_override"] = bool(should_pin)
+                entry["order_hint"] = int(desired_order_hint or 0)
                 entry["updated_at"] = int(time.time())
                 self._library_dirty = True
                 changed = True
@@ -22115,6 +22319,10 @@ class NftClonerPlugin(BasePlugin):
                             self._set_field(wrapper, fn, bool(should_pin))
                         except:
                             pass
+                    try:
+                        self._apply_saved_gift_order_hint(wrapper, desired_order_hint if should_pin else 0)
+                    except:
+                        pass
                     self._sync_library_entry_from_wrapper(wrapper)
             except:
                 pass
