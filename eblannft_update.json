@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "notes": "Loader/runtime update",
+  "version": "1.1.1",
+  "notes": "Test update for auto-updater",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
