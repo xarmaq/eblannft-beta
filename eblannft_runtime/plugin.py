@@ -1,4 +1,4 @@
-from base_plugin import BasePlugin, MenuItemData, MenuItemType, MethodHook
+﻿from base_plugin import BasePlugin, MenuItemData, MenuItemType, MethodHook
 from android_utils import log as logcat, run_on_ui_thread
 from client_utils import get_last_fragment, get_user_config, get_connections_manager
 try:
@@ -67,9 +67,9 @@ JRunnable = _gen(jclass("java.lang.Runnable"), "run")
 
 __id__ = "eblannft"
 __name__ = "eblanNFT"
-__description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
+__description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -489,7 +489,7 @@ class ProfileConfigOpenHook(MethodHook):
             if path and os.path.exists(str(path)):
                 run_on_ui_thread(lambda: self.plugin._handle_profile_file_open(str(path)))
             else:
-                BulletinHelper.show_error("Файл ещё не загружен или не найден")
+                BulletinHelper.show_error("Ð¤Ð°Ð¹Ð» ÐµÑ‰Ñ‘ Ð½Ðµ Ð·Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½ Ð¸Ð»Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
         except:
             pass
 
@@ -951,7 +951,7 @@ class NftClonerPlugin(BasePlugin):
         self._stars_catalog_list_field = None
         self._stars_catalog_list_candidates = None
         self._stars_catalog_last_scan_ts = 0.0
-        self.fake_incoming_text = "Привет! Как дела?"
+        self.fake_incoming_text = "ÐŸÑ€Ð¸Ð²ÐµÑ‚! ÐšÐ°Ðº Ð´ÐµÐ»Ð°?"
         self.fake_incoming_delay = "3"
         self.fake_incoming_messages = []
         self.fake_incoming_next_id = -2100000000
@@ -2190,6 +2190,12 @@ class NftClonerPlugin(BasePlugin):
     def on_plugin_load(self):
         try:
             self._plugin_unloading = False
+            try:
+                pending_version = self._get_pending_update_version()
+                if pending_version and not self._is_remote_version_newer(pending_version, __version__):
+                    self._set_pending_update_version("")
+            except:
+                pass
             self.add_menu_item(
                 MenuItemData(
                     menu_type=MenuItemType.PROFILE_ACTION_MENU,
@@ -2224,7 +2230,7 @@ class NftClonerPlugin(BasePlugin):
                 MenuItemData(
                     menu_type=MenuItemType.CHAT_ACTION_MENU,
                     item_id="fake_incoming_message_btn",
-                    text="Входящее сообщение",
+                    text="Ð’Ñ…Ð¾Ð´ÑÑ‰ÐµÐµ ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ðµ",
                     icon="msg_message",
                     on_click=self._open_fake_incoming_menu,
                     condition="false"
@@ -2234,7 +2240,7 @@ class NftClonerPlugin(BasePlugin):
                 MenuItemData(
                     menu_type=MenuItemType.CHAT_ACTION_MENU,
                     item_id="channel_nft_gifts_btn",
-                    text="NFT Gifts канала",
+                    text="NFT Gifts ÐºÐ°Ð½Ð°Ð»Ð°",
                     icon="msg_emoji_gem",
                     on_click=self._open_channel_gifts_menu,
                     condition="false"
@@ -2244,7 +2250,7 @@ class NftClonerPlugin(BasePlugin):
                 MenuItemData(
                     menu_type=MenuItemType.CHAT_ACTION_MENU,
                     item_id="channel_subscribers_btn",
-                    text="Подписчики (локально)",
+                    text="ÐŸÐ¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¸ (Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾)",
                     icon="msg_groups",
                     on_click=self._open_channel_subscribers_dialog,
                     condition="false"
@@ -2271,7 +2277,7 @@ class NftClonerPlugin(BasePlugin):
                 self._patch_my_cached_user()
                 # Explicit key prevents this startup primer from sharing the
                 # default "cached_user_patch" token with later delegate-driven
-                # schedules — they used to cancel each other out.
+                # schedules â€” they used to cancel each other out.
                 self._schedule_cached_user_patch([180, 560], key="initial_load_primer")
 
             try:
@@ -2325,19 +2331,19 @@ class NftClonerPlugin(BasePlugin):
         self._shutdown_bg_executor()
 
     def create_settings(self):
-        username_status = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"
-        number_status = self._display_nft_number() if self._is_nft_number_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"
+        username_status = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»"
+        number_status = self._display_nft_number() if self._is_nft_number_active() else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»"
         rating_status = self._get_local_rating_label()
         try:
             gifts_text = f"{len(self.gift_library or [])} NFT"
         except:
-            gifts_text = "ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº"
+            gifts_text = "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº"
         return [
             Header(text="NFT Gifts"),
-            Text(text=f"NFT Gifts ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {gifts_text}", icon="msg_emoji_gem", on_click=lambda _: self._open_gift_library_menu()),
-            Text(text=f"NFT Username ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {username_status}", icon="msg_edit", on_click=lambda _: self._open_nft_username_menu()),
-            Text(text=f"NFT Number ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {number_status}", icon="msg_link", on_click=lambda _: self._open_nft_number_menu()),
-            Text(text=f"Local Rating • {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
+            Text(text=f"NFT Gifts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {gifts_text}", icon="msg_emoji_gem", on_click=lambda _: self._open_gift_library_menu()),
+            Text(text=f"NFT Username ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {username_status}", icon="msg_edit", on_click=lambda _: self._open_nft_username_menu()),
+            Text(text=f"NFT Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {number_status}", icon="msg_link", on_click=lambda _: self._open_nft_number_menu()),
+            Text(text=f"Local Rating â€¢ {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
             Switch(
                 key="eblannft_hide_official_gifts_local",
                 text="Hide official gifts locally",
@@ -2346,9 +2352,9 @@ class NftClonerPlugin(BasePlugin):
                 on_change=lambda v: self._set_hide_official_gifts_local(v),
             ),
             Divider(),
-            Header(text="ÃƒÂÃ‚Â¡ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â"),
-            Text(text="ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³", icon="msg_retry", on_click=lambda _: self._force_load_catalog()),
-            Text(text="ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒâ€˜Ã‚ÂÃƒâ€˜Ã‹â€ ", icon="msg_delete", on_click=lambda _: self._clear_cache(), red=True),
+            Header(text="ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â"),
+            Text(text="ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³", icon="msg_retry", on_click=lambda _: self._force_load_catalog()),
+            Text(text="ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ", icon="msg_delete", on_click=lambda _: self._clear_cache(), red=True),
         ]
 
     def _get_menu_activity(self, context=None):
@@ -2370,7 +2376,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             return None
 
-    def _show_action_menu(self, title, actions, negative_text="ÃƒÂÃ‚ÂÃƒÂÃ‚Â°ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´", context=None):
+    def _show_action_menu(self, title, actions, negative_text="ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´", context=None):
         try:
             ctx = self._get_menu_activity(context)
             if not ctx:
@@ -2406,7 +2412,7 @@ class NftClonerPlugin(BasePlugin):
                     if cb:
                         cb()
                 except Exception as e:
-                    BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+                    BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
 
             builder = AlertDialogBuilder(ctx)
             builder.set_title(str(title or "NFT Studio"))
@@ -2415,7 +2421,7 @@ class NftClonerPlugin(BasePlugin):
             run_on_ui_thread(builder.show)
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
             return False
 
     def _commit_local_rating_settings(self, stars_value=None, level=None, next_goal=None, notify=True):
@@ -2428,7 +2434,7 @@ class NftClonerPlugin(BasePlugin):
             except:
                 text = ""
             if text and (not text.isdigit()):
-                raise ValueError("Введите числовое значение")
+                raise ValueError("Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ñ‡Ð¸ÑÐ»Ð¾Ð²Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ")
         try:
             stars = self._get_local_rating_value()
         except:
@@ -2473,9 +2479,9 @@ class NftClonerPlugin(BasePlugin):
             return
         try:
             if self.local_rating_enabled:
-                BulletinHelper.show_success(f"Локальный рейтинг сохранен: {self._get_local_rating_label()}")
+                BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½: {self._get_local_rating_label()}")
             else:
-                BulletinHelper.show_success("Локальный рейтинг выключен")
+                BulletinHelper.show_success("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½")
         except:
             pass
 
@@ -2483,27 +2489,27 @@ class NftClonerPlugin(BasePlugin):
         try:
             actions = [
                 (
-                    f"Количество очков • {self._format_local_rating_points(self._get_local_rating_value())}",
+                    f"ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² â€¢ {self._format_local_rating_points(self._get_local_rating_value())}",
                     lambda: self._show_text_input_dialog(
-                        "Количество очков рейтинга",
+                        "ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³Ð°",
                         str(self._get_local_rating_value() or ""),
                         lambda raw: self._commit_local_rating_settings(stars_value=raw),
                         numeric=True,
                     ),
                 ),
                 (
-                    f"Уровень профиля • {self._get_local_rating_level()}",
+                    f"Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ â€¢ {self._get_local_rating_level()}",
                     lambda: self._show_text_input_dialog(
-                        "Локальный уровень профиля",
+                        "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ",
                         str(self._get_local_rating_level()),
                         lambda raw: self._commit_local_rating_settings(level=raw),
                         numeric=True,
                     ),
                 ),
                 (
-                    f"Следующая цель • {self._format_local_rating_points(self._get_local_rating_next_goal())}",
+                    f"Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ â€¢ {self._format_local_rating_points(self._get_local_rating_next_goal())}",
                     lambda: self._show_text_input_dialog(
-                        "Порог следующего уровня",
+                        "ÐŸÐ¾Ñ€Ð¾Ð³ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÐµÐ³Ð¾ ÑƒÑ€Ð¾Ð²Ð½Ñ",
                         str(self._get_local_rating_next_goal()),
                         lambda raw: self._commit_local_rating_settings(next_goal=raw),
                         numeric=True,
@@ -2511,8 +2517,8 @@ class NftClonerPlugin(BasePlugin):
                 ),
             ]
             if self._is_local_rating_active():
-                actions.append(("Выключить локальный рейтинг", lambda: self._commit_local_rating_settings(stars_value=0)))
-            self._show_action_menu("Локальный рейтинг", actions, negative_text="Назад")
+                actions.append(("Ð’Ñ‹ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³", lambda: self._commit_local_rating_settings(stars_value=0)))
+            self._show_action_menu("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³", actions, negative_text="ÐÐ°Ð·Ð°Ð´")
         except Exception as e:
             BulletinHelper.show_error(f"Dialog Err: {e}")
 
@@ -2523,7 +2529,7 @@ class NftClonerPlugin(BasePlugin):
             except:
                 text = ""
             if text and (not text.isdigit()):
-                raise ValueError("Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ñ‡Ð¸ÑÐ»Ð¾Ð²Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ")
+                raise ValueError("Ãâ€™ÃÂ²ÃÂµÃÂ´ÃÂ¸Ã‘â€šÃÂµ Ã‘â€¡ÃÂ¸Ã‘ÂÃÂ»ÃÂ¾ÃÂ²ÃÂ¾ÃÂµ ÃÂ·ÃÂ½ÃÂ°Ã‘â€¡ÃÂµÃÂ½ÃÂ¸ÃÂµ")
         amount = self._sanitize_local_stars_balance_value(
             value if value is not None else self._get_local_stars_balance_value()
         )
@@ -2549,15 +2555,15 @@ class NftClonerPlugin(BasePlugin):
             return
         try:
             if self._is_local_stars_balance_active():
-                BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´: {self._get_local_stars_balance_label()}")
+                BulletinHelper.show_success(f"Ãâ€ºÃÂ¾ÃÂºÃÂ°ÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ±ÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã‘Â ÃÂ·ÃÂ²Ã‘â€˜ÃÂ·ÃÂ´: {self._get_local_stars_balance_label()}")
             else:
-                BulletinHelper.show_success("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´ Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½")
+                BulletinHelper.show_success("Ãâ€ºÃÂ¾ÃÂºÃÂ°ÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ±ÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã‘Â ÃÂ·ÃÂ²Ã‘â€˜ÃÂ·ÃÂ´ ÃÂ²Ã‘â€¹ÃÂºÃÂ»Ã‘Å½Ã‘â€¡ÃÂµÃÂ½")
         except:
             pass
 
     def _open_local_stars_balance_dialog(self):
         self._show_text_input_dialog(
-            "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´",
+            "Ãâ€ºÃÂ¾ÃÂºÃÂ°ÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ±ÃÂ°ÃÂ»ÃÂ°ÃÂ½Ã‘Â ÃÂ·ÃÂ²Ã‘â€˜ÃÂ·ÃÂ´",
             str(self._get_local_stars_balance_value() or ""),
             lambda raw: self._commit_local_stars_balance(raw),
             numeric=True,
@@ -2681,8 +2687,8 @@ class NftClonerPlugin(BasePlugin):
         except:
             lib_count = 0
         if lib_count > 0:
-            return f"ÃƒÂÃ‚Â² ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Âµ {lib_count}"
-        return "ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾"
+            return f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ {lib_count}"
+        return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾"
 
     def _get_wear_status_text(self):
         try:
@@ -2703,15 +2709,15 @@ class NftClonerPlugin(BasePlugin):
                     if num > 0:
                         return f"{title} #{num}"
                     return title
-                return "ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½"
+                return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½"
         except:
             pass
-        return "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½"
+        return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½"
 
     def _get_profile_menu_summary(self):
         wear_text = self._get_wear_status_text()
-        username_text = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"
-        number_text = self._display_nft_number() if self._is_nft_number_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"
+        username_text = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»"
+        number_text = self._display_nft_number() if self._is_nft_number_active() else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»"
         return f"wear: {wear_text}, @: {username_text}, #: {number_text}"
 
     def _has_profile_overrides(self):
@@ -3206,11 +3212,11 @@ class NftClonerPlugin(BasePlugin):
             lib_count = len(self.gift_library or [])
         except:
             lib_count = 0
-        constructor_text = "ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²" if self.inject_active else "ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ NFT"
-        return f"{lib_count} NFT, ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ ÃƒÂÃ‚Â¸ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ ({constructor_text})"
+        constructor_text = "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²" if self.inject_active else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ NFT"
+        return f"{lib_count} NFT, ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ({constructor_text})"
 
     def _get_service_menu_summary(self):
-        return "ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸ÃƒÂÃ‚Âµ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚ÂºÃƒâ€˜Ã‚ÂÃƒâ€˜Ã‹â€ ÃƒÂÃ‚Â°"
+        return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°"
 
     def _get_constructor_status_text(self):
         try:
@@ -3223,14 +3229,14 @@ class NftClonerPlugin(BasePlugin):
                 return self._get_current_nft_summary()
         except:
             pass
-        return "ÃƒÂÃ‚Â½Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ NFT"
+        return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ NFT"
 
     def _open_constructor_entry(self, context=None):
         def _launch():
             try:
                 self._open_constructor(context)
             except Exception as e:
-                BulletinHelper.show_error(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬: {e}")
+                BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬: {e}")
         try:
             AndroidUtilities.runOnUIThread(JRunnable(_launch), 80)
         except:
@@ -3360,7 +3366,7 @@ class NftClonerPlugin(BasePlugin):
                     try:
                         on_click()
                     except Exception as e:
-                        BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+                        BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
             try:
                 row.setOnClickListener(_SheetClick())
             except:
@@ -3547,8 +3553,8 @@ class NftClonerPlugin(BasePlugin):
             if back_cover_enabled:
                 card.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
 
-            left_icon = _make_side_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "◧", text_size=22.0)
-            right_icon = _make_side_icon(0, "", text_size=24.0)
+            left_icon = _make_side_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "â—§", text_size=22.0)
+            right_icon = _make_side_icon(0, "ï£¿", text_size=24.0)
             lp_left = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT)
             lp_left.leftMargin = AndroidUtilities.dp(16)
             lp_left.topMargin = AndroidUtilities.dp(16)
@@ -3663,7 +3669,7 @@ class NftClonerPlugin(BasePlugin):
             if back_cover_enabled:
                 check_label = TextView(ctx)
                 try:
-                    check_label.setText("✓")
+                    check_label.setText("âœ“")
                     check_label.setGravity(Gravity.CENTER)
                     check_label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18.0)
                     check_label.setTextColor(0xFFFFFFFF)
@@ -3683,7 +3689,7 @@ class NftClonerPlugin(BasePlugin):
                     self.set_setting("eblannft_settings_back_cover", not back_cover_enabled, reload_settings=True)
                 except Exception as e:
                     try:
-                        BulletinHelper.show_error(f"Не удалось переключить back cover: {e}")
+                        BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ back cover: {e}")
                     except:
                         pass
 
@@ -3773,15 +3779,15 @@ class NftClonerPlugin(BasePlugin):
             cards = [
                 _make_card(
                     "NFT Gifts",
-                    f"{len(self.gift_library or [])} подарков в локальной библиотеке.",
+                    f"{len(self.gift_library or [])} Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð² Ð² Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð¹ Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐµ.",
                     0xFF121A11,
                     0xFFFFFFFF,
                     0xFFBACBB3,
                     lambda: self._open_gift_library_menu(),
                 ),
                 _make_card(
-                    "Конструктор",
-                    "Открыть редактор и быстро собрать нужный визуал.",
+                    "ÐšÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€",
+                    "ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¾Ñ€ Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ð¾ ÑÐ¾Ð±Ñ€Ð°Ñ‚ÑŒ Ð½ÑƒÐ¶Ð½Ñ‹Ð¹ Ð²Ð¸Ð·ÑƒÐ°Ð».",
                     0xFFF3FBE9,
                     0xFF111111,
                     0xFF485345,
@@ -3789,7 +3795,7 @@ class NftClonerPlugin(BasePlugin):
                 ),
                 _make_card(
                     "Username",
-                    f"Текущий статус: {self._display_nft_username() if self._is_nft_username_active() else self._state_short_text(False)}.",
+                    f"Ð¢ÐµÐºÑƒÑ‰Ð¸Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ: {self._display_nft_username() if self._is_nft_username_active() else self._state_short_text(False)}.",
                     0xFF132114,
                     0xFFFFFFFF,
                     0xFFB6C9B0,
@@ -3797,7 +3803,7 @@ class NftClonerPlugin(BasePlugin):
                 ),
                 _make_card(
                     "Number",
-                    f"Текущий статус: {self._display_nft_number() if self._is_nft_number_active() else self._state_short_text(False)}.",
+                    f"Ð¢ÐµÐºÑƒÑ‰Ð¸Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ: {self._display_nft_number() if self._is_nft_number_active() else self._state_short_text(False)}.",
                     0xFFEDF6E6,
                     0xFF111111,
                     0xFF4A5346,
@@ -3826,7 +3832,7 @@ class NftClonerPlugin(BasePlugin):
                 pass
             tv = TextView(ctx)
             try:
-                tv.setText(f"\neblanNFT • v{__version__}")
+                tv.setText(f"\neblanNFT â€¢ v{__version__}")
                 tv.setGravity(Gravity.CENTER)
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 tv.setTextColor(self._theme_color("key_windowBackgroundWhiteGrayText2", 0xFF9A9A9A))
@@ -3911,7 +3917,7 @@ class NftClonerPlugin(BasePlugin):
 
             mark = TextView(ctx)
             try:
-                mark.setText("✓" if enabled else "")
+                mark.setText("âœ“" if enabled else "")
                 mark.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
                 try:
                     mark.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
@@ -3947,7 +3953,7 @@ class NftClonerPlugin(BasePlugin):
                         pass
                 except Exception as e:
                     try:
-                        BulletinHelper.show_error(f"Не удалось переключить Back Cover: {e}")
+                        BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Back Cover: {e}")
                     except:
                         pass
                 try:
@@ -4112,7 +4118,7 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 card.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
 
-            left_icon = _make_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "◫", text_size=21.0)
+            left_icon = _make_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "â—«", text_size=21.0)
             try:
                 left_icon.setClickable(True)
                 left_icon.setFocusable(True)
@@ -4125,7 +4131,7 @@ class NftClonerPlugin(BasePlugin):
             card.addView(left_icon, lp_left)
 
             if back_cover_enabled:
-                right_icon = _make_icon(0, "", text_size=24.0)
+                right_icon = _make_icon(0, "ï£¿", text_size=24.0)
                 lp_right = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT)
                 lp_right.rightMargin = AndroidUtilities.dp(16)
                 lp_right.topMargin = AndroidUtilities.dp(16)
@@ -4323,7 +4329,7 @@ class NftClonerPlugin(BasePlugin):
             if back_cover_enabled:
                 right_icon = TextView(ctx)
                 try:
-                    right_icon.setText("")
+                    right_icon.setText("ï£¿")
                     right_icon.setTextColor(0xFFFFFFFF)
                     right_icon.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 24.0)
                 except:
@@ -4394,7 +4400,7 @@ class NftClonerPlugin(BasePlugin):
 
             title = TextView(ctx)
             try:
-                title.setText("О eblanNFT")
+                title.setText("Ðž eblanNFT")
                 title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.0)
                 title.setTextColor(0xFFFFFFFF)
                 try:
@@ -4488,7 +4494,7 @@ class NftClonerPlugin(BasePlugin):
 
             info_title = TextView(ctx)
             try:
-                info_title.setText("vc дополнения")
+                info_title.setText("vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ")
                 info_title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.0)
                 info_title.setTextColor(0xFFFFFFFF)
                 try:
@@ -4501,7 +4507,7 @@ class NftClonerPlugin(BasePlugin):
 
             info_desc = TextView(ctx)
             try:
-                info_desc.setText("Официальный канал обновлений и новостей")
+                info_desc.setText("ÐžÑ„Ð¸Ñ†Ð¸Ð°Ð»ÑŒÐ½Ñ‹Ð¹ ÐºÐ°Ð½Ð°Ð» Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð¸ Ð½Ð¾Ð²Ð¾ÑÑ‚ÐµÐ¹")
                 info_desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 info_desc.setTextColor(0xFF8E8E8E)
             except:
@@ -4516,7 +4522,7 @@ class NftClonerPlugin(BasePlugin):
 
             arrow = TextView(ctx)
             try:
-                arrow.setText("›")
+                arrow.setText("â€º")
                 arrow.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 28.0)
                 arrow.setTextColor(0xFFBEBEBE)
             except:
@@ -4793,13 +4799,13 @@ class NftClonerPlugin(BasePlugin):
                     str(getattr(getattr(it, "settingItem", None), "link_alias", "") or "").strip().lower(),
                 ]
                 joined = " | ".join([p for p in probes if p])
-                if "подарки" in joined:
+                if "Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸" in joined:
                     found.add("gifts")
-                if "профиль" in joined:
+                if "Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ" in joined:
                     found.add("profile")
-                if "данные" in joined:
+                if "Ð´Ð°Ð½Ð½Ñ‹Ðµ" in joined:
                     found.add("data")
-                if "сервис" in joined:
+                if "ÑÐµÑ€Ð²Ð¸Ñ" in joined:
                     found.add("service")
             return found == {"gifts", "profile", "data", "service"}
         except:
@@ -4893,7 +4899,7 @@ class NftClonerPlugin(BasePlugin):
         tags = []
         try:
             if bool(entry.get("inject", False)):
-                tags.append("ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½")
+                tags.append("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½")
         except:
             pass
         try:
@@ -4903,7 +4909,7 @@ class NftClonerPlugin(BasePlugin):
         if self.wear_active and unique_id > 0 and unique_id == int(self.wear_collectible_id or 0):
             tags.append("wear")
         if tags:
-            return f"{base} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {', '.join(tags)}"
+            return f"{base} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {', '.join(tags)}"
         return base
 
     def _ui_text(self, value, fallback=""):
@@ -4921,7 +4927,7 @@ class NftClonerPlugin(BasePlugin):
         def _noise_score(src):
             try:
                 score = 0
-                for token in ["Ã", "Ð", "Ñ", "â", "™"]:
+                for token in ["Ãƒ", "Ã", "Ã‘", "Ã¢", "â„¢"]:
                     score += src.count(token)
                 return score
             except:
@@ -4948,10 +4954,10 @@ class NftClonerPlugin(BasePlugin):
 
         try:
             replacements = {
-                "â€¢": "\u2022",
-                "â„–": "\u2116",
-                "â€”": "-",
-                "â€“": "-",
+                "Ã¢â‚¬Â¢": "\u2022",
+                "Ã¢â€žâ€“": "\u2116",
+                "Ã¢â‚¬â€": "-",
+                "Ã¢â‚¬â€œ": "-",
             }
             for src, dst in replacements.items():
                 cur = cur.replace(src, dst)
@@ -5091,28 +5097,28 @@ class NftClonerPlugin(BasePlugin):
         if tokens:
             BulletinHelper.show_info("NFT Username:\n" + "\n".join([f"@{t}" for t in tokens]))
         else:
-            BulletinHelper.show_info("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº NFT Username ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_info("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº NFT Username ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
 
     def _show_number_tokens_info(self):
         tokens = self._get_nft_number_tokens()
         if tokens:
             BulletinHelper.show_info("NFT Number:\n" + "\n".join([self._format_nft_number(t) for t in tokens]))
         else:
-            BulletinHelper.show_info("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº NFT Number ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_info("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº NFT Number ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
 
     def _clear_all_nft_usernames(self):
         self._set_nft_username_tokens([])
         self.nft_username_enabled = False
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Âµ NFT Username ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
+        BulletinHelper.show_success("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ NFT Username ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹")
 
     def _clear_all_nft_numbers(self):
         self._set_nft_number_tokens([])
         self.nft_number_enabled = False
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Âµ NFT Number ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
+        BulletinHelper.show_success("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ NFT Number ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹")
 
     def _open_main_menu(self, context=None):
         self._show_main_menu_sheet(context=context)
@@ -5170,7 +5176,7 @@ class NftClonerPlugin(BasePlugin):
 
             subtitle = TextView(ctx)
             try:
-                subtitle.setText(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Âº ÃƒÂÃ‚Â² iOS: ÃƒÂÃ‚Â²Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Ëœ ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â´ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â·Ãƒâ€˜Ã†â€™ ÃƒÂÃ‚Â¸ Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â·ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¶ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â·ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¼.\nÃƒÂÃ‚Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã‚Â: {self._get_current_nft_summary()}")
+                subtitle.setText(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² iOS: ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼.\nÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â: {self._get_current_nft_summary()}")
                 subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 subtitle.setTextColor(self._theme_color("key_featuredStickers_buttonText", 0xFFF4F4F4))
             except:
@@ -5186,7 +5192,7 @@ class NftClonerPlugin(BasePlugin):
             chip_row.setOrientation(LinearLayout.HORIZONTAL)
             self._add_flow_chip(chip_row, self._create_label_chip(ctx, f"NFT {len(self.gift_library or [])}", 0x22FFFFFF, 0xFFFFFFFF, radius_dp=11, padding_h=10, padding_v=5, text_size=12), left=0, top=0)
             self._add_flow_chip(chip_row, self._create_label_chip(ctx, f"Wear {self._get_wear_status_text()}", 0x22FFFFFF, 0xFFFFFFFF, radius_dp=11, padding_h=10, padding_v=5, text_size=12), left=8, top=0)
-            self._add_flow_chip(chip_row, self._create_label_chip(ctx, "Username ÃƒÂÃ‚Â¸ Number ÃƒÂÃ‚Â½ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ", 0x22FFFFFF, 0xFFFFFFFF, radius_dp=11, padding_h=10, padding_v=5, text_size=12), left=8, top=0)
+            self._add_flow_chip(chip_row, self._create_label_chip(ctx, "Username ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ Number ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ", 0x22FFFFFF, 0xFFFFFFFF, radius_dp=11, padding_h=10, padding_v=5, text_size=12), left=8, top=0)
             try:
                 lp_chip = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
                 lp_chip.topMargin = AndroidUtilities.dp(10)
@@ -5223,19 +5229,19 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         body.addView(row)
 
-            _add_section("ÃƒÂÃ…Â¸Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™", [
-                self._create_sheet_action_row(ctx, "Wear Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚Â", self._get_wear_status_text(), lambda: self._open_gift_library_menu()),
-                self._create_sheet_action_row(ctx, "NFT Username", self._display_nft_username() if self._is_nft_username_active() else "ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾", lambda: self._open_nft_username_menu()),
-                self._create_sheet_action_row(ctx, "NFT Number", self._display_nft_number() if self._is_nft_number_active() else "ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾", lambda: self._open_nft_number_menu()),
+            _add_section("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", [
+                self._create_sheet_action_row(ctx, "Wear ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â", self._get_wear_status_text(), lambda: self._open_gift_library_menu()),
+                self._create_sheet_action_row(ctx, "NFT Username", self._display_nft_username() if self._is_nft_username_active() else "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", lambda: self._open_nft_username_menu()),
+                self._create_sheet_action_row(ctx, "NFT Number", self._display_nft_number() if self._is_nft_number_active() else "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", lambda: self._open_nft_number_menu()),
             ])
-            _add_section("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â»ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Â ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â", [
-                self._create_sheet_action_row(ctx, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬", self._get_constructor_status_text(), lambda: self._open_constructor_entry(), accent=True),
-                self._create_sheet_action_row(ctx, "ÃƒÂÃ¢â‚¬ËœÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â° NFT", f"{len(self.gift_library or [])} Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²", lambda: self._open_gift_library_menu()),
-                self._create_sheet_action_row(ctx, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", "ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â°ÃƒÂÃ‚Â³ÃƒÂÃ‚Â°ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â½ ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº", lambda: self._open_catalog_nft_sheet()),
+            _add_section("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â", [
+                self._create_sheet_action_row(ctx, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬", self._get_constructor_status_text(), lambda: self._open_constructor_entry(), accent=True),
+                self._create_sheet_action_row(ctx, "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° NFT", f"{len(self.gift_library or [])} ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²", lambda: self._open_gift_library_menu()),
+                self._create_sheet_action_row(ctx, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº", lambda: self._open_catalog_nft_sheet()),
             ])
-            _add_section("ÃƒÂÃ‚Â¡ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â", [
-                self._create_sheet_action_row(ctx, "ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³", "ÃƒÂÃ…Â¸ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â³Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²", lambda: self._force_load_catalog()),
-                self._create_sheet_action_row(ctx, "ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒâ€˜Ã‚ÂÃƒâ€˜Ã‹â€ ", "ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°ÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Âµ", lambda: self._clear_cache()),
+            _add_section("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â", [
+                self._create_sheet_action_row(ctx, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³", "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²", lambda: self._force_load_catalog()),
+                self._create_sheet_action_row(ctx, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ", "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ", lambda: self._clear_cache()),
             ])
 
             root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
@@ -5252,40 +5258,40 @@ class NftClonerPlugin(BasePlugin):
                 pass
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
             return False
 
     def _open_profile_tools_menu(self, context=None):
         try:
             actions = [
-                (f"ÃƒÂÃ‚ÂÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â¹ NFT ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self._get_wear_status_text()}", lambda: self._open_gift_library_menu()),
-                (f"NFT Username ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self._display_nft_username() if self._is_nft_username_active() else 'ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»'}", lambda: self._open_nft_username_menu()),
-                (f"NFT Number ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self._display_nft_number() if self._is_nft_number_active() else 'ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»'}", lambda: self._open_nft_number_menu()),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ NFT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self._get_wear_status_text()}", lambda: self._open_gift_library_menu()),
+                (f"NFT Username ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self._display_nft_username() if self._is_nft_username_active() else 'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»'}", lambda: self._open_nft_username_menu()),
+                (f"NFT Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self._display_nft_number() if self._is_nft_number_active() else 'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»'}", lambda: self._open_nft_number_menu()),
             ]
-            self._show_action_menu("ÃƒÂÃ…Â¸Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+            self._show_action_menu("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½ ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»Ãƒâ€˜Ã‚Â: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â: {e}")
 
     def _open_collection_tools_menu(self, context=None):
         try:
             actions = [
-                ("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬", lambda: self._open_constructor(None)),
-                (f"ÃƒÂÃ¢â‚¬ËœÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â° NFT ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {len(self.gift_library or [])}", lambda: self._open_gift_library_menu()),
-                ("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", lambda: self._open_catalog_nft_sheet()),
+                ("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬", lambda: self._open_constructor(None)),
+                (f"ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° NFT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {len(self.gift_library or [])}", lambda: self._open_gift_library_menu()),
+                ("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", lambda: self._open_catalog_nft_sheet()),
             ]
-            self._show_action_menu("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â»ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Â ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+            self._show_action_menu("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â»ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Â ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¸: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸: {e}")
 
     def _open_service_tools_menu(self, context=None):
         try:
             actions = [
-                ("ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³", self._force_load_catalog),
-                ("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒâ€˜Ã‚ÂÃƒâ€˜Ã‹â€ ", self._clear_cache),
+                ("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³", self._force_load_catalog),
+                ("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ", self._clear_cache),
             ]
-            self._show_action_menu("ÃƒÂÃ‚Â¡ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+            self._show_action_menu("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° Ãƒâ€˜Ã‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
 
     def _default_identity_config(self):
         return {
@@ -5556,7 +5562,7 @@ class NftClonerPlugin(BasePlugin):
     def _is_gift_stars_config_active(self, cfg=None):
         return bool(self._get_gift_stars_amount(cfg) > 0)
 
-    def _format_gift_stars_text(self, cfg=None, placeholder="не заданы"):
+    def _format_gift_stars_text(self, cfg=None, placeholder="Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ñ‹"):
         amount = self._get_gift_stars_amount(cfg)
         if amount <= 0:
             return str(placeholder or "")
@@ -5606,7 +5612,7 @@ class NftClonerPlugin(BasePlugin):
             grouped = "-" + grouped
         return grouped
 
-    def _format_local_value_text(self, cfg=None, placeholder="не задана", include_tilde=True, include_code=False):
+    def _format_local_value_text(self, cfg=None, placeholder="Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ð°", include_tilde=True, include_code=False):
         cfg2 = self._sanitize_value_config(cfg if isinstance(cfg, dict) else getattr(self, "value_config", None))
         amount = str(cfg2.get("amount", "") or "").strip()
         if not amount:
@@ -6091,7 +6097,7 @@ class NftClonerPlugin(BasePlugin):
         if heavy_pass and drawable is not None and fragment_view is not None:
             # Pre-bind attribute lookups outside the tight loop.
             _cs2txt = self._charsequence_to_plain_text
-            _skip_texts = ("в сети", "online")
+            _skip_texts = ("Ð² ÑÐµÑ‚Ð¸", "online")
             for view in self._iter_view_tree(fragment_view, max_depth=9):
                 if view is None:
                     continue
@@ -6106,7 +6112,7 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     txt = ""
                 txt_norm = str(txt or "").strip().lower()
-                if (not txt_norm) or txt_norm in _skip_texts or "был" in txt_norm:
+                if (not txt_norm) or txt_norm in _skip_texts or "Ð±Ñ‹Ð»" in txt_norm:
                     continue
                 try:
                     if hasattr(view, "setLeftDrawableOutside"):
@@ -6565,13 +6571,13 @@ class NftClonerPlugin(BasePlugin):
 
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
-            return "Выкл"
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} звезд • ур. {self._get_local_rating_level()}"
+            return "Ð’Ñ‹ÐºÐ»"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð·Ð²ÐµÐ·Ð´ â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
-            return "Выкл"
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} очков • ур. {self._get_local_rating_level()}"
+            return "Ð’Ñ‹ÐºÐ»"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð¾Ñ‡ÐºÐ¾Ð² â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_stars_balance_value(self):
         return self._sanitize_local_stars_balance_value(getattr(self, "local_stars_balance_value", 0))
@@ -6584,8 +6590,8 @@ class NftClonerPlugin(BasePlugin):
 
     def _get_local_stars_balance_label(self):
         if not self._is_local_stars_balance_active():
-            return "Ð’Ñ‹ÐºÐ»"
-        return f"{self._format_local_rating_points(self._get_local_stars_balance_value())} Ð·Ð²Ñ‘Ð·Ð´"
+            return "Ãâ€™Ã‘â€¹ÃÂºÃÂ»"
+        return f"{self._format_local_rating_points(self._get_local_stars_balance_value())} ÃÂ·ÃÂ²Ã‘â€˜ÃÂ·ÃÂ´"
 
     def _create_local_stars_amount(self):
         try:
@@ -7970,7 +7976,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             my_id = 0
         if uid <= 0 or (my_id > 0 and uid == my_id):
-            return f"ÃƒÂÃ‚Â¢ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Å¡ ({my_id})" if my_id > 0 else "ÃƒÂÃ‚Â¢ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Å¡"
+            return f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ ({my_id})" if my_id > 0 else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡"
         return str(uid)
 
     def _normalize_identity_uid_for_storage(self, raw_uid):
@@ -8083,7 +8089,7 @@ class NftClonerPlugin(BasePlugin):
         # Drop runtime objects only when the account slot really changes. A forced
         # recheck of the same slot must not blank wear/identity before cache IO.
         if int(prev or 0) != int(uid or 0):
-            # Reset load-state for the new slot — prevents the previous
+            # Reset load-state for the new slot â€” prevents the previous
             # account's "ok" state from authorizing writes against the new
             # account's possibly-unloaded cache.
             try:
@@ -9263,7 +9269,7 @@ class NftClonerPlugin(BasePlugin):
             return False
 
     # Whitelisted reasons that may drop the worn-NFT state. Any other call must be
-    # ignored — wear status is now iron-clad and only the user can clear it
+    # ignored â€” wear status is now iron-clad and only the user can clear it
     # (menu toggle / removing the NFT).
     _ALLOWED_WEAR_CLEAR_REASONS = (
         "menu_remove_wear",
@@ -9273,7 +9279,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _clear_wear_state(self, persist=True, clear_cached_status=True, request_server_clear=False, reason=""):
         # Hard guard: ignore any clear that is not an explicit user action. This
-        # makes wear "rock-solid" — server pushes / sync / refresh paths cannot
+        # makes wear "rock-solid" â€” server pushes / sync / refresh paths cannot
         # silently strip it. Only the menu-remove and library-remove flows pass.
         try:
             reason_str = str(reason or "").strip().lower()
@@ -9745,7 +9751,7 @@ class NftClonerPlugin(BasePlugin):
                             pass
             except:
                 pass
-                # Fix bogus availability totals (prevents "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0" ribbons in UI).
+                # Fix bogus availability totals (prevents "1 ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· 0" ribbons in UI).
             try:
                 gift = self._extract_wrapper_gift(obj)
                 if gift is not None:
@@ -10078,13 +10084,13 @@ class NftClonerPlugin(BasePlugin):
                 actions.append((self._format_library_entry_label(entry), lambda k=key: self._open_gift_actions_menu(k)))
 
             actions.extend([
-                ("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³", lambda: self._open_catalog_nft_sheet()),
+                ("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³", lambda: self._open_catalog_nft_sheet()),
             ])
 
-            title = f"ÃƒÂÃ¢â‚¬ËœÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â° NFT ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {len(entries)}" if entries else "ÃƒÂÃ¢â‚¬ËœÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â° NFT ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾"
-            self._show_action_menu(title, actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+            title = f"ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° NFT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {len(entries)}" if entries else "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° NFT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾"
+            self._show_action_menu(title, actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸: {e}")
 
     def _open_gift_library_menu(self, context=None):
         try:
@@ -10133,10 +10139,10 @@ class NftClonerPlugin(BasePlugin):
                 self._market_floor_cache = {}
             except:
                 pass
-            BulletinHelper.show_info("ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã…Â½ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³...")
+            BulletinHelper.show_info("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³...")
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³: {e}")
             return False
 
     def _load_catalog_silent(self):
@@ -11003,7 +11009,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _ensure_unique_gift_availability(self, gift, base_gift_id=0):
         """
-        Fix "X ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0" ribbons by ensuring availability_total / limited_count are filled from catalog.
+        Fix "X ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· 0" ribbons by ensuring availability_total / limited_count are filled from catalog.
         If we can't resolve totals, disable 'limited' flag so Telegram doesn't render bogus data.
         """
         if gift is None:
@@ -11161,7 +11167,7 @@ class NftClonerPlugin(BasePlugin):
         if (cur_limited_count > 0 or cur_total > 0):
             _set_any_bool(gift, ["limited", "is_limited", "isLimited"], True)
         else:
-            # Prevent "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0" if we couldn't resolve totals.
+            # Prevent "1 ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· 0" if we couldn't resolve totals.
             _set_any_bool(gift, ["limited", "is_limited", "isLimited"], False)
 
         # Debug: if still unresolved, log once per base gift id.
@@ -11525,46 +11531,46 @@ class NftClonerPlugin(BasePlugin):
     def _open_gift_actions_menu(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("ÃƒÂÃ…Â¸ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¹ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½")
             return
         inj = bool(e.get("inject", False))
         t = str(e.get("title", "NFT"))
         n = int(e.get("num", 0) or 0)
         title = f"{t} #{n}" if n > 0 else t
         actions = [
-            ("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â² ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Âµ", lambda: self._open_constructor_for_library_key(key)),
-            (("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â²ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸ÃƒÂÃ‚Âµ" if inj else "ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â²ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â¼"), lambda: self._toggle_library_injection_state(key)),
-            ("ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸", lambda: self._delete_library_gift_key(key)),
+            ("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ", lambda: self._open_constructor_for_library_key(key)),
+            (("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ" if inj else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼"), lambda: self._toggle_library_injection_state(key)),
+            ("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸", lambda: self._delete_library_gift_key(key)),
         ]
         self._show_action_menu(title, actions)
 
     def _open_gift_actions_menu(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return
         t = self._ui_text(e.get("title", "NFT"), "NFT")
         n = int(e.get("num", 0) or 0)
         title = f"{t} #{n}" if n > 0 else t
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
-            ("Открыть в конструкторе", lambda: self._open_constructor_for_library_key(key)),
-            (f"TON блокчейн • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            ("ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð² ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ðµ", lambda: self._open_constructor_for_library_key(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Владелец TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
-        actions.append(("Удалить из библиотеки", lambda: self._delete_library_gift_key(key)))
-        self._show_action_menu(title, actions, negative_text="Назад")
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+        actions.append(("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ¸", lambda: self._delete_library_gift_key(key)))
+        self._show_action_menu(title, actions, negative_text="ÐÐ°Ð·Ð°Ð´")
 
     def _toggle_library_injection_state(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("ÃƒÂÃ…Â¸ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¹ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½")
             return
         e["inject"] = not bool(e.get("inject", False))
         self._rebuild_injection_payloads()
         self._save_cache()
-        BulletinHelper.show_success("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸ÃƒÂÃ‚Âµ NFT ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾")
+        BulletinHelper.show_success("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ NFT ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
 
     def _open_constructor(self, context):
         try:
@@ -11664,7 +11670,7 @@ class NftClonerPlugin(BasePlugin):
                 if self.gift_library:
                     self._open_gift_library_menu()
                     return
-                BulletinHelper.show_error("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â° Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº!")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº!")
                 return
         gift_id = 0
         try:
@@ -11679,7 +11685,7 @@ class NftClonerPlugin(BasePlugin):
         if gift_id == 0 and self.cached_gift_id:
             gift_id = self.cached_gift_id
         if gift_id == 0:
-            BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒÂÃ‚Â²ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ gift_id")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ gift_id")
             return
         if not self.editing_gift_key:
             try:
@@ -11737,7 +11743,7 @@ class NftClonerPlugin(BasePlugin):
     def _display_nft_username(self):
         tokens = self._get_nft_username_tokens()
         if not tokens:
-            return "ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹"
+            return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹"
         if len(tokens) == 1:
             return f"@{tokens[0]}"
         if len(tokens) == 2:
@@ -11790,10 +11796,10 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     on_submit(str(et.getText()))
                 except Exception as e:
-                    BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â²ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°: {e}")
+                    BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°: {e}")
 
-            builder.set_positive_button("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", _ok)
-            builder.set_negative_button("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°", None)
+            builder.set_positive_button("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", _ok)
+            builder.set_negative_button("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
             BulletinHelper.show_error(f"Dialog Err: {e}")
@@ -11801,15 +11807,15 @@ class NftClonerPlugin(BasePlugin):
     def _open_remove_nft_username_menu(self):
         tokens = self._get_nft_username_tokens()
         if not tokens:
-            BulletinHelper.show_error("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº Ãƒâ€˜Ã…Â½ÃƒÂÃ‚Â·ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â² ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
             return
         try:
             actions = []
             for token in tokens:
                 actions.append((f"@{token}", lambda t=token: self._remove_nft_username_token(t)))
-            self._show_action_menu("ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ NFT Username", actions, negative_text="ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°")
+            self._show_action_menu("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ NFT Username", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°")
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â: {e}")
 
     def _remove_nft_username_token(self, token):
         tokens = self._get_nft_username_tokens()
@@ -11817,58 +11823,58 @@ class NftClonerPlugin(BasePlugin):
         self._set_nft_username_tokens(new_tokens)
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success(f"ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½: @{token}")
+        BulletinHelper.show_success(f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½: @{token}")
 
     def _open_nft_username_menu(self, context=None):
         try:
             tokens = self._get_nft_username_tokens()
             actions = [
-                ("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â°ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ username", lambda: self._show_text_input_dialog("NFT Username (ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂµÃƒÂÃ‚Â· @)", "", self._add_nft_username)),
-                ((f"ÃƒÂÃ…Â¸ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°ÃƒÂÃ‚Â· ÃƒÂÃ‚Â² ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»ÃƒÂÃ‚Âµ ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {'ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»' if self.nft_username_enabled else 'ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»'}"), self._toggle_nft_username_enabled),
-                (f"ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {len(tokens)}", self._show_username_tokens_info),
-                ("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸", self._open_nft_username_details_menu),
+                ("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ username", lambda: self._show_text_input_dialog("NFT Username (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· @)", "", self._add_nft_username)),
+                ((f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»' if self.nft_username_enabled else 'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»'}"), self._toggle_nft_username_enabled),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {len(tokens)}", self._show_username_tokens_info),
+                ("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸", self._open_nft_username_details_menu),
             ]
             if tokens:
-                actions.append(("ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚ÂºÃƒÂÃ‚Â°", self._open_remove_nft_username_menu))
-                actions.append(("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â²Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Ëœ", self._clear_all_nft_usernames))
-            self._show_action_menu("NFT Username", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+                actions.append(("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", self._open_remove_nft_username_menu))
+                actions.append(("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“", self._clear_all_nft_usernames))
+            self._show_action_menu("NFT Username", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
 
     def _toggle_nft_username_enabled(self):
         self.nft_username_enabled = not self.nft_username_enabled
         self._save_cache()
         self._patch_my_cached_user()
-        state_text = "ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾" if self.nft_username_enabled else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾"
+        state_text = "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾" if self.nft_username_enabled else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾"
         BulletinHelper.show_success(f"NFT Username: {state_text}")
 
     def _add_nft_username(self, value):
         uname = self._normalize_nft_username(value)
         if not uname:
-            BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â¹ Ãƒâ€˜Ã…Â½ÃƒÂÃ‚Â·ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹ÃƒÂÃ‚Â¼")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼")
             return
         tokens = self._get_nft_username_tokens()
         if uname.lower() in [t.lower() for t in tokens]:
-            BulletinHelper.show_info(f"ÃƒÂÃ‚Â£ÃƒÂÃ‚Â¶ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â´ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â°ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½: @{uname}")
+            BulletinHelper.show_info(f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½: @{uname}")
             return
         tokens.append(uname)
         self._set_nft_username_tokens(tokens)
         self.nft_username_enabled = True
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success(f"NFT Username ÃƒÂÃ‚Â´ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â°ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½: @{uname}")
+        BulletinHelper.show_success(f"NFT Username ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½: @{uname}")
 
     def _open_nft_username_details_menu(self):
         try:
-            date_text = self.nft_username_purchase_date if self.nft_username_purchase_date else "ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°"
+            date_text = self.nft_username_purchase_date if self.nft_username_purchase_date else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°"
             actions = [
-                (f"ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° TON ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.nft_username_price_ton}", lambda: self._show_text_input_dialog("ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â² TON", self.nft_username_price_ton, lambda text: self._save_nft_username_detail("ton", text))),
-                (f"ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° USD ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.nft_username_price_usd}", lambda: self._show_text_input_dialog("ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â² USD", self.nft_username_price_usd, lambda text: self._save_nft_username_detail("usd", text))),
-                (f"ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {date_text}", lambda: self._show_text_input_dialog("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ (ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ 27.05.2025 02:25)", self.nft_username_purchase_date, lambda text: self._save_nft_username_detail("date", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° TON ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.nft_username_price_ton}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² TON", self.nft_username_price_ton, lambda text: self._save_nft_username_detail("ton", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° USD ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.nft_username_price_usd}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² USD", self.nft_username_price_usd, lambda text: self._save_nft_username_detail("usd", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {date_text}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 27.05.2025 02:25)", self.nft_username_purchase_date, lambda text: self._save_nft_username_detail("date", text))),
             ]
-            self._show_action_menu("NFT Username ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™")
+            self._show_action_menu("NFT Username ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢")
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹: {e}")
 
     def _save_nft_username_detail(self, key, value):
         text = str(value or "").strip().replace(",", ".")
@@ -11884,7 +11890,7 @@ class NftClonerPlugin(BasePlugin):
         elif key == "date":
             self.nft_username_purchase_date = text
         self._save_cache()
-        BulletinHelper.show_success("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ NFT Username Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
+        BulletinHelper.show_success("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ NFT Username ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹")
 
     # ---- Collectible phone number (+888...) spoof ----
 
@@ -11956,9 +11962,9 @@ class NftClonerPlugin(BasePlugin):
     def _display_nft_number(self):
         tokens = self._get_nft_number_tokens()
         if not tokens:
-            return "ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½"
+            return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½"
         if len(tokens) == 1:
-            return self._format_nft_number(tokens[0]) or "ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½"
+            return self._format_nft_number(tokens[0]) or "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½"
         if len(tokens) == 2:
             return f"{self._format_nft_number(tokens[0])}, {self._format_nft_number(tokens[1])}"
         return f"{self._format_nft_number(tokens[0])}, {self._format_nft_number(tokens[1])} +{len(tokens)-2}"
@@ -11982,15 +11988,15 @@ class NftClonerPlugin(BasePlugin):
     def _open_remove_nft_number_menu(self):
         tokens = self._get_nft_number_tokens()
         if not tokens:
-            BulletinHelper.show_error("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â² ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
             return
         try:
             actions = []
             for token in tokens:
                 actions.append((self._format_nft_number(token), lambda t=token: self._remove_nft_number_token(t)))
-            self._show_action_menu("ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ NFT Number", actions, negative_text="ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°")
+            self._show_action_menu("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ NFT Number", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°")
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â: {e}")
 
     def _remove_nft_number_token(self, token):
         tokens = self._get_nft_number_tokens()
@@ -11998,58 +12004,58 @@ class NftClonerPlugin(BasePlugin):
         self._set_nft_number_tokens(new_tokens)
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success(f"ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½: {self._format_nft_number(token)}")
+        BulletinHelper.show_success(f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½: {self._format_nft_number(token)}")
 
     def _open_nft_number_menu(self, context=None):
         try:
             tokens = self._get_nft_number_tokens()
             actions = [
-                ("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â°ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬", lambda: self._show_text_input_dialog("NFT Number (ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ +888 0413 6929)", "", self._add_nft_number)),
-                ((f"ÃƒÂÃ…Â¸ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°ÃƒÂÃ‚Â· ÃƒÂÃ‚Â² ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»ÃƒÂÃ‚Âµ ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {'ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»' if self.nft_number_enabled else 'ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»'}"), self._toggle_nft_number_enabled),
-                (f"ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {len(tokens)}", self._show_number_tokens_info),
-                ("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸", self._open_nft_number_details_menu),
+                ("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬", lambda: self._show_text_input_dialog("NFT Number (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ +888 0413 6929)", "", self._add_nft_number)),
+                ((f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»' if self.nft_number_enabled else 'ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»'}"), self._toggle_nft_number_enabled),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {len(tokens)}", self._show_number_tokens_info),
+                ("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸", self._open_nft_number_details_menu),
             ]
             if tokens:
-                actions.append(("ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚ÂºÃƒÂÃ‚Â°", self._open_remove_nft_number_menu))
-                actions.append(("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â²Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Ëœ", self._clear_all_nft_numbers))
-            self._show_action_menu("NFT Number", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", context=context)
+                actions.append(("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", self._open_remove_nft_number_menu))
+                actions.append(("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“", self._clear_all_nft_numbers))
+            self._show_action_menu("NFT Number", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", context=context)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã…Â½: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½: {e}")
 
     def _toggle_nft_number_enabled(self):
         self.nft_number_enabled = not self.nft_number_enabled
         self._save_cache()
         self._patch_my_cached_user()
-        state_text = "ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾" if self.nft_number_enabled else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»Ãƒâ€˜Ã…Â½Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾"
+        state_text = "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾" if self.nft_number_enabled else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾"
         BulletinHelper.show_success(f"NFT Number: {state_text}")
 
     def _add_nft_number(self, value):
         num = self._normalize_nft_number(value, allow_missing_prefix=True)
         if not num:
-            BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ (ÃƒÂÃ‚Â½Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ +888...)")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ +888...)")
             return
         tokens = self._get_nft_number_tokens()
         if num in tokens:
-            BulletinHelper.show_info("ÃƒÂÃ‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â² Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚ÂºÃƒÂÃ‚Âµ")
+            BulletinHelper.show_info("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ")
             return
         tokens.append(num)
         self._set_nft_number_tokens(tokens)
         self.nft_number_enabled = True
         self._save_cache()
         self._patch_my_cached_user()
-        BulletinHelper.show_success("NFT Number ÃƒÂÃ‚Â´ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â°ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½")
+        BulletinHelper.show_success("NFT Number ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½")
 
     def _open_nft_number_details_menu(self):
         try:
-            date_text = self.nft_number_purchase_date if self.nft_number_purchase_date else "ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â·ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°"
+            date_text = self.nft_number_purchase_date if self.nft_number_purchase_date else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°"
             actions = [
-                (f"ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° TON ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.nft_number_price_ton}", lambda: self._show_text_input_dialog("ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° TON (ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ 10.8)", self.nft_number_price_ton, lambda text: self._save_nft_number_detail("ton", text))),
-                (f"ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° USD ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.nft_number_price_usd}", lambda: self._show_text_input_dialog("ÃƒÂÃ‚Â¦ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â° USD (ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ 14.68)", self.nft_number_price_usd, lambda text: self._save_nft_number_detail("usd", text))),
-                (f"ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {date_text}", lambda: self._show_text_input_dialog("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â° ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¿ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ (ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ 27.05.2025 02:25)", self.nft_number_purchase_date, lambda text: self._save_nft_number_detail("date", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° TON ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.nft_number_price_ton}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° TON (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 10.8)", self.nft_number_price_ton, lambda text: self._save_nft_number_detail("ton", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° USD ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.nft_number_price_usd}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° USD (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 14.68)", self.nft_number_price_usd, lambda text: self._save_nft_number_detail("usd", text))),
+                (f"ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {date_text}", lambda: self._show_text_input_dialog("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ (ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ 27.05.2025 02:25)", self.nft_number_purchase_date, lambda text: self._save_nft_number_detail("date", text))),
             ]
-            self._show_action_menu("NFT Number ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸", actions, negative_text="ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™")
+            self._show_action_menu("NFT Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸", actions, negative_text="ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢")
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹: {e}")
 
     def _save_nft_number_detail(self, key, value):
         text = str(value or "").strip().replace(",", ".")
@@ -12064,7 +12070,7 @@ class NftClonerPlugin(BasePlugin):
         elif key == "date":
             self.nft_number_purchase_date = text
         self._save_cache()
-        BulletinHelper.show_success("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ NFT Number Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
+        BulletinHelper.show_success("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ NFT Number ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹")
 
     def _state_short_text(self, enabled):
         return "\u0432\u043a\u043b" if bool(enabled) else "\u0432\u044b\u043a\u043b"
@@ -12088,29 +12094,29 @@ class NftClonerPlugin(BasePlugin):
         return [
             Divider(),
             Text(
-                text="Подарки",
-                subtext=f"{gifts_text} в библиотеке",
+                text="ÐŸÐ¾Ð´Ð°Ñ€ÐºÐ¸",
+                subtext=f"{gifts_text} Ð² Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐµ",
                 icon="msg_emoji_gem",
                 on_click=lambda _: self._open_gift_library_menu(),
             ),
             Divider(),
             Text(
-                text="Профиль",
-                subtext=f"Username • {username_status}   Number • {number_status}",
+                text="ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ",
+                subtext=f"Username â€¢ {username_status}   Number â€¢ {number_status}",
                 icon="msg_edit",
                 create_sub_fragment=self._create_profile_settings_subfragment,
                 link_alias="eblannft_profile_subfragment",
             ),
             Text(
-                text="Данные",
-                subtext="Экспорт и импорт .profile",
+                text="Ð”Ð°Ð½Ð½Ñ‹Ðµ",
+                subtext="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð¸ Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚ .profile",
                 icon="msg_share",
                 create_sub_fragment=self._create_data_settings_subfragment,
                 link_alias="eblannft_data_subfragment",
             ),
             Text(
-                text="Сервис",
-                subtext=f"Каталог и кэш   •   рейтинг {rating_status}",
+                text="Ð¡ÐµÑ€Ð²Ð¸Ñ",
+                subtext=f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸ ÐºÑÑˆ   â€¢   Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ {rating_status}",
                 icon="msg_retry",
                 create_sub_fragment=self._create_service_settings_subfragment,
                 link_alias="eblannft_service_subfragment",
@@ -12122,7 +12128,7 @@ class NftClonerPlugin(BasePlugin):
         number_status = self._display_nft_number() if self._is_nft_number_active() else self._state_short_text(False)
         rating_status = self._get_local_rating_label()
         return [
-            Divider(text="Локальные поля профиля и отображение подарков."),
+            Divider(text="Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð¿Ð¾Ð»Ñ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ Ð¸ Ð¾Ñ‚Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð²."),
             Text(
                 text="Username",
                 subtext=username_status,
@@ -12138,15 +12144,15 @@ class NftClonerPlugin(BasePlugin):
                 link_alias="eblannft_number_subfragment",
             ),
             Text(
-                text="Рейтинг",
+                text="Ð ÐµÐ¹Ñ‚Ð¸Ð½Ð³",
                 subtext=rating_status,
                 icon="msg_stats_solar",
                 on_click=lambda _: self._open_local_rating_dialog(),
             ),
             Switch(
                 key="eblannft_hide_official_gifts_local",
-                text="Скрыть обычные подарки",
-                subtext="Только локально, в вашем клиенте",
+                text="Ð¡ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¾Ð±Ñ‹Ñ‡Ð½Ñ‹Ðµ Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸",
+                subtext="Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾, Ð² Ð²Ð°ÑˆÐµÐ¼ ÐºÐ»Ð¸ÐµÐ½Ñ‚Ðµ",
                 default=bool(getattr(self, "hide_official_gifts_local", False)),
                 icon="msg_delete",
                 on_change=lambda v: self._set_hide_official_gifts_local(v),
@@ -12155,16 +12161,16 @@ class NftClonerPlugin(BasePlugin):
 
     def _create_data_settings_subfragment(self, parent_view=None):
         return [
-            Divider(text="Экспортируйте текущую локальную конфигурацию или загрузите готовый профиль."),
+            Divider(text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€ÑƒÐ¹Ñ‚Ðµ Ñ‚ÐµÐºÑƒÑ‰ÑƒÑŽ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½ÑƒÑŽ ÐºÐ¾Ð½Ñ„Ð¸Ð³ÑƒÑ€Ð°Ñ†Ð¸ÑŽ Ð¸Ð»Ð¸ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚Ðµ Ð³Ð¾Ñ‚Ð¾Ð²Ñ‹Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ."),
             Text(
-                text="Экспорт .profile",
-                subtext="Сохранить текущие локальные настройки",
+                text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ .profile",
+                subtext="Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸",
                 icon="msg_share",
                 on_click=lambda _: self._open_profile_export_name_dialog(),
             ),
             Text(
-                text="Импорт .profile",
-                subtext="Загрузить ранее сохранённый профиль",
+                text="Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ .profile",
+                subtext="Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ€Ð°Ð½ÐµÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ",
                 icon="msg_download",
                 on_click=lambda _: self._show_profile_import_dialog(),
             ),
@@ -12173,16 +12179,16 @@ class NftClonerPlugin(BasePlugin):
     def _create_service_settings_subfragment(self, parent_view=None):
         rating_status = self._get_local_rating_label()
         return [
-            Divider(text=f"Обслуживание локального каталога и быстрые системные действия. Рейтинг сейчас: {rating_status}."),
+            Divider(text=f"ÐžÐ±ÑÐ»ÑƒÐ¶Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð° Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ñ‹Ðµ ÑÐ¸ÑÑ‚ÐµÐ¼Ð½Ñ‹Ðµ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ. Ð ÐµÐ¹Ñ‚Ð¸Ð½Ð³ ÑÐµÐ¹Ñ‡Ð°Ñ: {rating_status}."),
             Text(
-                text="Обновить каталог",
-                subtext="Загрузить актуальный список подарков",
+                text="ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³",
+                subtext="Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð°ÐºÑ‚ÑƒÐ°Ð»ÑŒÐ½Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð²",
                 icon="msg_retry",
                 on_click=lambda _: self._force_load_catalog(),
             ),
             Text(
-                text="Очистить кэш",
-                subtext="Сбросить локальные временные данные плагина",
+                text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ ÐºÑÑˆ",
+                subtext="Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¿Ð»Ð°Ð³Ð¸Ð½Ð°",
                 icon="msg_delete",
                 on_click=lambda _: self._clear_cache(),
                 red=True,
@@ -12192,93 +12198,93 @@ class NftClonerPlugin(BasePlugin):
     def _create_username_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_username_tokens()
         items = [
-            Divider(text="Локальный collectible username. Видно только вам."),
+            Divider(text="Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ collectible username. Ð’Ð¸Ð´Ð½Ð¾ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð²Ð°Ð¼."),
             Switch(
                 key="eblannft_username_enabled",
-                text="Показывать",
-                subtext=self._display_nft_username() if self._is_nft_username_active() else "Выключено",
+                text="ÐŸÐ¾ÐºÐ°Ð·Ñ‹Ð²Ð°Ñ‚ÑŒ",
+                subtext=self._display_nft_username() if self._is_nft_username_active() else "Ð’Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¾",
                 default=bool(self.nft_username_enabled),
                 icon="msg_edit",
                 on_change=lambda v: self._set_nft_username_enabled(bool(v)),
             ),
             Text(
-                text="Добавить",
-                subtext="Новый username без @",
+                text="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ",
+                subtext="ÐÐ¾Ð²Ñ‹Ð¹ username Ð±ÐµÐ· @",
                 icon="msg_edit",
-                on_click=lambda _: self._show_text_input_dialog("Username (без @)", "", self._add_nft_username),
+                on_click=lambda _: self._show_text_input_dialog("Username (Ð±ÐµÐ· @)", "", self._add_nft_username),
             ),
             Text(
-                text="Список",
-                subtext=f"{len(tokens)} сохранено",
+                text="Ð¡Ð¿Ð¸ÑÐ¾Ðº",
+                subtext=f"{len(tokens)} ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¾",
                 icon="msg_emoji_gem",
                 on_click=lambda _: self._show_username_tokens_info(),
             ),
             Text(
-                text="Детали",
-                subtext="TON, USD и дата покупки",
+                text="Ð”ÐµÑ‚Ð°Ð»Ð¸",
+                subtext="TON, USD Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸",
                 icon="msg_stats_solar",
                 create_sub_fragment=self._create_username_details_subfragment,
                 link_alias="eblannft_username_details_subfragment",
             ),
         ]
         if tokens:
-            items.append(Text(text="Удалить", subtext="Убрать один username из списка", icon="msg_delete", on_click=lambda _: self._open_remove_nft_username_menu()))
-            items.append(Text(text="Очистить всё", subtext="Удалить все сохранённые username", icon="msg_delete", on_click=lambda _: self._clear_all_nft_usernames(), red=True))
+            items.append(Text(text="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ", subtext="Ð£Ð±Ñ€Ð°Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ username Ð¸Ð· ÑÐ¿Ð¸ÑÐºÐ°", icon="msg_delete", on_click=lambda _: self._open_remove_nft_username_menu()))
+            items.append(Text(text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÑ‘", subtext="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²ÑÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ðµ username", icon="msg_delete", on_click=lambda _: self._clear_all_nft_usernames(), red=True))
         return items
 
     def _create_number_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_number_tokens()
         items = [
-            Divider(text="Локальный collectible number. Видно только вам."),
+            Divider(text="Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ collectible number. Ð’Ð¸Ð´Ð½Ð¾ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð²Ð°Ð¼."),
             Switch(
                 key="eblannft_number_enabled",
-                text="Показывать",
-                subtext=self._display_nft_number() if self._is_nft_number_active() else "Выключено",
+                text="ÐŸÐ¾ÐºÐ°Ð·Ñ‹Ð²Ð°Ñ‚ÑŒ",
+                subtext=self._display_nft_number() if self._is_nft_number_active() else "Ð’Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¾",
                 default=bool(self.nft_number_enabled),
                 icon="msg_link",
                 on_change=lambda v: self._set_nft_number_enabled(bool(v)),
             ),
             Text(
-                text="Добавить",
-                subtext="Новый номер в формате +888...",
+                text="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ",
+                subtext="ÐÐ¾Ð²Ñ‹Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ð² Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ðµ +888...",
                 icon="msg_link",
-                on_click=lambda _: self._show_text_input_dialog("Number (например +888 0413 6929)", "", self._add_nft_number),
+                on_click=lambda _: self._show_text_input_dialog("Number (Ð½Ð°Ð¿Ñ€Ð¸Ð¼ÐµÑ€ +888 0413 6929)", "", self._add_nft_number),
             ),
             Text(
-                text="Список",
-                subtext=f"{len(tokens)} сохранено",
+                text="Ð¡Ð¿Ð¸ÑÐ¾Ðº",
+                subtext=f"{len(tokens)} ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¾",
                 icon="msg_emoji_gem",
                 on_click=lambda _: self._show_number_tokens_info(),
             ),
             Text(
-                text="Детали",
-                subtext="TON, USD и дата покупки",
+                text="Ð”ÐµÑ‚Ð°Ð»Ð¸",
+                subtext="TON, USD Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸",
                 icon="msg_stats_solar",
                 create_sub_fragment=self._create_number_details_subfragment,
                 link_alias="eblannft_number_details_subfragment",
             ),
         ]
         if tokens:
-            items.append(Text(text="Удалить", subtext="Убрать один номер из списка", icon="msg_delete", on_click=lambda _: self._open_remove_nft_number_menu()))
-            items.append(Text(text="Очистить всё", subtext="Удалить все сохранённые номера", icon="msg_delete", on_click=lambda _: self._clear_all_nft_numbers(), red=True))
+            items.append(Text(text="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ", subtext="Ð£Ð±Ñ€Ð°Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ Ð½Ð¾Ð¼ÐµÑ€ Ð¸Ð· ÑÐ¿Ð¸ÑÐºÐ°", icon="msg_delete", on_click=lambda _: self._open_remove_nft_number_menu()))
+            items.append(Text(text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÑ‘", subtext="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²ÑÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ðµ Ð½Ð¾Ð¼ÐµÑ€Ð°", icon="msg_delete", on_click=lambda _: self._clear_all_nft_numbers(), red=True))
         return items
 
     def _create_username_details_subfragment(self, parent_view=None):
-        date_text = self.nft_username_purchase_date if self.nft_username_purchase_date else "Не задана"
+        date_text = self.nft_username_purchase_date if self.nft_username_purchase_date else "ÐÐµ Ð·Ð°Ð´Ð°Ð½Ð°"
         return [
-            Divider(text="Ценность и дата покупки для локального превью username."),
-            Text(text="TON", subtext=str(self.nft_username_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Цена в TON", self.nft_username_price_ton, lambda text: self._save_nft_username_detail("ton", text))),
-            Text(text="USD", subtext=str(self.nft_username_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Цена в USD", self.nft_username_price_usd, lambda text: self._save_nft_username_detail("usd", text))),
-            Text(text="Дата", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Дата покупки", self.nft_username_purchase_date, lambda text: self._save_nft_username_detail("date", text))),
+            Divider(text="Ð¦ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸ Ð´Ð»Ñ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ Ð¿Ñ€ÐµÐ²ÑŒÑŽ username."),
+            Text(text="TON", subtext=str(self.nft_username_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² TON", self.nft_username_price_ton, lambda text: self._save_nft_username_detail("ton", text))),
+            Text(text="USD", subtext=str(self.nft_username_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² USD", self.nft_username_price_usd, lambda text: self._save_nft_username_detail("usd", text))),
+            Text(text="Ð”Ð°Ñ‚Ð°", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Ð”Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸", self.nft_username_purchase_date, lambda text: self._save_nft_username_detail("date", text))),
         ]
 
     def _create_number_details_subfragment(self, parent_view=None):
-        date_text = self.nft_number_purchase_date if self.nft_number_purchase_date else "Не задана"
+        date_text = self.nft_number_purchase_date if self.nft_number_purchase_date else "ÐÐµ Ð·Ð°Ð´Ð°Ð½Ð°"
         return [
-            Divider(text="Ценность и дата покупки для локального превью number."),
-            Text(text="TON", subtext=str(self.nft_number_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Цена в TON", self.nft_number_price_ton, lambda text: self._save_nft_number_detail("ton", text))),
-            Text(text="USD", subtext=str(self.nft_number_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Цена в USD", self.nft_number_price_usd, lambda text: self._save_nft_number_detail("usd", text))),
-            Text(text="Дата", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Дата покупки", self.nft_number_purchase_date, lambda text: self._save_nft_number_detail("date", text))),
+            Divider(text="Ð¦ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ Ð¸ Ð´Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸ Ð´Ð»Ñ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ Ð¿Ñ€ÐµÐ²ÑŒÑŽ number."),
+            Text(text="TON", subtext=str(self.nft_number_price_ton), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² TON", self.nft_number_price_ton, lambda text: self._save_nft_number_detail("ton", text))),
+            Text(text="USD", subtext=str(self.nft_number_price_usd), icon="msg_link", on_click=lambda _: self._show_text_input_dialog("Ð¦ÐµÐ½Ð° Ð² USD", self.nft_number_price_usd, lambda text: self._save_nft_number_detail("usd", text))),
+            Text(text="Ð”Ð°Ñ‚Ð°", subtext=date_text, icon="msg_share", on_click=lambda _: self._show_text_input_dialog("Ð”Ð°Ñ‚Ð° Ð¿Ð¾ÐºÑƒÐ¿ÐºÐ¸", self.nft_number_purchase_date, lambda text: self._save_nft_number_detail("date", text))),
         ]
 
     def _set_nft_username_enabled(self, enabled):
@@ -12295,10 +12301,10 @@ class NftClonerPlugin(BasePlugin):
 
     def _profile_option_defs(self):
         return [
-            ("nft_gifts", "Все NFT подарки", "Библиотека, активный локальный подарок и wear"),
-            ("nft_usernames", "NFT юзернеймы", "Список username, выбранный username и шаблон"),
-            ("nft_number", "NFT номер", "Список номеров, выбранный номер и шаблон"),
-            ("local_rating", "Локальный рейтинг", "Очки, уровень и следующая цель"),
+            ("nft_gifts", "Ð’ÑÐµ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸", "Ð‘Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ°, Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¿Ð¾Ð´Ð°Ñ€Ð¾Ðº Ð¸ wear"),
+            ("nft_usernames", "NFT ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹", "Ð¡Ð¿Ð¸ÑÐ¾Ðº username, Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ username Ð¸ ÑˆÐ°Ð±Ð»Ð¾Ð½"),
+            ("nft_number", "NFT Ð½Ð¾Ð¼ÐµÑ€", "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð½Ð¾Ð¼ÐµÑ€Ð¾Ð², Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ð¸ ÑˆÐ°Ð±Ð»Ð¾Ð½"),
+            ("local_rating", "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³", "ÐžÑ‡ÐºÐ¸, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ Ð¸ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ"),
         ]
 
     def _profile_option_title(self, option_key):
@@ -12398,11 +12404,11 @@ class NftClonerPlugin(BasePlugin):
     def _write_profile_config_file(self, profile_name, selected_keys):
         payload = self._collect_profile_export_payload(profile_name, selected_keys)
         if not payload.get("sections"):
-            BulletinHelper.show_error("Выберите хотя бы один пункт")
+            BulletinHelper.show_error("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð¸Ð½ Ð¿ÑƒÐ½ÐºÑ‚")
             return False
         config_dir = self._get_profile_configs_dir()
         if not config_dir:
-            BulletinHelper.show_error("Не удалось подготовить папку для профилей")
+            BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²Ð¸Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ Ð´Ð»Ñ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÐµÐ¹")
             return False
         safe_name = self._sanitize_profile_name(profile_name)
         filename = f"{safe_name}{PROFILE_CONFIG_FILE_EXTENSION}"
@@ -12420,7 +12426,7 @@ class NftClonerPlugin(BasePlugin):
             self._show_profile_saved_sheet(filepath, filename)
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка экспорта: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð°: {e}")
             return False
 
     def _load_profile_config_file(self, filepath):
@@ -12446,7 +12452,7 @@ class NftClonerPlugin(BasePlugin):
     def _handle_profile_file_open(self, filepath):
         data = self._load_profile_config_file(filepath)
         if not data:
-            BulletinHelper.show_error("Не удалось прочитать .profile")
+            BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ .profile")
             return
         filename = ""
         try:
@@ -12467,11 +12473,11 @@ class NftClonerPlugin(BasePlugin):
         try:
             fragment = get_last_fragment()
             if not fragment:
-                BulletinHelper.show_success(f"Профиль сохранён: {filename}")
+                BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
                 return
             activity = fragment.getParentActivity()
             if not activity:
-                BulletinHelper.show_success(f"Профиль сохранён: {filename}")
+                BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
                 return
 
             container = LinearLayout(activity)
@@ -12479,7 +12485,7 @@ class NftClonerPlugin(BasePlugin):
             container.setPadding(AndroidUtilities.dp(20), AndroidUtilities.dp(20), AndroidUtilities.dp(20), AndroidUtilities.dp(12))
 
             title_view = TextView(activity)
-            title_view.setText("Профиль экспортирован")
+            title_view.setText("ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½")
             title_view.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
             title_view.setTypeface(AndroidUtilities.bold())
             title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
@@ -12502,14 +12508,14 @@ class NftClonerPlugin(BasePlugin):
             container.addView(path_view, lp_path)
 
             builder = AlertDialogBuilder(activity)
-            builder.set_title("Экспорт .profile")
+            builder.set_title("Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ .profile")
             builder.set_view(container)
-            builder.set_positive_button("Поделиться", lambda d, w: self._share_profile_file(filepath, activity))
-            builder.set_negative_button("Закрыть", None)
+            builder.set_positive_button("ÐŸÐ¾Ð´ÐµÐ»Ð¸Ñ‚ÑŒÑÑ", lambda d, w: self._share_profile_file(filepath, activity))
+            builder.set_negative_button("Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
             _log(f"Profile saved sheet error: {e}")
-            BulletinHelper.show_success(f"Профиль сохранён: {filename}")
+            BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
 
     def _share_profile_file(self, filepath, activity):
         try:
@@ -12529,7 +12535,7 @@ class NftClonerPlugin(BasePlugin):
             chooser = Intent.createChooser(intent, "Share profile")
             activity.startActivity(chooser)
         except Exception as e:
-            BulletinHelper.show_error(f"Не удалось открыть шаринг: {e}")
+            BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÑˆÐ°Ñ€Ð¸Ð½Ð³: {e}")
 
     def _show_profile_selection_sheet(self, sheet_title, subtitle, option_keys, default_selected, confirm_text, on_confirm):
         try:
@@ -12542,7 +12548,7 @@ class NftClonerPlugin(BasePlugin):
 
             available = [key for key in list(option_keys or []) if str(key or "").strip()]
             if not available:
-                BulletinHelper.show_error("Нет доступных пунктов")
+                BulletinHelper.show_error("ÐÐµÑ‚ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹Ñ… Ð¿ÑƒÐ½ÐºÑ‚Ð¾Ð²")
                 return False
 
             BottomSheetCls = jclass("org.telegram.ui.ActionBar.BottomSheet")
@@ -12554,7 +12560,7 @@ class NftClonerPlugin(BasePlugin):
             root.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(18), AndroidUtilities.dp(16), AndroidUtilities.dp(12))
 
             title_view = TextView(activity)
-            title_view.setText(str(sheet_title or "Профиль"))
+            title_view.setText(str(sheet_title or "ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ"))
             title_view.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
             title_view.setTypeface(AndroidUtilities.bold())
             title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
@@ -12609,7 +12615,7 @@ class NftClonerPlugin(BasePlugin):
             lp_buttons.topMargin = AndroidUtilities.dp(14)
 
             cancel_btn = TextView(activity)
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText("ÐžÑ‚Ð¼ÐµÐ½Ð°")
             cancel_btn.setGravity(Gravity.CENTER)
             cancel_btn.setTypeface(AndroidUtilities.bold())
             cancel_btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton))
@@ -12617,7 +12623,7 @@ class NftClonerPlugin(BasePlugin):
             cancel_btn.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(14), AndroidUtilities.dp(8), AndroidUtilities.dp(14))
 
             apply_btn = TextView(activity)
-            apply_btn.setText(str(confirm_text or "Готово"))
+            apply_btn.setText(str(confirm_text or "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾"))
             apply_btn.setGravity(Gravity.CENTER)
             apply_btn.setTypeface(AndroidUtilities.bold())
             apply_btn.setTextColor(-1)
@@ -12636,7 +12642,7 @@ class NftClonerPlugin(BasePlugin):
             def _apply(_view=None):
                 chosen = [key for key in available if bool(selected.get(key, False))]
                 if not chosen:
-                    BulletinHelper.show_error("Выберите хотя бы один пункт")
+                    BulletinHelper.show_error("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð¸Ð½ Ð¿ÑƒÐ½ÐºÑ‚")
                     return
                 try:
                     sheet.dismiss()
@@ -12645,7 +12651,7 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     on_confirm(chosen)
                 except Exception as e:
-                    BulletinHelper.show_error(f"Ошибка применения: {e}")
+                    BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ: {e}")
 
             cancel_btn.setOnClickListener(JOnClickListener(_cancel))
             apply_btn.setOnClickListener(JOnClickListener(_apply))
@@ -12659,13 +12665,13 @@ class NftClonerPlugin(BasePlugin):
             sheet.show()
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка окна профиля: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾ÐºÐ½Ð° Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ: {e}")
             return False
 
     def _open_profile_export_name_dialog(self):
         current_name = time.strftime("profile_%Y%m%d_%H%M%S")
         self._show_text_input_dialog(
-            "Имя конфига",
+            "Ð˜Ð¼Ñ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð°",
             current_name,
             lambda raw: self._show_profile_export_sheet(raw),
             numeric=False,
@@ -12675,11 +12681,11 @@ class NftClonerPlugin(BasePlugin):
         safe_name = self._sanitize_profile_name(profile_name)
         defaults = {key: True for key, _title, _desc in self._profile_option_defs()}
         self._show_profile_selection_sheet(
-            f"Экспорт {safe_name}{PROFILE_CONFIG_FILE_EXTENSION}",
-            "Отметьте, что нужно положить в конфиг",
+            f"Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ {safe_name}{PROFILE_CONFIG_FILE_EXTENSION}",
+            "ÐžÑ‚Ð¼ÐµÑ‚ÑŒÑ‚Ðµ, Ñ‡Ñ‚Ð¾ Ð½ÑƒÐ¶Ð½Ð¾ Ð¿Ð¾Ð»Ð¾Ð¶Ð¸Ñ‚ÑŒ Ð² ÐºÐ¾Ð½Ñ„Ð¸Ð³",
             [key for key, _title, _desc in self._profile_option_defs()],
             defaults,
-            "Экспортировать",
+            "Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ",
             lambda selected_keys: self._write_profile_config_file(safe_name, selected_keys),
         )
 
@@ -12687,12 +12693,12 @@ class NftClonerPlugin(BasePlugin):
         try:
             config_dir = self._get_profile_configs_dir()
             if not config_dir or (not os.path.exists(config_dir)):
-                BulletinHelper.show_error("Папка с профилями не найдена")
+                BulletinHelper.show_error("ÐŸÐ°Ð¿ÐºÐ° Ñ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑÐ¼Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°")
                 return
             files = [name for name in os.listdir(config_dir) if str(name).lower().endswith(PROFILE_CONFIG_FILE_EXTENSION)]
             files.sort(reverse=True)
             if not files:
-                BulletinHelper.show_info("Нет сохранённых .profile")
+                BulletinHelper.show_info("ÐÐµÑ‚ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ñ… .profile")
                 return
 
             ctx = self._get_menu_activity()
@@ -12709,22 +12715,22 @@ class NftClonerPlugin(BasePlugin):
                 filepath = os.path.join(config_dir, files[index])
                 data = self._load_profile_config_file(filepath)
                 if not data:
-                    BulletinHelper.show_error("Не удалось прочитать конфиг")
+                    BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ ÐºÐ¾Ð½Ñ„Ð¸Ð³")
                     return
                 self._show_profile_import_sheet(data, files[index])
 
             builder = AlertDialogBuilder(ctx)
-            builder.set_title("Выберите .profile")
+            builder.set_title("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ .profile")
             builder.set_items(files, _open_selected)
-            builder.set_negative_button("Отмена", None)
+            builder.set_negative_button("ÐžÑ‚Ð¼ÐµÐ½Ð°", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка импорта: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°: {e}")
 
     def _show_profile_import_sheet(self, profile_data, filename):
         available = self._get_profile_available_option_keys(profile_data)
         if not available:
-            BulletinHelper.show_error("В профиле нет поддерживаемых данных")
+            BulletinHelper.show_error("Ð’ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ Ð½ÐµÑ‚ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÐ¼Ñ‹Ñ… Ð´Ð°Ð½Ð½Ñ‹Ñ…")
             return
         profile_name = str(profile_data.get("profile_name", "") or "").strip()
         subtitle_parts = []
@@ -12733,11 +12739,11 @@ class NftClonerPlugin(BasePlugin):
         if filename:
             subtitle_parts.append(str(filename))
         self._show_profile_selection_sheet(
-            "Импорт .profile",
-            " • ".join(subtitle_parts),
+            "Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ .profile",
+            " â€¢ ".join(subtitle_parts),
             available,
             {key: True for key in available},
-            "Импортировать",
+            "Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ",
             lambda selected_keys: self._import_profile_config(profile_data, selected_keys),
         )
 
@@ -12809,9 +12815,9 @@ class NftClonerPlugin(BasePlugin):
                     skipped_legacy.append(key)
             if not imported:
                 if skipped_legacy:
-                    BulletinHelper.show_info("Секция локальной верификации больше не поддерживается и была пропущена")
+                    BulletinHelper.show_info("Ð¡ÐµÐºÑ†Ð¸Ñ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð¹ Ð²ÐµÑ€Ð¸Ñ„Ð¸ÐºÐ°Ñ†Ð¸Ð¸ Ð±Ð¾Ð»ÑŒÑˆÐµ Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ÑÑ Ð¸ Ð±Ñ‹Ð»Ð° Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð°")
                     return True
-                BulletinHelper.show_error("Не удалось импортировать выбранные пункты")
+                BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ðµ Ð¿ÑƒÐ½ÐºÑ‚Ñ‹")
                 return False
 
             try:
@@ -12855,10 +12861,10 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
             labels = ", ".join([self._profile_option_title(key) for key in imported])
-            BulletinHelper.show_success(f"Импортировано: {labels}")
+            BulletinHelper.show_success(f"Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¾: {labels}")
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка импорта: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°: {e}")
             return False
 
     def _show_text_input_dialog(self, title, prefill, on_submit, numeric=False):
@@ -13692,7 +13698,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(148), AndroidUtilities.dp(148)))
 
             title = TextView(ctx)
-            title.setText("Добро пожаловать в\neblanNFT!")
+            title.setText("Ð”Ð¾Ð±Ñ€Ð¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°Ñ‚ÑŒ Ð²\neblanNFT!")
             title.setGravity(Gravity.CENTER)
             title.setTextSize(30)
             try:
@@ -13706,7 +13712,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(title, lp_title)
 
             desc = TextView(ctx)
-            desc.setText("Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля. Быстро, плавно и с фирменным зелёным eblannft вайбом.")
+            desc.setText("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾ Ð½Ð°ÑÑ‚Ñ€Ð°Ð¸Ð²Ð°Ð¹ NFT-Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸, NFT Username, NFT Number Ð¸ Ð²Ð¸Ð·ÑƒÐ°Ð» Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ. Ð‘Ñ‹ÑÑ‚Ñ€Ð¾, Ð¿Ð»Ð°Ð²Ð½Ð¾ Ð¸ Ñ Ñ„Ð¸Ñ€Ð¼ÐµÐ½Ð½Ñ‹Ð¼ Ð·ÐµÐ»Ñ‘Ð½Ñ‹Ð¼ eblannft Ð²Ð°Ð¹Ð±Ð¾Ð¼.")
             desc.setGravity(Gravity.CENTER)
             desc.setTextSize(15)
             try:
@@ -13717,7 +13723,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             open_btn = TextView(ctx)
-            open_btn.setText("Открыть настройки")
+            open_btn.setText("ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸")
             open_btn.setGravity(Gravity.CENTER)
             open_btn.setTextSize(18)
             try:
@@ -14145,7 +14151,7 @@ class NftClonerPlugin(BasePlugin):
             row.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(72), AndroidUtilities.dp(72)))
 
             desc = TextView(ctx)
-            desc.setText("eblannft\nЛокальный плагин для NFT-подарков,\nпрофиля и визуальных настроек.")
+            desc.setText("eblannft\nÐ›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¿Ð»Ð°Ð³Ð¸Ð½ Ð´Ð»Ñ NFT-Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð²,\nÐ¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ Ð¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ñ‹Ñ… Ð½Ð°ÑÑ‚Ñ€Ð¾ÐµÐº.")
             desc.setTextSize(15)
             try:
                 desc.setTextColor(int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)))
@@ -14157,7 +14163,7 @@ class NftClonerPlugin(BasePlugin):
             root.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             btn = TextView(ctx)
-            btn.setText("Поддержка")
+            btn.setText("ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶ÐºÐ°")
             btn.setGravity(Gravity.CENTER)
             btn.setTextSize(16)
             try:
@@ -14367,11 +14373,46 @@ class NftClonerPlugin(BasePlugin):
             })
         return entries
 
+    def _resolve_loader_file_path(self):
+        raw = ""
+        try:
+            raw = str(__file__ or "")
+        except:
+            raw = ""
+        raw = raw.split("#", 1)[0]
+        raw = os.path.abspath(raw) if raw else ""
+        if raw.lower().endswith(os.path.join("eblannft_runtime", "plugin.py").lower()):
+            return os.path.abspath(os.path.join(os.path.dirname(raw), "..", "eblannft.plugin"))
+        if raw.lower().endswith(os.path.join("eblannft_runtime", "__init__.py").lower()):
+            return os.path.abspath(os.path.join(os.path.dirname(raw), "..", "eblannft.plugin"))
+        if raw.lower().endswith("eblannft.plugin"):
+            return raw
+        try:
+            base = os.path.abspath(str(get_plugins_dir()))
+            return os.path.join(base, "eblannft.plugin")
+        except:
+            return os.path.abspath(os.path.join(os.path.dirname(raw or __file__), "eblannft.plugin"))
+
     def _resolve_plugin_dir(self):
         try:
-            return os.path.abspath(str(get_plugins_dir()))
+            return os.path.abspath(os.path.dirname(self._resolve_loader_file_path()))
         except:
-            return os.path.abspath(os.path.dirname(__file__))
+            try:
+                return os.path.abspath(str(get_plugins_dir()))
+            except:
+                return os.path.abspath(os.path.dirname(__file__))
+
+    def _get_pending_update_version(self):
+        try:
+            return str(self.get_setting("eblannft_update_pending_version", "") or "").strip()
+        except:
+            return ""
+
+    def _set_pending_update_version(self, version):
+        try:
+            self.set_setting("eblannft_update_pending_version", str(version or "").strip())
+        except:
+            pass
 
     def _resolve_update_dest_path(self, rel_path):
         base = self._resolve_plugin_dir()
@@ -14424,6 +14465,7 @@ class NftClonerPlugin(BasePlugin):
             self.set_setting("eblannft_update_last_applied_version", str(info.get("version", "") or ""))
         except:
             pass
+        self._set_pending_update_version(str(info.get("version", "") or ""))
         return True
 
     def _schedule_update_popup_show(self, info, auto_start=False, delays=None):
@@ -14472,6 +14514,18 @@ class NftClonerPlugin(BasePlugin):
                     pass
         return scheduled
 
+    def _is_pending_update_ready(self, info):
+        try:
+            remote_version = str((info or {}).get("version", "") or "").strip()
+        except:
+            remote_version = ""
+        if not remote_version:
+            return False
+        pending_version = self._get_pending_update_version()
+        if not pending_version or pending_version != remote_version:
+            return False
+        return self._is_remote_version_newer(remote_version, __version__)
+
     def _show_update_bottom_sheet(self, info, auto_start=False):
         frag = get_last_fragment()
         ctx = frag.getParentActivity() if frag and frag.getParentActivity() else ApplicationLoader.applicationContext
@@ -14482,6 +14536,7 @@ class NftClonerPlugin(BasePlugin):
             from android_utils import OnClickListener
         except:
             OnClickListener = None
+        pending_apply = self._is_pending_update_ready(info)
         sheet = BottomSheet(ctx, True)
         self._eblannft_update_popup_visible = True
         root = LinearLayout(ctx)
@@ -14514,7 +14569,7 @@ class NftClonerPlugin(BasePlugin):
 
         repo_line = TextView(ctx)
         try:
-            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
+            repo_line.setText(f"{info.get('repo', '')} â€¢ {info.get('branch', '')}")
             repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
             repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
@@ -14523,7 +14578,10 @@ class NftClonerPlugin(BasePlugin):
 
         desc = TextView(ctx)
         try:
-            desc.setText(f"Version {info.get('version', '?')} is available. Current version: {__version__}.")
+            if pending_apply:
+                desc.setText(f"Version {info.get('version', '?')} is already downloaded. Current runtime: {__version__}.")
+            else:
+                desc.setText(f"Version {info.get('version', '?')} is available. Current version: {__version__}.")
             desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
             desc.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
         except:
@@ -14531,20 +14589,50 @@ class NftClonerPlugin(BasePlugin):
         hero.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
         root.addView(hero, LayoutHelper.createLinear(-1, -2))
 
+        chip = TextView(ctx)
+        try:
+            chip.setText("Restart required" if pending_apply else "Ready")
+            chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
+            chip.setGravity(Gravity.CENTER)
+            chip.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(7), AndroidUtilities.dp(12), AndroidUtilities.dp(7))
+            chip_bg = GradientDrawable()
+            chip_bg.setCornerRadius(AndroidUtilities.dp(999))
+            chip_bg.setColor(0x1FFFFFFF if pending_apply else 0x1F5BE49B)
+            chip.setBackground(chip_bg)
+            chip.setTextColor(0xFFFFFFFF)
+        except:
+            pass
+        root.addView(chip, LayoutHelper.createLinear(-2, -2, Gravity.START, 0, AndroidUtilities.dp(14), 0, 0))
+
         status = TextView(ctx)
         try:
-            status.setText("Ready to download.")
+            status.setText("Update files are already on disk. Restart the plugin to apply them." if pending_apply else "Ready to download.")
             status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
             status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
             pass
-        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(14), 0, 0))
+        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
 
-        progress = ProgressBar(ctx)
-        root.addView(progress, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 0, AndroidUtilities.dp(16), 0, 0))
+        progress_wrap = FrameLayout(ctx)
+        progress_bg = View(ctx)
+        progress_fill = View(ctx)
+        try:
+            bg_draw = GradientDrawable()
+            bg_draw.setCornerRadius(AndroidUtilities.dp(999))
+            bg_draw.setColor(0x1FFFFFFF)
+            progress_bg.setBackground(bg_draw)
+            fill_draw = GradientDrawable()
+            fill_draw.setCornerRadius(AndroidUtilities.dp(999))
+            fill_draw.setColor(0xFF7CFFB2 if not pending_apply else 0xFFFFFFFF)
+            progress_fill.setBackground(fill_draw)
+        except:
+            pass
+        progress_wrap.addView(progress_bg, FrameLayout.LayoutParams(-1, AndroidUtilities.dp(8)))
+        progress_wrap.addView(progress_fill, FrameLayout.LayoutParams(AndroidUtilities.dp(44 if pending_apply else 18), AndroidUtilities.dp(8)))
+        root.addView(progress_wrap, LayoutHelper.createLinear(-1, AndroidUtilities.dp(8), Gravity.TOP, 0, AndroidUtilities.dp(16), 0, 0))
 
         btn = TextView(ctx)
-        btn.setText("Download update")
+        btn.setText("Restart to apply" if pending_apply else "Download update")
         btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
         btn.setGravity(Gravity.CENTER)
         try:
@@ -14552,10 +14640,10 @@ class NftClonerPlugin(BasePlugin):
             btn_bg = GradientDrawable()
             btn_bg.setCornerRadius(AndroidUtilities.dp(22))
             try:
-                btn_bg.setColor(Theme.getColor(Theme.key_featuredStickers_addButton))
+                btn_bg.setColor(Theme.getColor(Theme.key_featuredStickers_addButton) if not pending_apply else 0xFF2B2C31)
                 btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
             except:
-                btn_bg.setColor(0xFF2B7FFF)
+                btn_bg.setColor(0xFF2B7FFF if not pending_apply else 0xFF2B2C31)
                 btn.setTextColor(0xFFFFFFFF)
             btn.setBackground(btn_bg)
         except:
@@ -14594,6 +14682,18 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
+            progress_wrap.setAlpha(0.0)
+            progress_wrap.setTranslationY(float(AndroidUtilities.dp(10)))
+            progress_wrap.animate().alpha(1.0).translationY(0.0).setStartDelay(105).setDuration(260).start()
+            if not pending_apply:
+                progress_fill.setScaleX(0.35)
+                progress_fill.setPivotX(0.0)
+                progress_fill.animate().scaleX(1.0).setStartDelay(180).setDuration(520).start()
+            else:
+                progress_fill.setScaleX(1.0)
+        except:
+            pass
+        try:
             btn.setAlpha(0.0)
             btn.setScaleX(0.96)
             btn.setScaleY(0.96)
@@ -14613,14 +14713,35 @@ class NftClonerPlugin(BasePlugin):
                 status.setText(str(text or ""))
             except:
                 pass
-            if done:
-                try:
-                    progress.setVisibility(View.GONE)
-                except:
-                    pass
+            try:
+                if done:
+                    progress_fill.animate().scaleX(1.0).setDuration(180).start()
+                else:
+                    progress_fill.setVisibility(View.VISIBLE)
+            except:
+                pass
+
+        def _apply_progress(done_idx, total, written=False):
+            try:
+                total = max(1, int(total or 1))
+                done_idx = max(0, min(int(done_idx or 0), total))
+                width_dp = 18 + int((done_idx / float(total)) * 250)
+                lp = progress_fill.getLayoutParams()
+                lp.width = AndroidUtilities.dp(width_dp if not written else min(268, width_dp + 8))
+                progress_fill.setLayoutParams(lp)
+                chip.setText("Applying" if written else "Downloading")
+            except:
+                pass
 
         def _download():
             if state["started"]:
+                return
+            if pending_apply:
+                try:
+                    BulletinHelper.show_info("Update is already downloaded. Restart the plugin to apply it.")
+                except:
+                    pass
+                _dismiss()
                 return
             state["started"] = True
             try:
@@ -14636,16 +14757,18 @@ class NftClonerPlugin(BasePlugin):
 
             def _progress(done_idx, total, path, written):
                 phase = "Applying" if written else "Downloading"
-                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} • {p}", False))
+                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase, w=written: (_apply_progress(d, t, w), _apply_status(f"{ph}: {d}/{t} â€¢ {p}", False)))
 
             def _worker():
                 try:
                     self._download_and_apply_update(info, progress_cb=_progress)
                     def _done_ok():
                         state["done"] = True
-                        _apply_status("Update downloaded. Disable and enable the plugin.", True)
+                        _apply_progress(1, 1, True)
+                        chip.setText("Restart required")
+                        _apply_status("Update downloaded. Restart the plugin to apply it.", True)
                         try:
-                            btn.setText("Done")
+                            btn.setText("Restart to apply")
                             btn.setEnabled(False)
                             btn.setAlpha(1.0)
                         except:
@@ -14658,12 +14781,15 @@ class NftClonerPlugin(BasePlugin):
                 except Exception as e:
                     def _done_err():
                         state["started"] = False
+                        try:
+                            chip.setText("Error")
+                        except:
+                            pass
                         _apply_status(f"Update error: {e}", True)
                         try:
                             btn.setText("Retry download")
                             btn.setEnabled(True)
                             btn.setAlpha(1.0)
-                            progress.setVisibility(View.VISIBLE)
                         except:
                             pass
                         try:
@@ -14767,27 +14893,27 @@ class NftClonerPlugin(BasePlugin):
 
     def _create_update_settings_subfragment(self, parent_view=None):
         return [
-            Divider(text="Настройка автообновления loader/runtime из GitHub репозитория."),
-            Divider(text=f"Источник обновлений: {self._get_update_repo()} • {self._get_update_branch()}"),
+            Divider(text="ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ° Ð°Ð²Ñ‚Ð¾Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ loader/runtime Ð¸Ð· GitHub Ñ€ÐµÐ¿Ð¾Ð·Ð¸Ñ‚Ð¾Ñ€Ð¸Ñ."),
+            Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} â€¢ {self._get_update_branch()}"),
             Switch(
                 key="eblannft_update_check_on_load",
-                text="Проверять при запуске",
-                subtext="Фоновая проверка новых версий при загрузке плагина",
+                text="ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÑ‚ÑŒ Ð¿Ñ€Ð¸ Ð·Ð°Ð¿ÑƒÑÐºÐµ",
+                subtext="Ð¤Ð¾Ð½Ð¾Ð²Ð°Ñ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ð¾Ð²Ñ‹Ñ… Ð²ÐµÑ€ÑÐ¸Ð¹ Ð¿Ñ€Ð¸ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ Ð¿Ð»Ð°Ð³Ð¸Ð½Ð°",
                 default=self._is_update_check_on_load_enabled(),
                 icon="msg_retry",
                 on_change=lambda v: self.set_setting("eblannft_update_check_on_load", bool(v)),
             ),
             Switch(
                 key="eblannft_auto_update_enabled",
-                text="Скачивать автоматически",
-                subtext="Если найдена новая версия, сразу начать загрузку",
+                text="Ð¡ÐºÐ°Ñ‡Ð¸Ð²Ð°Ñ‚ÑŒ Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸",
+                subtext="Ð•ÑÐ»Ð¸ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð½Ð¾Ð²Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ, ÑÑ€Ð°Ð·Ñƒ Ð½Ð°Ñ‡Ð°Ñ‚ÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÑƒ",
                 default=self._is_auto_update_enabled(),
                 icon="msg_download",
                 on_change=lambda v: self.set_setting("eblannft_auto_update_enabled", bool(v)),
             ),
             Text(
-                text="Проверить сейчас",
-                subtext=f"Текущая версия: {__version__}",
+                text="ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ ÑÐµÐ¹Ñ‡Ð°Ñ",
+                subtext=f"Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ: {__version__}",
                 icon="msg_download",
                 on_click=lambda _: self._check_for_plugin_updates(show_no_updates=True, auto_download=False),
             ),
@@ -14808,11 +14934,11 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", lambda: self._open_constructor_for_library_key(key)),
-            (f"TON блокчейн \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
             (("\u0412\u044b\u043a\u043b\u044e\u0447\u0438\u0442\u044c \u0432\u043d\u0435\u0434\u0440\u0435\u043d\u0438\u0435" if inj else "\u0421\u0434\u0435\u043b\u0430\u0442\u044c \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u043c"), lambda: self._toggle_library_injection_state(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Владелец TON \u2022 {self._format_ton_owner_mode_label(ton_cfg.get('owner_mode', 'nickname'))}", lambda: self._cycle_library_ton_owner_mode(key)))
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON \u2022 {self._format_ton_owner_mode_label(ton_cfg.get('owner_mode', 'nickname'))}", lambda: self._cycle_library_ton_owner_mode(key)))
         if is_worn:
             actions.append(("\u0421\u043d\u044f\u0442\u044c wear", lambda: self._remove_library_gift_wear(key)))
         actions.append(("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0438\u0437 \u0431\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0438", lambda: self._delete_library_gift_key(key)))
@@ -14923,7 +15049,7 @@ class NftClonerPlugin(BasePlugin):
                     def _atomic_write_json(path, payload):
                         # Keep a sibling .bak of the *previous* good payload so
                         # we can recover if the main file gets corrupted (truncated
-                        # write, FS error, etc.) — wear must never silently fall
+                        # write, FS error, etc.) â€” wear must never silently fall
                         # off because of a bad read.
                         try:
                             if os.path.exists(path):
@@ -14934,7 +15060,7 @@ class NftClonerPlugin(BasePlugin):
                                 if prev_raw:
                                     try:
                                         # Only refresh .bak when the old file is
-                                        # still parseable — never replace a good
+                                        # still parseable â€” never replace a good
                                         # backup with a corrupt one.
                                         json.loads(prev_raw)
                                         bak_path = path + ".bak"
@@ -14986,7 +15112,7 @@ class NftClonerPlugin(BasePlugin):
                             load_state = ""
                         if load_state in ("failed", "pending"):
                             # A "pending" load means we haven't successfully
-                            # loaded yet — never overwrite a possibly-good disk
+                            # loaded yet â€” never overwrite a possibly-good disk
                             # file with our (likely empty) in-memory state.
                             try:
                                 payload = json.dumps(data2)
@@ -15130,9 +15256,9 @@ class NftClonerPlugin(BasePlugin):
                 )
                 self.local_verification_mode = 0
                 self.hide_official_gifts_local = bool(data.get("hide_official_gifts_local", False))
-                self.fake_incoming_text = str(data.get("fake_incoming_text", "Привет! Как дела?") or "Привет! Как дела?")
+                self.fake_incoming_text = str(data.get("fake_incoming_text", "ÐŸÑ€Ð¸Ð²ÐµÑ‚! ÐšÐ°Ðº Ð´ÐµÐ»Ð°?") or "ÐŸÑ€Ð¸Ð²ÐµÑ‚! ÐšÐ°Ðº Ð´ÐµÐ»Ð°?")
                 self.fake_incoming_delay = "3"
-                self.fake_incoming_text = "Привет! Как дела?"
+                self.fake_incoming_text = "ÐŸÑ€Ð¸Ð²ÐµÑ‚! ÐšÐ°Ðº Ð´ÐµÐ»Ð°?"
                 self.fake_incoming_next_id = -2100000000
                 self.fake_incoming_messages = []
                 self.channel_data = {}
@@ -15186,7 +15312,7 @@ class NftClonerPlugin(BasePlugin):
                     except Exception as e:
                         _log(f"Main cache restore from backup failed: {e}")
                 # If a previous failed-load wrote a .recover sidecar, drop it now
-                # — main is good again.
+                # â€” main is good again.
                 try:
                     rec_path = _cache_path(uid) + ".recover"
                     if os.path.exists(rec_path):
@@ -15194,7 +15320,7 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     pass
             else:
-                # File missing entirely — fresh slot. Mark state as "missing"
+                # File missing entirely â€” fresh slot. Mark state as "missing"
                 # so writes are allowed (this is a new install, not a corrupted
                 # cache).
                 try:
@@ -15204,7 +15330,7 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             _log(f"Cache load error: {e}")
             try:
-                # Unknown failure inside the load block — treat as failed so we
+                # Unknown failure inside the load block â€” treat as failed so we
                 # don't blow the disk away on next save.
                 self._cache_load_state = "failed"
             except:
@@ -15572,7 +15698,7 @@ class NftClonerPlugin(BasePlugin):
             return False
 
         # Use the same self-check as _apply_nft_number_to_user so both paths
-        # behave identically — fixes "every other time" flicker where username
+        # behave identically â€” fixes "every other time" flicker where username
         # was skipped when uid couldn't be extracted from a UserFull-like
         # container while number was still applied (creating an asymmetric,
         # alternating UI state across refreshes).
@@ -15612,7 +15738,7 @@ class NftClonerPlugin(BasePlugin):
                     changed = True
 
         # Patch singular username field so any UI path that reads user.username
-        # (not the list) also shows the NFT username — fixes "every other time" bug
+        # (not the list) also shows the NFT username â€” fixes "every other time" bug
         primary_token = tokens[0] if tokens else ""
         if primary_token:
             try:
@@ -15659,7 +15785,7 @@ class NftClonerPlugin(BasePlugin):
 
         # Same singular-field workaround as on User: some UserFull-aware UI paths
         # read the flattened username on the nested user object directly, so make
-        # sure that one is in sync — prevents the "every other time" flicker.
+        # sure that one is in sync â€” prevents the "every other time" flicker.
         try:
             primary_token = tokens[0] if tokens else ""
             if primary_token:
@@ -15742,7 +15868,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         # Mirror username's nested-User patch: also stamp the nested user.phone so
-        # UI paths that read full_user.user.phone stay in sync — fixes the
+        # UI paths that read full_user.user.phone stay in sync â€” fixes the
         # alternating display when only the nested user is queried.
         try:
             nested_u = get_val(full_user_obj, "user", None)
@@ -16527,7 +16653,7 @@ class NftClonerPlugin(BasePlugin):
                             return title
                     except:
                         pass
-        return "Пользователь" if eid > 0 else "Чат"
+        return "ÐŸÐ¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ" if eid > 0 else "Ð§Ð°Ñ‚"
 
     def _resolve_identity_entity_id(self, raw_uid, fallback_uid=0):
         try:
@@ -17564,7 +17690,7 @@ class NftClonerPlugin(BasePlugin):
         if not st:
             # Wear is supposed to be active but we couldn't build a collectible
             # status (likely incomplete wear_status_data). Try a one-shot library
-            # resync and rebuild — this keeps the worn status from silently
+            # resync and rebuild â€” this keeps the worn status from silently
             # disappearing when caches are partial.
             try:
                 self._sync_wear_status_data_from_library(self.wear_collectible_id)
@@ -17712,7 +17838,7 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         pass
                 # Even when nothing changed, force a UI refresh when NFT username/number
-                # is active — this fixes the "every other time" intermittent display bug
+                # is active â€” this fixes the "every other time" intermittent display bug
                 # caused by Telegram reading a stale (un-patched) user object from cache
                 if (self._is_nft_username_active() or self._is_nft_number_active()):
                     if not has_changes:
@@ -18971,8 +19097,8 @@ class NftClonerPlugin(BasePlugin):
     def _hook_gift_three_dots_menu(self):
         """
         Inject two actions into Telegram's gift sheet (three dots menu) for gifts from our library:
-        - ÃƒÂÃ‹Å“ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â² ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Âµ
-        - ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™
+        - ÃƒÆ’Ã‚ÂÃƒâ€¹Ã…â€œÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ
+        - ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢
         Implementation mirrors NUM.plugin (StarGiftSheet.onMenuPressed + ItemOptions.show).
         """
         try:
@@ -19285,14 +19411,14 @@ class NftClonerPlugin(BasePlugin):
     def _save_library_gift_stars_config(self, key, value, refresh_ui=True):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
 
         raw = str(value or "").strip()
         if raw:
             digits = re.sub(r"[^0-9]+", "", raw)
             if not digits:
-                BulletinHelper.show_error("Введите количество звёзд числом")
+                BulletinHelper.show_error("Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð·Ð²Ñ‘Ð·Ð´ Ñ‡Ð¸ÑÐ»Ð¾Ð¼")
                 return False
             amount = int(digits or 0)
         else:
@@ -19335,16 +19461,16 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
         if self._is_gift_stars_config_active(cfg):
-            BulletinHelper.show_success(f"Локальные звёзды: {self._format_gift_stars_text(cfg)}")
+            BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹: {self._format_gift_stars_text(cfg)}")
         else:
-            BulletinHelper.show_success("Локальные звёзды сброшены")
+            BulletinHelper.show_success("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹ ÑÐ±Ñ€Ð¾ÑˆÐµÐ½Ñ‹")
         pass
         return True
 
     def _save_library_ton_display_config(self, key, cfg, refresh_ui=True):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
 
         cfg2 = self._sanitize_ton_display_config(cfg)
@@ -19382,69 +19508,69 @@ class NftClonerPlugin(BasePlugin):
     def _toggle_library_ton_display(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         cfg["enabled"] = not bool(cfg.get("enabled", False))
         if self._save_library_ton_display_config(key, cfg):
-            BulletinHelper.show_success("TON-блок: включен" if bool(cfg.get("enabled", False)) else "TON-блок: выключен")
+            BulletinHelper.show_success("TON-Ð±Ð»Ð¾Ðº: Ð²ÐºÐ»ÑŽÑ‡ÐµÐ½" if bool(cfg.get("enabled", False)) else "TON-Ð±Ð»Ð¾Ðº: Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½")
             return True
         return False
 
     def _cycle_library_ton_owner_mode(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         current = self._sanitize_ton_owner_mode(cfg.get("owner_mode", "nickname"))
         cfg["owner_mode"] = "address" if current == "nickname" else "nickname"
         if self._save_library_ton_display_config(key, cfg):
-            BulletinHelper.show_success("Владелец TON: {0}".format(self._format_ton_owner_mode_label(cfg.get("owner_mode", "nickname"))))
+            BulletinHelper.show_success("Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON: {0}".format(self._format_ton_owner_mode_label(cfg.get("owner_mode", "nickname"))))
             return True
         return False
 
     def _toggle_library_ton_owner_mode(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         current = self._sanitize_ton_owner_mode(cfg.get("owner_mode", "nickname"))
         cfg["owner_mode"] = "address" if current == "nickname" else "nickname"
         if self._save_library_ton_display_config(key, cfg):
-            BulletinHelper.show_success("Владелец TON: {0}".format(self._format_ton_owner_mode_label(cfg.get("owner_mode", "nickname"))))
+            BulletinHelper.show_success("Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON: {0}".format(self._format_ton_owner_mode_label(cfg.get("owner_mode", "nickname"))))
             return True
         return False
 
     def _save_library_ton_nickname(self, key, value):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         cfg["nickname"] = self._sanitize_ton_nickname(value)
         if self._save_library_ton_display_config(key, cfg):
-            BulletinHelper.show_success("nickname.ton обновлён")
+            BulletinHelper.show_success("nickname.ton Ð¾Ð±Ð½Ð¾Ð²Ð»Ñ‘Ð½")
             return True
         return False
 
     def _save_library_ton_address(self, key, value):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         cfg["address"] = self._sanitize_ton_address(value)
         if self._save_library_ton_display_config(key, cfg):
-            BulletinHelper.show_success("TON address обновлён")
+            BulletinHelper.show_success("TON address Ð¾Ð±Ð½Ð¾Ð²Ð»Ñ‘Ð½")
             return True
         return False
 
     def _save_library_ton_wallet(self, key, value):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         raw = str(value or "").strip()
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -19454,7 +19580,7 @@ class NftClonerPlugin(BasePlugin):
             cfg["owner_mode"] = "nickname"
             ok = self._save_library_ton_display_config(key, cfg)
             if ok:
-                BulletinHelper.show_success("Кошелёк TON очищен")
+                BulletinHelper.show_success("ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº TON Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½")
             return bool(ok)
 
         if raw.lower().endswith(".ton"):
@@ -19463,7 +19589,7 @@ class NftClonerPlugin(BasePlugin):
             cfg["owner_mode"] = "nickname"
             ok = self._save_library_ton_display_config(key, cfg)
             if ok:
-                BulletinHelper.show_success("Кошелёк TON обновлён")
+                BulletinHelper.show_success("ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº TON Ð¾Ð±Ð½Ð¾Ð²Ð»Ñ‘Ð½")
             return bool(ok)
 
         cfg["nickname"] = ""
@@ -19471,36 +19597,36 @@ class NftClonerPlugin(BasePlugin):
         cfg["owner_mode"] = "address"
         ok = self._save_library_ton_display_config(key, cfg)
         if ok:
-            BulletinHelper.show_success("Кошелёк TON обновлён")
+            BulletinHelper.show_success("ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº TON Ð¾Ð±Ð½Ð¾Ð²Ð»Ñ‘Ð½")
         return bool(ok)
 
     def _open_library_ton_owner_menu(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         nickname = self._sanitize_ton_nickname(cfg.get("nickname", ""))
         address = self._sanitize_ton_address(cfg.get("address", ""))
         wallet_value = "{0}.ton".format(nickname) if nickname else address
-        wallet_text = wallet_value if wallet_value else "не задан"
+        wallet_text = wallet_value if wallet_value else "Ð½Ðµ Ð·Ð°Ð´Ð°Ð½"
         preview_text = self._format_visual_ton_owner_text(e, cfg)
         actions = [
-            (f"Кошелёк • {wallet_text}", lambda: self._show_text_input_dialog("Кошелёк TON", wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
-            (f"Превью • {preview_text}", lambda: None),
+            (f"ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº â€¢ {wallet_text}", lambda: self._show_text_input_dialog("ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº TON", wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
+            (f"ÐŸÑ€ÐµÐ²ÑŒÑŽ â€¢ {preview_text}", lambda: None),
         ]
-        self._show_action_menu("Владелец TON", actions, negative_text="Назад")
+        self._show_action_menu("Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON", actions, negative_text="ÐÐ°Ð·Ð°Ð´")
         return True
 
     def _open_local_gift_stars_dialog(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
         prefill = str(self._get_gift_stars_amount(cfg) or "") if self._is_gift_stars_config_active(cfg) else ""
         self._show_text_input_dialog(
-            "Локальные звёзды",
+            "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹",
             prefill,
             lambda text: self._save_library_gift_stars_config(key, text),
             numeric=True,
@@ -19510,13 +19636,13 @@ class NftClonerPlugin(BasePlugin):
     def _open_local_gift_value_menu(self, key, sheet=None, context=None):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return False
         cfg = self._sanitize_value_config(e.get("value_config", None))
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
-        stars_subtitle = self._format_gift_stars_text(stars_cfg, placeholder="не заданы")
-        title = "Локальная ценность"
-        subtitle = self._format_local_value_text(cfg, placeholder="не задана", include_tilde=True, include_code=True)
+        stars_subtitle = self._format_gift_stars_text(stars_cfg, placeholder="Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ñ‹")
+        title = "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ð°Ñ Ñ†ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ"
+        subtitle = self._format_local_value_text(cfg, placeholder="Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ð°", include_tilde=True, include_code=True)
 
         def _open_constructor():
             def _run():
@@ -19528,7 +19654,7 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     self._open_constructor_for_library_key(key)
                 except Exception as ex:
-                    BulletinHelper.show_error(f"Не удалось открыть конструктор: {ex}")
+                    BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€: {ex}")
 
             try:
                 AndroidUtilities.runOnUIThread(JRunnable(_run), 90)
@@ -19536,13 +19662,13 @@ class NftClonerPlugin(BasePlugin):
                 _run()
 
         actions = [
-            (f"Текущее значение • {subtitle}", _open_constructor),
-            (f"Локальные звёзды • {stars_subtitle}", lambda: self._open_local_gift_stars_dialog(key)),
-            ("Изменить в конструкторе", _open_constructor),
+            (f"Ð¢ÐµÐºÑƒÑ‰ÐµÐµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ â€¢ {subtitle}", _open_constructor),
+            (f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹ â€¢ {stars_subtitle}", lambda: self._open_local_gift_stars_dialog(key)),
+            ("Ð˜Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð² ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ðµ", _open_constructor),
         ]
         if self._is_gift_stars_config_active(stars_cfg):
-            actions.append(("Сбросить локальные звёзды", lambda: self._save_library_gift_stars_config(key, "0")))
-        self._show_action_menu(title, actions, negative_text="Назад", context=context)
+            actions.append(("Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹", lambda: self._save_library_gift_stars_config(key, "0")))
+        self._show_action_menu(title, actions, negative_text="ÐÐ°Ð·Ð°Ð´", context=context)
         return True
 
     def _inject_local_gift_value_row(self, sheet, gift=None):
@@ -19571,19 +19697,19 @@ class NftClonerPlugin(BasePlugin):
             return False
         cfg = self._sanitize_value_config(e.get("value_config", None))
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
-        value_text = self._format_local_value_text(cfg, placeholder="не задана")
+        value_text = self._format_local_value_text(cfg, placeholder="Ð½Ðµ Ð·Ð°Ð´Ð°Ð½Ð°")
         if self._is_gift_stars_config_active(stars_cfg):
-            value_text = f"{value_text} • {self._format_gift_stars_text(stars_cfg)}"
-        button_text = "подробнее"
+            value_text = f"{value_text} â€¢ {self._format_gift_stars_text(stars_cfg)}"
+        button_text = "Ð¿Ð¾Ð´Ñ€Ð¾Ð±Ð½ÐµÐµ"
 
         def _open_menu():
             try:
                 self._open_local_gift_value_menu(key, sheet=sheet)
             except Exception as ex:
-                BulletinHelper.show_error(f"Не удалось открыть меню ценности: {ex}")
+                BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¼ÐµÐ½ÑŽ Ñ†ÐµÐ½Ð½Ð¾ÑÑ‚Ð¸: {ex}")
 
         try:
-            table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
+            table.addRow(self._ui_text("Ð¦ÐµÐ½Ð½Ð¾ÑÑ‚ÑŒ"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
             return True
         except Exception as e:
             _log(f"Local gift value row inject error: {e}")
@@ -19617,7 +19743,7 @@ class NftClonerPlugin(BasePlugin):
         if table is None:
             return False
         try:
-            table.addRow(self._ui_text("Владелец"), self._ui_text(self._format_visual_ton_owner_text(e, ton_cfg)))
+            table.addRow(self._ui_text("Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ†"), self._ui_text(self._format_visual_ton_owner_text(e, ton_cfg)))
             return True
         except Exception as ex:
             _log(f"Local TON owner row inject error: {ex}")
@@ -19655,7 +19781,7 @@ class NftClonerPlugin(BasePlugin):
             return False
         try:
             if enabled:
-                after_view.setText("Подарок хранится в блокчейне TON. Посмотреть ›")
+                after_view.setText("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º")
                 after_view.setVisibility(View.VISIBLE)
                 try:
                     after_view.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton))
@@ -19689,7 +19815,7 @@ class NftClonerPlugin(BasePlugin):
     def _resolve_local_gift_release_badge_text(self, entry=None, gift=None):
         ton_cfg = self._sanitize_ton_display_config(entry.get("ton_display_config", None) if isinstance(entry, dict) else None)
         if bool(ton_cfg.get("enabled", False)):
-            return "Подарок хранится в блокчейне TON. Посмотреть ›"
+            return "ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º"
         probes = []
         if isinstance(entry, dict):
             try:
@@ -19716,7 +19842,7 @@ class NftClonerPlugin(BasePlugin):
 
         if any(token in haystack for token in ["snoop", "dogg", "low rider", "lowrider"]):
             try:
-                text = "Выпущен @snoopdogg"
+                text = "Ð’Ñ‹Ð¿ÑƒÑ‰ÐµÐ½ @snoopdogg"
                 username = "@snoopdogg"
                 start = text.find(username)
                 if start < 0:
@@ -19748,7 +19874,7 @@ class NftClonerPlugin(BasePlugin):
                 ssb.setSpan(_SnoopLink(), start, end, 0)
                 return ssb
             except:
-                return "Выпущен @snoopdogg"
+                return "Ð’Ñ‹Ð¿ÑƒÑ‰ÐµÐ½ @snoopdogg"
         return None
 
     def _inject_local_gift_release_badge(self, sheet, gift=None):
@@ -21657,9 +21783,9 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # CHANNEL FEATURES – NFT gifts, subscriber count
-    # ─────────────────────────────────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # CHANNEL FEATURES â€“ NFT gifts, subscriber count
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _get_channel_key(self, dialog_id_or_chat_id):
         """Convert a NEGATIVE dialog_id to a positive chat_id string key.
@@ -21669,9 +21795,9 @@ class NftClonerPlugin(BasePlugin):
         except:
             eid = 0
         if eid >= 0:
-            # Positive = user dialog, 0 = unknown → not a channel
+            # Positive = user dialog, 0 = unknown â†’ not a channel
             return None
-        # Negative dialog_id → convert to positive chat_id
+        # Negative dialog_id â†’ convert to positive chat_id
         key = self._convert_entity_to_chat_id(eid)
         try:
             key_int = int(key or 0)
@@ -21724,7 +21850,7 @@ class NftClonerPlugin(BasePlugin):
             return False
         changed = False
 
-        # ── Subscriber count ─────────────────────────────────────────────
+        # â”€â”€ Subscriber count â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             subs = int(cd.get("subscribers", 0) or 0)
             if subs > 0:
@@ -21891,13 +22017,13 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             _log(f"inject_channel_gifts error: {e}")
 
-    # ── Channel NFT Gifts (independent library) ──────────────────────────────
+    # â”€â”€ Channel NFT Gifts (independent library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _open_channel_gifts_menu(self, context=None):
         """Show channel gift management menu (fully independent library)."""
         _, key = self._resolve_channel_from_context(context)
         if not key:
-            BulletinHelper.show_error("Это меню только для каналов и групп")
+            BulletinHelper.show_error("Ð­Ñ‚Ð¾ Ð¼ÐµÐ½ÑŽ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ ÐºÐ°Ð½Ð°Ð»Ð¾Ð² Ð¸ Ð³Ñ€ÑƒÐ¿Ð¿")
             return
         cd = self._get_channel_data(key)
         ch_lib = list(cd.get("gift_library", []) or [])
@@ -21916,25 +22042,25 @@ class NftClonerPlugin(BasePlugin):
                         self._remove_channel_gift_entry(key, entry_key)
                     return _rm
 
-                actions.append((f"✕ {label}", _make_remove()))
+                actions.append((f"âœ• {label}", _make_remove()))
             except:
                 continue
 
         # Add from profile library
-        actions.append(("＋ Добавить из профиля", lambda: self._open_channel_gift_picker(key)))
+        actions.append(("ï¼‹ Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð¸Ð· Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ", lambda: self._open_channel_gift_picker(key)))
         # Clear all
         if ch_lib:
-            actions.append(("⊘ Очистить все", lambda: self._clear_channel_gifts(key)))
+            actions.append(("âŠ˜ ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÐµ", lambda: self._clear_channel_gifts(key)))
 
-        run_on_ui_thread(lambda: self._show_action_menu("NFT Gifts канала", actions))
+        run_on_ui_thread(lambda: self._show_action_menu("NFT Gifts ÐºÐ°Ð½Ð°Ð»Ð°", actions))
 
     def _open_channel_gift_picker(self, channel_key):
         """Let user pick a gift from the profile library to copy to this channel."""
         lib = self.gift_library or []
         if not lib:
             BulletinHelper.show_error(
-                "Профильная библиотека пуста. "
-                "Постройте подарки через NFT Gifts в профиле."
+                "ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒÐ½Ð°Ñ Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ° Ð¿ÑƒÑÑ‚Ð°. "
+                "ÐŸÐ¾ÑÑ‚Ñ€Ð¾Ð¹Ñ‚Ðµ Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ñ‡ÐµÑ€ÐµÐ· NFT Gifts Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ."
             )
             return
         actions = []
@@ -21954,20 +22080,20 @@ class NftClonerPlugin(BasePlugin):
             except:
                 continue
         if not actions:
-            BulletinHelper.show_error("Нет подарков для копирования")
+            BulletinHelper.show_error("ÐÐµÑ‚ Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð² Ð´Ð»Ñ ÐºÐ¾Ð¿Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ")
             return
-        run_on_ui_thread(lambda: self._show_action_menu("Выбрать подарок", actions))
+        run_on_ui_thread(lambda: self._show_action_menu("Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð¿Ð¾Ð´Ð°Ñ€Ð¾Ðº", actions))
 
     def _copy_profile_gift_to_channel(self, channel_key, profile_gift_key):
         """Serialize a profile library gift and store it independently in the channel."""
         try:
             w = self._library_get_wrapper(profile_gift_key)
             if w is None:
-                BulletinHelper.show_error("Подарок не найден в профиле")
+                BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ")
                 return
             b64 = serialize_tl_object(w)
             if not b64:
-                BulletinHelper.show_error("Не удалось сериализовать подарок")
+                BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐµÑ€Ð¸Ð°Ð»Ð¸Ð·Ð¾Ð²Ð°Ñ‚ÑŒ Ð¿Ð¾Ð´Ð°Ñ€Ð¾Ðº")
                 return
             # Build independent entry
             entry_src = self._library_find_entry(profile_gift_key)
@@ -21985,9 +22111,9 @@ class NftClonerPlugin(BasePlugin):
             self.channel_data[str(channel_key)] = cd
             self._save_cache()
             lbl = f"{title} #{num}" if num else title
-            BulletinHelper.show_success(f"Добавлен в канал: {lbl}")
+            BulletinHelper.show_success(f"Ð”Ð¾Ð±Ð°Ð²Ð»ÐµÐ½ Ð² ÐºÐ°Ð½Ð°Ð»: {lbl}")
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка копирования: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° ÐºÐ¾Ð¿Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ñ: {e}")
 
     def _remove_channel_gift_entry(self, channel_key, entry_key):
         """Remove one gift entry from the channel's library."""
@@ -22000,22 +22126,22 @@ class NftClonerPlugin(BasePlugin):
             cd["gift_library"] = ch_lib
             self.channel_data[str(channel_key)] = cd
             self._save_cache()
-            BulletinHelper.show_info("Подарок удалён из канала")
+            BulletinHelper.show_info("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº ÑƒÐ´Ð°Ð»Ñ‘Ð½ Ð¸Ð· ÐºÐ°Ð½Ð°Ð»Ð°")
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ°: {e}")
 
     def _clear_channel_gifts(self, channel_key):
         """Remove all gifts from a channel's library."""
         self._set_channel_data_field(channel_key, "gift_library", [])
-        BulletinHelper.show_info("Подарки канала очищены")
+        BulletinHelper.show_info("ÐŸÐ¾Ð´Ð°Ñ€ÐºÐ¸ ÐºÐ°Ð½Ð°Ð»Ð° Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½Ñ‹")
 
-    # ── Channel Subscribers dialog ───────────────────────────────────────────
+    # â”€â”€ Channel Subscribers dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _open_channel_subscribers_dialog(self, context=None):
         """Open local subscriber count dialog for a channel."""
         _, key = self._resolve_channel_from_context(context)
         if not key:
-            BulletinHelper.show_error("Это меню только для каналов и групп")
+            BulletinHelper.show_error("Ð­Ñ‚Ð¾ Ð¼ÐµÐ½ÑŽ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ ÐºÐ°Ð½Ð°Ð»Ð¾Ð² Ð¸ Ð³Ñ€ÑƒÐ¿Ð¿")
             return
         cd = self._get_channel_data(key)
         current_subs = int(cd.get("subscribers", 0) or 0)
@@ -22032,7 +22158,7 @@ class NftClonerPlugin(BasePlugin):
                 layout.setPadding(ph, AndroidUtilities.dp(10), ph, AndroidUtilities.dp(4))
 
                 lbl = TextView(ctx)
-                lbl.setText("Количество подписчиков")
+                lbl.setText("ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿Ð¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¾Ð²")
                 try:
                     lbl.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueHeader))
                 except:
@@ -22040,7 +22166,7 @@ class NftClonerPlugin(BasePlugin):
                 layout.addView(lbl)
 
                 note = TextView(ctx)
-                note.setText("Локально. Видно только вам. 0 = выключить.")
+                note.setText("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾. Ð’Ð¸Ð´Ð½Ð¾ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð²Ð°Ð¼. 0 = Ð²Ñ‹ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ.")
                 note.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
                 try:
                     note.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
@@ -22056,7 +22182,7 @@ class NftClonerPlugin(BasePlugin):
                 edit = EditText(ctx)
                 edit.setText(str(current_subs) if current_subs > 0 else "")
                 try:
-                    edit.setHint("Пример: 1500000")
+                    edit.setHint("ÐŸÑ€Ð¸Ð¼ÐµÑ€: 1500000")
                 except:
                     pass
                 edit.setInputType(int(InputType.TYPE_CLASS_NUMBER))
@@ -22068,7 +22194,7 @@ class NftClonerPlugin(BasePlugin):
                 layout.addView(edit, lp2)
 
                 builder = AlertDialogBuilder(ctx)
-                builder.set_title("Подписчики (локально)")
+                builder.set_title("ÐŸÐ¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¸ (Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾)")
                 builder.set_view(layout)
 
                 def _submit(d, w):
@@ -22079,11 +22205,11 @@ class NftClonerPlugin(BasePlugin):
                         val = 0
                     self._commit_channel_subscribers(key, val)
 
-                builder.set_positive_button("Сохранить", _submit)
-                builder.set_negative_button("Отмена", None)
+                builder.set_positive_button("Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ", _submit)
+                builder.set_negative_button("ÐžÑ‚Ð¼ÐµÐ½Ð°", None)
                 builder.show()
             except Exception as e:
-                BulletinHelper.show_error(f"Подписчики диалог: {e}")
+                BulletinHelper.show_error(f"ÐŸÐ¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¸ Ð´Ð¸Ð°Ð»Ð¾Ð³: {e}")
 
         run_on_ui_thread(_show_ui)
 
@@ -22093,18 +22219,18 @@ class NftClonerPlugin(BasePlugin):
             self._set_channel_data_field(key, "subscribers", count)
             run_on_ui_thread(self._repatch_channel_chats)
             if count > 0:
-                BulletinHelper.show_success(f"Подписчики: {count:,}")
+                BulletinHelper.show_success(f"ÐŸÐ¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¸: {count:,}")
             else:
-                BulletinHelper.show_info("Подписчики сброшены")
+                BulletinHelper.show_info("ÐŸÐ¾Ð´Ð¿Ð¸ÑÑ‡Ð¸ÐºÐ¸ ÑÐ±Ñ€Ð¾ÑˆÐµÐ½Ñ‹")
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ°: {e}")
 
-    # ── Channel hooks ────────────────────────────────────────────────────────
+    # â”€â”€ Channel hooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _hook_channel_data(self):
         """Apply initial channel overrides via direct cache patch (no getChat/putChats hooks).
         Hooking getChat/putChats crosses JVM-Python bridge on every call and blocks
-        Telegram's update pipeline → infinite loading across all dialogs. Instead we
+        Telegram's update pipeline â†’ infinite loading across all dialogs. Instead we
         patch the MessagesController cache directly via _repatch_channel_chats()."""
         try:
             # Delay initial patch so MessagesController is fully initialised
@@ -22176,7 +22302,7 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     pass
 
-            # Fix bogus "X ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0" ribbons for real saved gifts too (not only injected ones).
+            # Fix bogus "X ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· 0" ribbons for real saved gifts too (not only injected ones).
             try:
                 try:
                     my_id = int(self._get_my_user_id() or 0)
@@ -22229,11 +22355,11 @@ class NftClonerPlugin(BasePlugin):
                         pass
 
                     if my_id > 0 and req_user_id > 0 and req_user_id != my_id:
-                        _log(f"  Skip inject: Ãƒâ€˜Ã¢â‚¬Â¡Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™ req_user_id={req_user_id}, my_id={my_id}")
+                        _log(f"  Skip inject: ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ req_user_id={req_user_id}, my_id={my_id}")
                         return
 
                     if my_id > 0 and owner_user_id > 0 and owner_user_id != my_id:
-                        _log(f"  Skip inject: Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº Ãƒâ€˜Ã¢â‚¬Â¡Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™Ãƒâ€˜Ã¢â‚¬Â ÃƒÂÃ‚Â° owner_user_id={owner_user_id}, my_id={my_id}")
+                        _log(f"  Skip inject: ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° owner_user_id={owner_user_id}, my_id={my_id}")
                         return
 
                     if my_id > 0 and target_user_id > 0 and target_user_id != my_id:
@@ -22264,7 +22390,7 @@ class NftClonerPlugin(BasePlugin):
                             try:
                                 gift = self._extract_wrapper_gift(w)
                                 if gift is not None:
-                                    # Keep availability totals sane for UI ("X ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· Y" ribbon).
+                                    # Keep availability totals sane for UI ("X ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· Y" ribbon).
                                     self._ensure_unique_gift_availability(gift, base_gift_id=0)
                                     try:
                                         gid = int(get_val(gift, "id", 0) or 0)
@@ -22418,20 +22544,20 @@ class NftClonerPlugin(BasePlugin):
     def _open_gift_actions_menu(self, key):
         e = self._library_find_entry(key)
         if not e:
-            BulletinHelper.show_error("Подарок не найден")
+            BulletinHelper.show_error("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½")
             return
         t = self._ui_text(e.get("title", "NFT"), "NFT")
         n = int(e.get("num", 0) or 0)
         title = f"{t} #{n}" if n > 0 else t
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
-            ("Открыть в конструкторе", lambda: self._open_constructor_for_library_key(key)),
-            (f"TON блокчейн • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            ("ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð² ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ðµ", lambda: self._open_constructor_for_library_key(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Владелец TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
-        actions.append(("Удалить из библиотеки", lambda: self._delete_library_gift_key(key)))
-        self._show_action_menu(title, actions, negative_text="Назад")
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+        actions.append(("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ¸", lambda: self._delete_library_gift_key(key)))
+        self._show_action_menu(title, actions, negative_text="ÐÐ°Ð·Ð°Ð´")
 
     def _toggle_library_ton_owner_mode(self, key):
         e = self._library_find_entry(key)
@@ -22610,8 +22736,8 @@ class GiftItemOptionsShowHook(MethodHook):
                 _log(f"Gift menu safe labels fallback: {e}")
 
             # Signature: add(int iconResId, CharSequence text, Runnable action)
-            item_options.add(icon_edit, "ÃƒÂÃ‹Å“ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â² ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Âµ", JRunnable(_on_edit))
-            item_options.add(icon_delete, "ÃƒÂÃ‚Â£ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™", JRunnable(_on_delete))
+            item_options.add(icon_edit, "ÃƒÆ’Ã‚ÂÃƒâ€¹Ã…â€œÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ", JRunnable(_on_edit))
+            item_options.add(icon_delete, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", JRunnable(_on_delete))
 
             self.plugin._gift_menu_injected_once = True
             # Reduce risk of affecting other menus.
@@ -22638,9 +22764,9 @@ class DrawerSetUserHook(MethodHook):
         except:
             pass
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Channel data hooks – patch TLRPC$Chat objects with local overrides.
-# ─────────────────────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Channel data hooks â€“ patch TLRPC$Chat objects with local overrides.
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class LocalStarsBalanceHook(MethodHook):
     def __init__(self, plugin):
@@ -22688,7 +22814,7 @@ class LocalStarsBalanceHook(MethodHook):
             pass
 
 class GetChatChannelHook(MethodHook):
-    """After MessagesController.getChat() – patch the returned chat object."""
+    """After MessagesController.getChat() â€“ patch the returned chat object."""
     def __init__(self, plugin):
         super().__init__()
         self.plugin = plugin
@@ -22704,7 +22830,7 @@ class GetChatChannelHook(MethodHook):
 
 
 class PutChatsChannelHook(MethodHook):
-    """Before MessagesController.putChats() – patch chats before caching."""
+    """Before MessagesController.putChats() â€“ patch chats before caching."""
     def __init__(self, plugin):
         super().__init__()
         self.plugin = plugin
@@ -22981,7 +23107,7 @@ class StatusWrapperDelegate(dynamic_proxy(RequestDelegate)):
         if (self.plugin.wear_active and self.plugin.wear_collectible_id > 0) or self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active():
             try:
                 # The previous gate skipped rescheduling whenever the early-
-                # profile fastpatch path was active — but the early-profile
+                # profile fastpatch path was active â€” but the early-profile
                 # mode is *exactly* when the loadFullUser response is about to
                 # overwrite our patched cached User. Without a follow-up
                 # schedule, identity/wear silently drops on the next render.
@@ -23093,7 +23219,7 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                 # in a half-patched state on the next render.
                 # Use a delegate-specific batch key so this schedule does NOT
                 # share a token with the on_plugin_load primer (which used the
-                # default key) — otherwise each delegate run would cancel that
+                # default key) â€” otherwise each delegate run would cancel that
                 # primer (or vice versa) instead of running additively.
                 self.plugin._schedule_cached_user_patch(
                     [80, 220, 520],
@@ -23406,7 +23532,7 @@ class ProfileActivityFastPatchHook(MethodHook):
             if not p._is_my_profile_activity(pa):
                 return
 
-            # Refresh own gifts UI (fix "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0") without any manual actions.
+            # Refresh own gifts UI (fix "1 ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· 0") without any manual actions.
             try:
                 if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
                     if method_name not in ["onFragmentCreate", "createView", "onResume"]:
@@ -23890,7 +24016,7 @@ class PutAnyWearHook(MethodHook):
         # After Telegram's internal merge runs (putUser merges incoming user
         # into the cached User in MessagesController.users), the cached User
         # may have a *fresh* usernames ArrayList that reflects only the server
-        # state — discarding our pre-merge patches. Re-apply against the
+        # state â€” discarding our pre-merge patches. Re-apply against the
         # post-merge cached User so wear AND identity stay in sync, eliminating
         # the "wear shows / usernames revert" alternation users see when the
         # merge replaces the list reference.
@@ -24433,7 +24559,7 @@ class ResaleGridController:
             pass
 
     def show(self):
-        title = "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT" if self.is_catalog else "ÃƒÂÃ…â€œÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¸ NFT"
+        title = "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT" if self.is_catalog else "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ NFT"
         try:
             user_id = get_user_config().clientUserId
             ResaleGiftsFragment = jclass("org.telegram.ui.Gifts.ResaleGiftsFragment")
@@ -24456,7 +24582,7 @@ class ResaleGridController:
             get_last_fragment().presentFragment(self.fragment)
             AndroidUtilities.runOnUIThread(JRunnable(self._init_ui), 150)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â: {e}")
 
     def _init_ui(self):
         try:
@@ -24579,11 +24705,11 @@ class ResaleGridController:
         try:
             String = jclass("java.lang.String")
             if self.btn_model:
-                self.btn_model.setValue(String(f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_model}" if self.filter_model else "ÃƒÂÃ…â€œÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™"))
+                self.btn_model.setValue(String(f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_model}" if self.filter_model else "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢"))
             if self.btn_pattern:
-                self.btn_pattern.setValue(String(f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_pattern}" if self.filter_pattern else "ÃƒÂÃ‚Â£ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬"))
+                self.btn_pattern.setValue(String(f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_pattern}" if self.filter_pattern else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬"))
             if self.btn_backdrop:
-                self.btn_backdrop.setValue(String(f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_backdrop}" if self.filter_backdrop else "ÃƒÂÃ‚Â¤ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½"))
+                self.btn_backdrop.setValue(String(f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_backdrop}" if self.filter_backdrop else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¤ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½"))
         except:
             pass
 
@@ -24598,7 +24724,7 @@ class ResaleGridController:
         if action_bar:
             try:
                 count = len(self.filtered_items or [])
-                action_bar.setSubtitle(f"{count} NFT" if count > 0 else "ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ NFT")
+                action_bar.setSubtitle(f"{count} NFT" if count > 0 else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ NFT")
             except:
                 pass
 
@@ -24621,7 +24747,7 @@ class ResaleGridController:
             GiftCellFactory = None
 
         if not self.filtered_items:
-            empty = UItem.asShadow("ÃƒÂÃ‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¹ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾")
+            empty = UItem.asShadow("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
             try:
                 empty.spanCount = 3
             except:
@@ -24658,7 +24784,7 @@ class ResaleGridController:
             except:
                 self.plugin.cached_gift_id = 0
             if int(self.plugin.cached_gift_id or 0) <= 0:
-                BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚Âµ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ gift_id")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ gift_id")
                 return
             try:
                 self.fragment.finishFragment()
@@ -24721,13 +24847,13 @@ class CatalogGridController:
             user_id = get_user_config().clientUserId
             ResaleGiftsFragment = jclass("org.telegram.ui.Gifts.ResaleGiftsFragment")
             attempts = [
-                ("uid,title,int,None", lambda: ResaleGiftsFragment(user_id, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", 0, None)),
-                ("intuid,title,int,None", lambda: ResaleGiftsFragment(int(user_id), "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", 0, None)),
-                ("uid,int,title,None", lambda: ResaleGiftsFragment(user_id, 0, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", None)),
-                ("uid,bool,title,int,None", lambda: ResaleGiftsFragment(user_id, True, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", 0, None)),
-                ("uid,bool,title,int,None(false)", lambda: ResaleGiftsFragment(user_id, False, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", 0, None)),
-                ("uid,title,None", lambda: ResaleGiftsFragment(user_id, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", None)),
-                ("uid,title", lambda: ResaleGiftsFragment(user_id, "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT")),
+                ("uid,title,int,None", lambda: ResaleGiftsFragment(user_id, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", 0, None)),
+                ("intuid,title,int,None", lambda: ResaleGiftsFragment(int(user_id), "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", 0, None)),
+                ("uid,int,title,None", lambda: ResaleGiftsFragment(user_id, 0, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", None)),
+                ("uid,bool,title,int,None", lambda: ResaleGiftsFragment(user_id, True, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", 0, None)),
+                ("uid,bool,title,int,None(false)", lambda: ResaleGiftsFragment(user_id, False, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", 0, None)),
+                ("uid,title,None", lambda: ResaleGiftsFragment(user_id, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", None)),
+                ("uid,title", lambda: ResaleGiftsFragment(user_id, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT")),
                 ("uid,int", lambda: ResaleGiftsFragment(user_id, 0)),
                 ("uid,bool", lambda: ResaleGiftsFragment(user_id, True)),
                 ("uid", lambda: ResaleGiftsFragment(user_id)),
@@ -24751,7 +24877,7 @@ class CatalogGridController:
                 try:
                     meth = getattr(self.fragment, meth_name, None)
                     if meth is not None:
-                        meth("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT")
+                        meth("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT")
                 except:
                     pass
             _log(f"CatalogGrid.show: fragment={self.fragment} user_id={user_id}")
@@ -24771,7 +24897,7 @@ class CatalogGridController:
             get_last_fragment().presentFragment(self.fragment)
             AndroidUtilities.runOnUIThread(JRunnable(self._init_ui), 150)
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³: {e}")
 
     def _refresh_catalog_items(self):
         self.items = self.plugin._get_catalog_nft_gifts()
@@ -24836,7 +24962,7 @@ class CatalogGridController:
 
     def _suppress_native_loading_state(self):
         placeholder_text = "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430..." if bool(getattr(self, "_loading_catalog", False)) else "\u0421\u043f\u0438\u0441\u043e\u043a \u043f\u0443\u0441\u0442"
-        broken_tokens = ("Ã", "Ð", "Ñ", "â", "€", "™")
+        broken_tokens = ("Ãƒ", "Ã", "Ã‘", "Ã¢", "â‚¬", "â„¢")
 
         def _is_broken_text(text):
             try:
@@ -24903,8 +25029,8 @@ class CatalogGridController:
         except:
             pass
         return
-        # ÃƒÂÃ‚Â ÃƒÂÃ‚Â°ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã‚Â ÃƒÂÃ‚Â²ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚Â ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â° Ãƒâ€˜Ã‚ÂÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â²ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â° Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ emptyView. ÃƒÂÃ¢â‚¬Å“ÃƒÂÃ‚Â»Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¾ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â±Ãƒâ€˜Ã¢â‚¬Â¦ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´
-        # loading/progress-ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â² Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚ÂµÃƒÂÃ‚Â¹ Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â±ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂºÃƒÂÃ‚Âµ ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â°ÃƒÂÃ‚Â» Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â²ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ layout.
+        # ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ emptyView. ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´
+        # loading/progress-ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â» ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ layout.
         try:
             empty_view = get_val(self.fragment, "emptyView")
             if empty_view:
@@ -25152,9 +25278,9 @@ class CatalogGridController:
             except:
                 pass
 
-        _set_btn(self.btn_model, f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_model}" if self.filter_model else None, "ÃƒÂÃ…â€œÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™")
-        _set_btn(self.btn_pattern, f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_pattern}" if self.filter_pattern else None, "ÃƒÂÃ‚Â£ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬")
-        _set_btn(self.btn_backdrop, f"ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {self.filter_backdrop}" if self.filter_backdrop else None, "ÃƒÂÃ‚Â¤ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½")
+        _set_btn(self.btn_model, f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_model}" if self.filter_model else None, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢")
+        _set_btn(self.btn_pattern, f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_pattern}" if self.filter_pattern else None, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬")
+        _set_btn(self.btn_backdrop, f"ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {self.filter_backdrop}" if self.filter_backdrop else None, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¤ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½")
 
         clear_container = get_val(self.fragment, "clearFiltersContainer")
         if clear_container:
@@ -25167,7 +25293,7 @@ class CatalogGridController:
         if action_bar:
             try:
                 count = len(self.filtered_items or [])
-                action_bar.setSubtitle(f"{count} NFT" if count > 0 else "ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ NFT")
+                action_bar.setSubtitle(f"{count} NFT" if count > 0 else "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ NFT")
             except:
                 pass
 
@@ -25268,7 +25394,7 @@ class CatalogGridController:
             pass
 
         if not self.filtered_items:
-            empty = UItem.asShadow("ÃƒÂÃ‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¹ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾")
+            empty = UItem.asShadow("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
             try:
                 empty.spanCount = 3
             except:
@@ -25326,7 +25452,7 @@ class CatalogGridController:
             except:
                 pass
             if gift_id <= 0:
-                BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚Âµ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ gift_id")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ gift_id")
                 return
 
             self.plugin.stolen_gift_inner = gift
@@ -25375,7 +25501,7 @@ class CatalogNftSheet:
     def _refresh(self, silent=False):
         self.items = self.plugin._get_catalog_nft_gifts()
         if not silent and not self.items:
-            BulletinHelper.show_info("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡. ÃƒÂÃ‚ÂÃƒÂÃ‚Â°ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ 'ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³'.")
+            BulletinHelper.show_info("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡. ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ 'ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³'.")
 
     def _schedule_kick(self, delay_ms=450):
         """Schedule a delayed adapter update (avoids re-entrancy while building items)."""
@@ -25684,7 +25810,7 @@ class CatalogNftSheet:
             builder.setApplyBottomPadding(True)
         except:
             pass
-        builder.setTitle("ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT", True)
+        builder.setTitle("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ NFT", True)
 
         container = LinearLayout(self.activity)
         container.setOrientation(LinearLayout.VERTICAL)
@@ -25915,14 +26041,14 @@ class CatalogNftSheet:
                     _log(f"CatalogSheet.fill: items={len(self.items or [])} loading={bool(self._loading_catalog)}")
             except:
                 pass
-            items.add(UItem.asButton(-10, "ÃƒÂÃ…Â¾ÃƒÂÃ‚Â±ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³", "ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚Â³Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â°ÃƒÂÃ‚Â³ÃƒÂÃ‚Â°ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°").accent())
+            items.add(UItem.asButton(-10, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³", "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°").accent())
             pass
             items.add(UItem.asShadow(None))
             if self._loading_catalog:
-                items.add(UItem.asShadow("ÃƒÂÃ¢â‚¬â€ÃƒÂÃ‚Â°ÃƒÂÃ‚Â³Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â·ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â°..."))
+                items.add(UItem.asShadow("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°..."))
                 # Still show cached items below if any.
             if not self.items:
-                items.add(UItem.asShadow("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡"))
+                items.add(UItem.asShadow("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡"))
                 return
             for idx, g in enumerate(self.items):
                 gift_id = int(get_val(g, "id", 0) or 0)
@@ -25964,7 +26090,7 @@ class CatalogNftSheet:
             except:
                 pass
             if gift_id <= 0:
-                BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚Âµ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¿Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ gift_id")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ gift_id")
                 return
 
             if self.sheet:
@@ -25979,7 +26105,7 @@ class CatalogNftSheet:
 
             AttrLoader(self.plugin, gift_id).start()
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³: {e}")
 
 class LiveSelectorDialog:
     def __init__(self, title, items, on_select, label_resolver):
@@ -26015,7 +26141,7 @@ class LiveSelectorDialog:
             # Search (attribute filter)
             search = EditText(self.activity)
             try:
-                search.setHint("ÃƒÂÃ…Â¸ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Âº...")
+                search.setHint("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº...")
             except:
                 pass
             try:
@@ -26056,7 +26182,7 @@ class LiveSelectorDialog:
             self._apply_filter(initial=True)
             self._build_list()
             builder.setView(root)
-            builder.setNegativeButton("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°", None)
+            builder.setNegativeButton("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", None)
             self.dialog = builder.show()
             try:
                 self.dialog.setOnDismissListener(JOnDismissListener(lambda d: self._on_dismiss()))
@@ -26144,7 +26270,7 @@ class LiveSelectorDialog:
             except:
                 pass
             tv.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
-            tv.setText("ÃƒÂÃ‚ÂÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚ÂµÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â½ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¹ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾")
+            tv.setText("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
             self.container_layout.addView(tv)
             return
 
@@ -26957,7 +27083,7 @@ class NftBuilderSheet:
         try:
             self._create_and_inject()
         except Exception as e:
-            BulletinHelper.show_error(f"Ошибка внедрения: {e}")
+            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð²Ð½ÐµÐ´Ñ€ÐµÐ½Ð¸Ñ: {e}")
 
     def _instantiate_native_preview_sheet(self, PreviewSheet, rp, acc, title, attr_list):
         attempts = [
@@ -27826,11 +27952,11 @@ class NftBuilderSheet:
     def _open_value_currency_menu(self):
         try:
             actions = [
-                ("USD • $", lambda: self._apply_builder_value(currency="USD", update_ui=True, hide_pad=False)),
-                ("EUR • €", lambda: self._apply_builder_value(currency="EUR", update_ui=True, hide_pad=False)),
-                ("RUB • ₽", lambda: self._apply_builder_value(currency="RUB", update_ui=True, hide_pad=False)),
+                ("USD â€¢ $", lambda: self._apply_builder_value(currency="USD", update_ui=True, hide_pad=False)),
+                ("EUR â€¢ â‚¬", lambda: self._apply_builder_value(currency="EUR", update_ui=True, hide_pad=False)),
+                ("RUB â€¢ â‚½", lambda: self._apply_builder_value(currency="RUB", update_ui=True, hide_pad=False)),
             ]
-            self.plugin._show_action_menu("Валюта ценности", actions, negative_text="Назад", context=self.activity)
+            self.plugin._show_action_menu("Ð’Ð°Ð»ÑŽÑ‚Ð° Ñ†ÐµÐ½Ð½Ð¾ÑÑ‚Ð¸", actions, negative_text="ÐÐ°Ð·Ð°Ð´", context=self.activity)
         except Exception as e:
             BulletinHelper.show_error(f"Currency Err: {e}")
 
@@ -28507,7 +28633,7 @@ class NftBuilderSheet:
             container.addView(et, LayoutHelper.createFrame(-1, -2))
 
             builder = AlertDialog.Builder(self.activity)
-            builder.setTitle("ÃƒÂÃ‚Â£ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°ÃƒÂÃ‚Â¶ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ NFT")
+            builder.setTitle("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ NFT")
             builder.setView(container)
 
             def on_confirm(dialog, which):
@@ -28515,8 +28641,8 @@ class NftBuilderSheet:
                 if txt.isdigit():
                     self._apply_builder_number(txt, update_ui=True, hide_pad=True)
 
-            builder.setPositiveButton("ÃƒÂÃ¢â‚¬Å“ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¾", JTelegramListener(lambda d, w: on_confirm(d, w)))
-            builder.setNegativeButton("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°", None)
+            builder.setPositiveButton("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", JTelegramListener(lambda d, w: on_confirm(d, w)))
+            builder.setNegativeButton("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", None)
 
             def on_dialog_show(dialog):
                 try:
@@ -28554,7 +28680,7 @@ class NftBuilderSheet:
             if current_uid != 0:
                 et.setText(str(current_uid))
             try:
-                et.setHint("ÃƒÂÃ…Â¸Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ = Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚ÂµÃƒÂÃ‚ÂºÃƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â°ÃƒÂÃ‚ÂºÃƒÂÃ‚ÂºÃƒÂÃ‚Â°Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Å¡")
+                et.setHint("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ = ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
             except:
                 pass
             et.setInputType(2)
@@ -28571,15 +28697,15 @@ class NftBuilderSheet:
                 if raw.startswith("-") and raw[1:].isdigit():
                     raw = "0"
                 if raw and (not raw.isdigit()):
-                    BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â¶ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ Ãƒâ€˜Ã¢â‚¬Â¡ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¹ user id")
+                    BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¶ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ user id")
                     return
                 cfg2 = self.plugin._sanitize_identity_config(getattr(self.plugin, "identity_config", None))
                 cfg2[field_key] = int(raw_input) if raw_input else 0
                 self.plugin.identity_config = cfg2
                 run_on_ui_thread(lambda: self._safe_adapter_update(full=False))
 
-            builder.setPositiveButton("ÃƒÂÃ¢â‚¬Å“ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¾", JTelegramListener(lambda d, w: on_confirm(d, w)))
-            builder.setNegativeButton("ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â°", None)
+            builder.setPositiveButton("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", JTelegramListener(lambda d, w: on_confirm(d, w)))
+            builder.setNegativeButton("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°", None)
 
             def on_dialog_show(dialog):
                 try:
@@ -28634,7 +28760,7 @@ class NftBuilderSheet:
             self._refresh_started_ts = 0.0
 
         if not self.activity:
-            BulletinHelper.show_error("Не удалось открыть конструктор NFT")
+            BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€ NFT")
             self._on_dismiss()
             return
 
@@ -28646,12 +28772,12 @@ class NftBuilderSheet:
 
         try:
             if self._show_compact_hooked_sheet():
-                BulletinHelper.show_info("Открываю конструктор NFT...")
+                BulletinHelper.show_info("ÐžÑ‚ÐºÑ€Ñ‹Ð²Ð°ÑŽ ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€ NFT...")
                 return
         except Exception as e:
             _log(f"Compact constructor fallback error: {e}")
 
-        BulletinHelper.show_error("Не удалось открыть конструктор NFT")
+        BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€ NFT")
         self._on_dismiss()
 
     def _on_dismiss(self):
@@ -28688,60 +28814,60 @@ class NftBuilderSheet:
 
     def fill_settings(self, items, adapter):
         try:
-            items.add(UItem.asHeader("ÃƒÂÃ¢â‚¬â„¢ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒâ€˜Ã‹â€ ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â¹ ÃƒÂÃ‚Â²ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â´"))
+            items.add(UItem.asHeader("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´"))
             cfg = self.plugin.build_config
             identity_cfg = self.plugin._sanitize_identity_config(getattr(self.plugin, "identity_config", None))
 
             def get_label(obj):
                 if not obj:
-                    return "ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡"
+                    return "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡"
                 res, _ = self.resolve_label_public(obj, False)
                 return res
 
             m_obj = self.models[cfg["model"] % len(self.models)] if self.models else None
-            items.add(UItem.asButton(1, "ÃƒÂÃ…â€œÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™", get_label(m_obj)))
+            items.add(UItem.asButton(1, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", get_label(m_obj)))
 
             p_obj = self.patterns[cfg["pattern"] % len(self.patterns)] if self.patterns else None
-            items.add(UItem.asButton(2, "ÃƒÂÃ‚Â£ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬", get_label(p_obj)))
+            items.add(UItem.asButton(2, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â£ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬", get_label(p_obj)))
 
             b_obj = self.backdrops[cfg["backdrop"] % len(self.backdrops)] if self.backdrops else None
-            items.add(UItem.asButton(3, "ÃƒÂÃ‚Â¤ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½", get_label(b_obj)))
+            items.add(UItem.asButton(3, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¤ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½", get_label(b_obj)))
 
             items.add(UItem.asShadow(None))
-            items.add(UItem.asHeader("ÃƒÂÃ…Â¸ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã¢â‚¬Â¹"))
-            items.add(UItem.asButton(4, "ÃƒÂÃ‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¼ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ NFT", f"#{cfg['num']}"))
-            items.add(UItem.asButton(5, "ÃƒÂÃ¢â‚¬â„¢ÃƒÂÃ‚Â»ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Â ", self.plugin._identity_value_to_label(identity_cfg.get("owner_user_id", 0))))
-            items.add(UItem.asButton(6, "ÃƒÂÃ…Â¾Ãƒâ€˜Ã¢â‚¬Å¡ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾", self.plugin._identity_value_to_label(identity_cfg.get("from_user_id", 0))))
-            items.add(UItem.asButton(7, "ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚Â»Ãƒâ€˜Ã‚Â ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾", self.plugin._identity_value_to_label(identity_cfg.get("to_user_id", 0))))
+            items.add(UItem.asHeader("ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹"))
+            items.add(UItem.asButton(4, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ NFT", f"#{cfg['num']}"))
+            items.add(UItem.asButton(5, "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ", self.plugin._identity_value_to_label(identity_cfg.get("owner_user_id", 0))))
+            items.add(UItem.asButton(6, "ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", self.plugin._identity_value_to_label(identity_cfg.get("from_user_id", 0))))
+            items.add(UItem.asButton(7, "ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾", self.plugin._identity_value_to_label(identity_cfg.get("to_user_id", 0))))
             items.add(UItem.asShadow(None))
-            items.add(UItem.asButton(99, "ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ ÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â²ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â´Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™").accent())
+            items.add(UItem.asButton(99, "ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢").accent())
         except Exception as e:
             items.add(UItem.asShadow(f"Error: {e}"))
 
     def on_click(self, item, view, pos, x, y):
         try:
             if item.id == 1:
-                self._show_selector("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ ÃƒÂÃ‚Â¼ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™", self.models, "model")
+                self._show_selector("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¼ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢", self.models, "model")
             elif item.id == 2:
-                self._show_selector("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â·ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬", self.patterns, "pattern")
+                self._show_selector("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬", self.patterns, "pattern")
             elif item.id == 3:
-                self._show_selector("ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Âµ Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½", self.backdrops, "backdrop")
+                self._show_selector("ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½", self.backdrops, "backdrop")
             elif item.id == 4:
                 if not self._toggle_number_pad(True):
                     self._show_input_dialog()
             elif item.id == 5:
-                self._show_identity_input_dialog("owner_user_id", "ID ÃƒÂÃ‚Â²ÃƒÂÃ‚Â»ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â»Ãƒâ€˜Ã…â€™Ãƒâ€˜Ã¢â‚¬Â ÃƒÂÃ‚Â°")
+                self._show_identity_input_dialog("owner_user_id", "ID ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â²ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°")
             elif item.id == 6:
-                self._show_identity_input_dialog("from_user_id", "ID ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Å¡ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾")
+                self._show_identity_input_dialog("from_user_id", "ID ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
             elif item.id == 7:
-                self._show_identity_input_dialog("to_user_id", "ID ÃƒÂÃ‚Â´ÃƒÂÃ‚Â»Ãƒâ€˜Ã‚Â ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾")
+                self._show_identity_input_dialog("to_user_id", "ID ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾")
             elif item.id == 8:
                 current_stars = ""
                 try:
                     current_stars = str(self.plugin._get_gift_stars_amount() or "")
                 except:
                     pass
-                self.plugin._show_text_input_dialog("Локальные звёзды", current_stars, self._save_gift_stars_value, numeric=True)
+                self.plugin._show_text_input_dialog("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹", current_stars, self._save_gift_stars_value, numeric=True)
             elif item.id == 99:
                 self._create_and_inject()
         except Exception as e:
@@ -28752,7 +28878,7 @@ class NftBuilderSheet:
         if raw:
             digits = re.sub(r"[^0-9]+", "", raw)
             if not digits:
-                BulletinHelper.show_error("Введите количество звёзд числом")
+                BulletinHelper.show_error("Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð·Ð²Ñ‘Ð·Ð´ Ñ‡Ð¸ÑÐ»Ð¾Ð¼")
                 return
             amount = int(digits or 0)
         else:
@@ -28768,13 +28894,13 @@ class NftBuilderSheet:
         except:
             pass
         if self.plugin._is_gift_stars_config_active(self.plugin.gift_stars_config):
-            BulletinHelper.show_success(f"Локальные звёзды: {self.plugin._format_gift_stars_text(self.plugin.gift_stars_config)}")
+            BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹: {self.plugin._format_gift_stars_text(self.plugin.gift_stars_config)}")
         else:
-            BulletinHelper.show_success("Локальные звёзды сброшены")
+            BulletinHelper.show_success("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð·Ð²Ñ‘Ð·Ð´Ñ‹ ÑÐ±Ñ€Ð¾ÑˆÐµÐ½Ñ‹")
 
     def _show_selector(self, title, items_list, config_key):
         if not items_list:
-            BulletinHelper.show_error("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
             return
 
         try:
@@ -28787,7 +28913,7 @@ class NftBuilderSheet:
         except:
             values = []
         if not values:
-            BulletinHelper.show_error("ÃƒÂÃ‚Â¡ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¸Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Âº ÃƒÂÃ‚Â¿Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡")
+            BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âº ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡")
             return
 
         def _on_selected(idx):
@@ -28807,30 +28933,30 @@ class NftBuilderSheet:
                 except:
                     pass
             except Exception as e:
-                BulletinHelper.show_error(f"ÃƒÂÃ¢â‚¬â„¢Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚Â±ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬ ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°: {e}")
+                BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°: {e}")
 
         try:
             LiveSelectorDialog(title, values, _on_selected, lambda obj, _: self.resolve_label_public(obj, True)).show()
         except Exception as e:
-            BulletinHelper.show_error(f"ÃƒÂÃ…Â¡ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â½Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â€šÂ¬: {e}")
+            BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬: {e}")
 
     def _create_and_inject(self):
         try:
             stolen = self.plugin.stolen_gift_inner
             if not stolen:
-                BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚ÂºÃƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â´ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½ÃƒÂÃ‚Â½ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ÃƒÂÃ‚Â¾ ÃƒÂÃ‚Â¿ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚ÂºÃƒÂÃ‚Â°!")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â³ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¿ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°!")
                 return
 
             if not self.plugin.cls_unique or not self.plugin.cls_saved:
                 if not self.plugin._ensure_gift_classes():
-                    BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»ÃƒÂÃ‚Â°Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â² (TL_savedStarGift/TL_starGiftUnique)")
+                    BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂµÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â² (TL_savedStarGift/TL_starGiftUnique)")
                     return
 
             _log("Building custom NFT...")
 
             gift = self.plugin._new_java_instance(self.plugin.cls_unique)
             if not gift:
-                BulletinHelper.show_error("ÃƒÂÃ‚ÂÃƒÂÃ‚Âµ Ãƒâ€˜Ã†â€™ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã…â€™ Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾ÃƒÂÃ‚Â·ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã…â€™ TL_starGiftUnique")
+                BulletinHelper.show_error("ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Âµ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â»ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¦Ã¢â‚¬â„¢ TL_starGiftUnique")
                 _log(f"Build error: can't instantiate cls_unique={self.plugin.cls_unique}")
                 return
 
@@ -28867,7 +28993,7 @@ class NftBuilderSheet:
                 self.plugin._set_field(gift, "slug", custom_slug)
             except Exception as e:
                 _log(f"Custom data error: {e}\n{traceback.format_exc()}")
-                BulletinHelper.show_error(f"ÃƒÂÃ…Â¾Ãƒâ€˜Ã‹â€ ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â±ÃƒÂÃ‚ÂºÃƒÂÃ‚Â° ÃƒÂÃ‚Â½ÃƒÂÃ‚Â°Ãƒâ€˜Ã‚ÂÃƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â¸ ÃƒÂÃ‚Â´ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹Ãƒâ€˜Ã¢â‚¬Â¦: {e}")
+                BulletinHelper.show_error(f"ÃƒÆ’Ã‚ÂÃƒâ€¦Ã‚Â¾ÃƒÆ’Ã¢â‚¬ËœÃƒâ€¹Ã¢â‚¬Â ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â±ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â° ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬ËœÃƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¾ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¹ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚ÂºÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â´ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â°ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â½ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¹ÃƒÆ’Ã¢â‚¬ËœÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦: {e}")
                 return
 
             attrs_list = ArrayList()
@@ -28967,7 +29093,7 @@ class NftBuilderSheet:
                 identity_cfg = self.plugin._default_identity_config()
                 _log(f"Identity cfg fallback: {e}")
 
-            # Fix bogus totals for "X ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· Y" ribbon (availability_total / limited_count).
+            # Fix bogus totals for "X ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â¸ÃƒÆ’Ã‚ÂÃƒâ€šÃ‚Â· Y" ribbon (availability_total / limited_count).
             try:
                 self.plugin._ensure_unique_gift_availability(gift, base_gift_id=int(self.base_id))
             except:
@@ -28975,7 +29101,7 @@ class NftBuilderSheet:
 
             wrapper = self.plugin._new_java_instance(self.plugin.cls_saved)
             if not wrapper:
-                BulletinHelper.show_error("Не удалось создать TL_savedStarGift")
+                BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ TL_savedStarGift")
                 _log(f"Build error: can't instantiate cls_saved={self.plugin.cls_saved}")
                 return
             try:
@@ -28992,7 +29118,7 @@ class NftBuilderSheet:
                     pass
             except Exception as e:
                 _log(f"Wrap error: {e}")
-                BulletinHelper.show_error(f"Ошибка упаковки: {e}")
+                BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° ÑƒÐ¿Ð°ÐºÐ¾Ð²ÐºÐ¸: {e}")
                 return
 
             try:
@@ -29012,7 +29138,7 @@ class NftBuilderSheet:
                 self.sheet.dismiss()
 
         except Exception as e:
-            BulletinHelper.show_error(f"Глобальная ошибка: {e}")
+            BulletinHelper.show_error(f"Ð“Ð»Ð¾Ð±Ð°Ð»ÑŒÐ½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
             _log(f"Build error: {e}\n{traceback.format_exc()}")
 
 
@@ -29037,15 +29163,15 @@ def _nft_force_load_catalog_clean(self):
             self._market_floor_cache = {}
         except:
             pass
-        BulletinHelper.show_info("Обновляю каталог...")
+        BulletinHelper.show_info("ÐžÐ±Ð½Ð¾Ð²Ð»ÑÑŽ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³...")
         return True
     except Exception as e:
-        BulletinHelper.show_error(f"Каталог: {e}")
+        BulletinHelper.show_error(f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³: {e}")
         return False
 
 
 def _resale_grid_show_clean(self):
-    title = "Каталог NFT" if self.is_catalog else "Мои NFT"
+    title = "ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ NFT" if self.is_catalog else "ÐœÐ¾Ð¸ NFT"
     try:
         user_id = get_user_config().clientUserId
         ResaleGiftsFragment = jclass("org.telegram.ui.Gifts.ResaleGiftsFragment")
@@ -29068,14 +29194,14 @@ def _resale_grid_show_clean(self):
         get_last_fragment().presentFragment(self.fragment)
         AndroidUtilities.runOnUIThread(JRunnable(self._init_ui), 150)
     except Exception as e:
-        BulletinHelper.show_error(f"Ошибка открытия каталога: {e}")
+        BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¸Ñ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð°: {e}")
 
 
 def _catalog_grid_show_clean(self):
     try:
         user_id = get_user_config().clientUserId
         ResaleGiftsFragment = jclass("org.telegram.ui.Gifts.ResaleGiftsFragment")
-        clean_title = "Каталог NFT"
+        clean_title = "ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ NFT"
         attempts = [
             ("uid,title,int,None", lambda: ResaleGiftsFragment(user_id, clean_title, 0, None)),
             ("intuid,title,int,None", lambda: ResaleGiftsFragment(int(user_id), clean_title, 0, None)),
@@ -29127,7 +29253,7 @@ def _catalog_grid_show_clean(self):
         get_last_fragment().presentFragment(self.fragment)
         AndroidUtilities.runOnUIThread(JRunnable(self._init_ui), 150)
     except Exception as e:
-        BulletinHelper.show_error(f"Каталог: {e}")
+        BulletinHelper.show_error(f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³: {e}")
 
 
 def _catalog_grid_update_ui_clean(self):
@@ -29159,9 +29285,9 @@ def _catalog_grid_update_ui_clean(self):
         except:
             pass
 
-    _set_btn(self.btn_model, f"• {self.filter_model}" if self.filter_model else None, "Модель")
-    _set_btn(self.btn_pattern, f"• {self.filter_pattern}" if self.filter_pattern else None, "Узор")
-    _set_btn(self.btn_backdrop, f"• {self.filter_backdrop}" if self.filter_backdrop else None, "Фон")
+    _set_btn(self.btn_model, f"â€¢ {self.filter_model}" if self.filter_model else None, "ÐœÐ¾Ð´ÐµÐ»ÑŒ")
+    _set_btn(self.btn_pattern, f"â€¢ {self.filter_pattern}" if self.filter_pattern else None, "Ð£Ð·Ð¾Ñ€")
+    _set_btn(self.btn_backdrop, f"â€¢ {self.filter_backdrop}" if self.filter_backdrop else None, "Ð¤Ð¾Ð½")
 
     clear_container = get_val(self.fragment, "clearFiltersContainer")
     if clear_container:
@@ -29174,7 +29300,7 @@ def _catalog_grid_update_ui_clean(self):
     if action_bar:
         try:
             count = len(self.filtered_items or [])
-            action_bar.setSubtitle(f"{count} NFT" if count > 0 else "Нет NFT")
+            action_bar.setSubtitle(f"{count} NFT" if count > 0 else "ÐÐµÑ‚ NFT")
         except:
             pass
 
@@ -29203,7 +29329,7 @@ def _catalog_grid_fill_items_clean(self, items, adapter):
         GiftCellFactory = None
 
     if not self.filtered_items:
-        empty = UItem.asShadow("Ничего не найдено")
+        empty = UItem.asShadow("ÐÐ¸Ñ‡ÐµÐ³Ð¾ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾")
         try:
             empty.spanCount = 3
         except:
@@ -29261,7 +29387,7 @@ def _catalog_grid_on_click_clean(self, item, view, pos, x, y):
         except:
             self.plugin.cached_gift_id = 0
         if int(self.plugin.cached_gift_id or 0) <= 0:
-            BulletinHelper.show_error("Не удалось определить gift_id")
+            BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ð¸Ñ‚ÑŒ gift_id")
             return
         try:
             self.fragment.finishFragment()
@@ -29276,7 +29402,7 @@ def _catalog_grid_on_click_clean(self, item, view, pos, x, y):
 def _catalog_sheet_refresh_clean(self, silent=False):
     self.items = self.plugin._get_catalog_nft_gifts()
     if not silent and not self.items:
-        BulletinHelper.show_info("Каталог пуст. Нажмите «Обновить каталог».")
+        BulletinHelper.show_info("ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¿ÑƒÑÑ‚. ÐÐ°Ð¶Ð¼Ð¸Ñ‚Ðµ Â«ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Â».")
 
 
 def _catalog_sheet_show_clean(self):
@@ -29294,7 +29420,7 @@ def _catalog_sheet_show_clean(self):
         builder.setApplyBottomPadding(True)
     except:
         pass
-    builder.setTitle("Каталог NFT", True)
+    builder.setTitle("ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ NFT", True)
 
     container = LinearLayout(self.activity)
     container.setOrientation(LinearLayout.VERTICAL)
@@ -29353,12 +29479,12 @@ def _catalog_sheet_show_clean(self):
 
 def _catalog_sheet_fill_items_clean(self, items, adapter):
     try:
-        items.add(UItem.asButton(-10, "Обновить каталог", "Загрузить каталог из магазина").accent())
+        items.add(UItem.asButton(-10, "ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³", "Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸Ð· Ð¼Ð°Ð³Ð°Ð·Ð¸Ð½Ð°").accent())
         items.add(UItem.asShadow(None))
         if self._loading_catalog:
-            items.add(UItem.asShadow("Загрузка каталога..."))
+            items.add(UItem.asShadow("Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð°..."))
         if not self.items:
-            items.add(UItem.asShadow("Список пуст"))
+            items.add(UItem.asShadow("Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¿ÑƒÑÑ‚"))
             return
         for idx, g in enumerate(self.items):
             gift_id = int(get_val(g, "id", 0) or 0)
@@ -29430,23 +29556,23 @@ CatalogNftSheet.on_click = _catalog_sheet_on_click_clean
 def _service_settings_subfragment_with_updates(self, parent_view=None):
     rating_status = self._get_local_rating_label()
     return [
-        Divider(text=f"Обслуживание локального каталога и быстрые системные действия. Рейтинг сейчас: {rating_status}."),
+        Divider(text=f"ÐžÐ±ÑÐ»ÑƒÐ¶Ð¸Ð²Ð°Ð½Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ð³Ð¾ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³Ð° Ð¸ Ð±Ñ‹ÑÑ‚Ñ€Ñ‹Ðµ ÑÐ¸ÑÑ‚ÐµÐ¼Ð½Ñ‹Ðµ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ñ. Ð ÐµÐ¹Ñ‚Ð¸Ð½Ð³ ÑÐµÐ¹Ñ‡Ð°Ñ: {rating_status}."),
         Text(
-            text="Обновления",
-            subtext=f"v{__version__} • GitHub loader/runtime",
+            text="ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ",
+            subtext=f"v{__version__} â€¢ GitHub loader/runtime",
             icon="msg_download",
             create_sub_fragment=self._create_update_settings_subfragment,
             link_alias="eblannft_update_subfragment",
         ),
         Text(
-            text="Обновить каталог",
-            subtext="Загрузить актуальный список подарков",
+            text="ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ°Ñ‚Ð°Ð»Ð¾Ð³",
+            subtext="Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð°ÐºÑ‚ÑƒÐ°Ð»ÑŒÐ½Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¾Ð²",
             icon="msg_retry",
             on_click=lambda _: self._force_load_catalog(),
         ),
         Text(
-            text="Очистить кэш",
-            subtext="Сбросить локальные временные данные плагина",
+            text="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ ÐºÑÑˆ",
+            subtext="Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¿Ð»Ð°Ð³Ð¸Ð½Ð°",
             icon="msg_delete",
             on_click=lambda _: self._clear_cache(),
             red=True,
