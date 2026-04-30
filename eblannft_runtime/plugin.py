@@ -14381,10 +14381,21 @@ class NftClonerPlugin(BasePlugin):
         entries = self._resolve_update_entries(info)
         if not entries:
             raise RuntimeError("Empty update file list")
+        try:
+            entries.sort(key=lambda e: (1 if str(e.get("path", "")).endswith("eblannft.plugin") else 0, str(e.get("path", ""))))
+        except:
+            pass
         payloads = []
         total = len(entries)
         for idx, entry in enumerate(entries, 1):
-            raw = self._fetch_url_bytes(entry["url"], timeout=25)
+            try:
+                raw = self._fetch_url_bytes(entry["url"], timeout=25)
+            except Exception as e:
+                pth = str(entry.get("path", "") or "")
+                if pth.endswith("__init__.py"):
+                    raw = bytes([10])
+                else:
+                    raise RuntimeError(f"Download failed for {pth}: {e}")
             if not raw:
                 raise RuntimeError(f"Empty file: {entry['path']}")
             payloads.append((entry["path"], raw))
@@ -14428,54 +14439,66 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
+        hero = LinearLayout(ctx)
+        hero.setOrientation(LinearLayout.VERTICAL)
+        try:
+            hero_bg = GradientDrawable()
+            hero_bg.setCornerRadius(AndroidUtilities.dp(24))
+            hero_bg.setColor(0xFF101114)
+            hero.setBackground(hero_bg)
+            hero.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(16))
+        except:
+            pass
+
         title = TextView(ctx)
-        title.setText("Обновление eblanNFT")
-        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20)
+        title.setText("?????????? eblanNFT")
+        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21)
         try:
             title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
             title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
         except:
             pass
-        root.addView(title, LayoutHelper.createLinear(-1, -2))
+        hero.addView(title, LayoutHelper.createLinear(-1, -2))
 
         repo_line = TextView(ctx)
         try:
-            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
+            repo_line.setText(f"{info.get('repo', '')} ? {info.get('branch', '')}")
             repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
             repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
             pass
-        root.addView(repo_line, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(4), 0, 0))
+        hero.addView(repo_line, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(4), 0, 0))
 
         desc = TextView(ctx)
         try:
-            desc.setText(f"Найдена версия {info.get('version', '?')}. Текущая версия: {__version__}.")
+            desc.setText(f"??????? ?????? {info.get('version', '?')}. ??????? ??????: {__version__}.")
             desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
             desc.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
         except:
             pass
-        root.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
+        hero.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
+        root.addView(hero, LayoutHelper.createLinear(-1, -2))
 
         status = TextView(ctx)
         try:
-            status.setText("Готово к загрузке.")
+            status.setText("?????? ? ????????.")
             status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
             status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
         except:
             pass
-        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(8), 0, 0))
+        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(14), 0, 0))
 
         progress = ProgressBar(ctx)
-        root.addView(progress, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 0, AndroidUtilities.dp(12), 0, 0))
+        root.addView(progress, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 0, AndroidUtilities.dp(16), 0, 0))
 
         btn = TextView(ctx)
-        btn.setText("Скачать обновление")
+        btn.setText("??????? ??????????")
         btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
         btn.setGravity(Gravity.CENTER)
         try:
-            btn.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(10))
+            btn.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(12), AndroidUtilities.dp(16), AndroidUtilities.dp(12))
             btn_bg = GradientDrawable()
-            btn_bg.setCornerRadius(AndroidUtilities.dp(20))
+            btn_bg.setCornerRadius(AndroidUtilities.dp(22))
             try:
                 btn_bg.setColor(Theme.getColor(Theme.key_featuredStickers_addButton))
                 btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
@@ -14485,10 +14508,10 @@ class NftClonerPlugin(BasePlugin):
             btn.setBackground(btn_bg)
         except:
             pass
-        root.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(14), 0, 0))
+        root.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(18), 0, 0))
 
         close_btn = TextView(ctx)
-        close_btn.setText("Закрыть")
+        close_btn.setText("???????")
         close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
         close_btn.setGravity(Gravity.CENTER)
         try:
@@ -14524,42 +14547,50 @@ class NftClonerPlugin(BasePlugin):
                 return
             state["started"] = True
             try:
-                BulletinHelper.show_info(f"Загрузка обновления {info.get('version', '?')}...")
+                btn.setEnabled(False)
+                btn.setAlpha(0.7)
             except:
                 pass
-            run_on_ui_thread(lambda: _apply_status("Скачивание файлов...", False))
+            try:
+                BulletinHelper.show_info(f"???????? ?????????? {info.get('version', '?')}...")
+            except:
+                pass
+            run_on_ui_thread(lambda: _apply_status("????????????? ????? ??????????...", False))
 
             def _progress(done_idx, total, path, written):
-                phase = "Применение" if written else "Загрузка"
-                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} • {p}", False))
+                phase = "??????????" if written else "????????"
+                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} ? {p}", False))
 
             def _worker():
                 try:
                     self._download_and_apply_update(info, progress_cb=_progress)
                     def _done_ok():
                         state["done"] = True
-                        _apply_status("Обновление скачано. Выключи и включи плагин.", True)
+                        _apply_status("?????????? ???????. ??????? ? ?????? ??????.", True)
                         try:
-                            btn.setText("Готово")
+                            btn.setText("??????")
                             btn.setEnabled(False)
+                            btn.setAlpha(1.0)
                         except:
                             pass
                         try:
-                            BulletinHelper.show_success(f"eblanNFT обновлён до {info.get('version', '?')}")
+                            BulletinHelper.show_success(f"eblanNFT ???????? ?? {info.get('version', '?')}")
                         except:
                             pass
                     run_on_ui_thread(_done_ok)
                 except Exception as e:
                     def _done_err():
                         state["started"] = False
-                        _apply_status(f"Ошибка обновления: {e}", True)
+                        _apply_status(f"?????? ??????????: {e}", True)
                         try:
-                            btn.setText("Повторить загрузку")
+                            btn.setText("????????? ????????")
                             btn.setEnabled(True)
+                            btn.setAlpha(1.0)
+                            progress.setVisibility(View.VISIBLE)
                         except:
                             pass
                         try:
-                            BulletinHelper.show_error(f"Обновление: {e}")
+                            BulletinHelper.show_error(f"??????????: {e}")
                         except:
                             pass
                     run_on_ui_thread(_done_err)
