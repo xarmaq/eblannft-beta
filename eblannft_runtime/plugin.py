@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -15602,7 +15602,11 @@ class NftClonerPlugin(BasePlugin):
                 BulletinHelper.show_info(f"Downloading update {info.get('version', '?')}...")
             except:
                 pass
-            run_on_ui_thread(lambda: (_apply_progress(0, 1, False, 0, 0, 0, 0), _apply_status("Собираю файлы обновления…", False)))
+            def _show_prepare_state():
+                _apply_progress(0, 1, False, 0, 0, 0, 0)
+                _apply_status("Собираю файлы обновления…", False)
+
+            run_on_ui_thread(_show_prepare_state)
 
             def _progress(done_idx, total, path, written, current_bytes=0, total_bytes=0, overall_loaded=0, overall_total=0):
                 short_path = str(path or "").replace("\\", "/").split("/")[-1]
@@ -15620,10 +15624,11 @@ class NftClonerPlugin(BasePlugin):
                     status_text = f"{short_path} • {loaded_text} из {total_text}"
                 else:
                     status_text = f"{short_path or 'update'} • {done_idx}/{total}"
-                run_on_ui_thread(
-                    lambda d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, ol=overall_loaded, ot=overall_total, st=status_text:
-                        (_apply_progress(d, t, w, cb, tb, ol, ot), _apply_status(st, False))
-                )
+                def _dispatch_progress_ui(d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, ol=overall_loaded, ot=overall_total, st=status_text):
+                    _apply_progress(d, t, w, cb, tb, ol, ot)
+                    _apply_status(st, False)
+
+                run_on_ui_thread(_dispatch_progress_ui)
 
             def _worker():
                 try:
@@ -15713,17 +15718,26 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 if not info:
                     if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_error("GitHub update repo is not configured"))
+                        def _show_repo_error():
+                            BulletinHelper.show_error("GitHub update repo is not configured")
+
+                        run_on_ui_thread(_show_repo_error)
                     return
                 if not self._is_remote_version_newer(info.get("version", __version__), __version__):
                     if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_info(f"You already have the latest version: {__version__}"))
+                        def _show_latest_info():
+                            BulletinHelper.show_info(f"You already have the latest version: {__version__}")
+
+                        run_on_ui_thread(_show_latest_info)
                     return
                 auto_flag = self._is_auto_update_enabled() if auto_download is None else bool(auto_download)
                 self._schedule_update_popup_show(info, auto_start=auto_flag)
             except Exception as e:
                 if show_no_updates:
-                    run_on_ui_thread(lambda: BulletinHelper.show_error(f"Update check: {e}"))
+                    def _show_check_error(err=e):
+                        BulletinHelper.show_error(f"Update check: {err}")
+
+                    run_on_ui_thread(_show_check_error)
             finally:
                 self._eblannft_update_check_running = False
 
