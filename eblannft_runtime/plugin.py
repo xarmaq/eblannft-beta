@@ -1,4 +1,4 @@
-﻿from base_plugin import BasePlugin, MenuItemData, MenuItemType, MethodHook
+from base_plugin import BasePlugin, MenuItemData, MenuItemType, MethodHook
 from android_utils import log as logcat, run_on_ui_thread
 from client_utils import get_last_fragment, get_user_config, get_connections_manager
 try:
@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.6"
+__version__ = "1.4.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -12405,7 +12405,19 @@ class NftClonerPlugin(BasePlugin):
                 text="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ",
                 subtext="ÐÐ¾Ð²Ñ‹Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ð² Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ðµ +888...",
                 icon="msg_link",
-                on_click=lambda _: self._show_text_input_dialog("Number (Ð½Ð°Ð¿Ñ€Ð¸Ð¼ÐµÑ€ +888 0413 6929)", "", self._add_nft_number),
+                on_click=lambda _: self._show_text_input_dialog(
+                    "Number (Ð½Ð°Ð¿Ñ€Ð¸Ð¼ÐµÑ€ +888 0413 6929)",
+                    "",
+                    self._add_nft_number,
+                    neutral_text="\u0420\u0430\u043d\u0434\u043e\u043c",
+                    on_neutral=self._add_random_nft_number,
+                ),
+            ),
+            Text(
+                text="\u0420\u0430\u043d\u0434\u043e\u043c",
+                subtext="\u0421\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043d\u043e\u043c\u0435\u0440 \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438",
+                icon="msg_dice",
+                on_click=lambda _: self._add_random_nft_number(),
             ),
             Text(
                 text="Ð¡Ð¿Ð¸ÑÐ¾Ðº",
@@ -13024,7 +13036,7 @@ class NftClonerPlugin(BasePlugin):
             BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°: {e}")
             return False
 
-    def _show_text_input_dialog(self, title, prefill, on_submit, numeric=False):
+    def _show_text_input_dialog(self, title, prefill, on_submit, numeric=False, neutral_text=None, on_neutral=None):
         try:
             fragment = get_last_fragment()
             if not fragment:
@@ -13057,6 +13069,13 @@ class NftClonerPlugin(BasePlugin):
                     BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0432\u0432\u043e\u0434\u0430: {e}")
 
             builder.set_positive_button("\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", _ok)
+            if neutral_text and callable(on_neutral):
+                def _neutral(dialog, which):
+                    try:
+                        on_neutral()
+                    except Exception as e:
+                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                builder.set_neutral_button(self._ui_text(neutral_text), _neutral)
             builder.set_negative_button("\u041e\u0442\u043c\u0435\u043d\u0430", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
@@ -13398,7 +13417,16 @@ class NftClonerPlugin(BasePlugin):
         try:
             tokens = self._get_nft_number_tokens()
             actions = [
-                ("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c", lambda: self._show_text_input_dialog("Number (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 +888 0413 6929)", "", self._add_nft_number)),
+                (
+                    "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c",
+                    lambda: self._show_text_input_dialog(
+                        "Number (\u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 +888 0413 6929)",
+                        "",
+                        self._add_nft_number,
+                        neutral_text="\u0420\u0430\u043d\u0434\u043e\u043c",
+                        on_neutral=self._add_random_nft_number,
+                    ),
+                ),
                 ("\u0420\u0430\u043d\u0434\u043e\u043c", self._add_random_nft_number),
                 (f"\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u2022 {self._state_short_text(self.nft_number_enabled)}", self._toggle_nft_number_enabled),
                 (f"\u0421\u043f\u0438\u0441\u043e\u043a \u2022 {len(tokens)}", self._show_number_tokens_info),

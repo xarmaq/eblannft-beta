@@ -1,6 +1,6 @@
 {
-  "version": "1.4.6",
-  "notes": "Reduce gift sheet open lag by deferring heavy TON UI rebuilds and keep Random action for NFT Number",
+  "version": "1.4.7",
+  "notes": "Fix embedded runtime loading after clean installs and add Random action directly to NFT Number input/settings",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
