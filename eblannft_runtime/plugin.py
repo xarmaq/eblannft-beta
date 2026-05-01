@@ -86,7 +86,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.7"
+__version__ = "1.5.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -14347,45 +14347,8 @@ class NftClonerPlugin(BasePlugin):
         try:
             if not self._is_first_install_welcome_pending():
                 return
-            if bool(getattr(self, "_eblannft_welcome_launching", False)):
-                return
-            self._eblannft_welcome_launching = True
-
-            def _worker():
-                try:
-                    target_ctx = None
-                    for _ in range(40):
-                        try:
-                            frag = get_last_fragment()
-                            if frag:
-                                act = frag.getParentActivity()
-                                if act:
-                                    target_ctx = act
-                                    break
-                        except:
-                            pass
-                        try:
-                            time.sleep(0.25)
-                        except:
-                            break
-                    if target_ctx is None:
-                        return
-
-                    def _show():
-                        try:
-                            shown = bool(self._show_install_welcome_sheet(target_ctx))
-                            if shown:
-                                self.set_setting("eblannft_first_welcome_done", True)
-                        except Exception as inner_e:
-                            _log(f"install welcome ui fail: {inner_e}")
-
-                    run_on_ui_thread(_show)
-                finally:
-                    self._eblannft_welcome_launching = False
-
-            threading.Thread(target=_worker, daemon=True).start()
+            self.set_setting("eblannft_first_welcome_done", True)
         except Exception as e:
-            self._eblannft_welcome_launching = False
             _log(f"install welcome fail: {e}")
 
     def _is_first_install_welcome_pending(self):
@@ -15760,6 +15723,59 @@ class NftClonerPlugin(BasePlugin):
             except:
                 run_on_ui_thread(_download)
 
+    def _apply_update_silently(self, info, source="auto"):
+        if not isinstance(info, dict):
+            return
+        if bool(getattr(self, "_eblannft_update_install_running", False)):
+            return
+        self._eblannft_update_install_running = True
+
+        remote_version = str(info.get("version", "") or "").strip() or "?"
+        pending_apply = bool(self._is_pending_update_ready(info))
+
+        def _ui_info(text, kind="info"):
+            try:
+                if kind == "success":
+                    BulletinHelper.show_success(str(text or ""))
+                elif kind == "error":
+                    BulletinHelper.show_error(str(text or ""))
+                else:
+                    BulletinHelper.show_info(str(text or ""))
+            except:
+                pass
+
+        if pending_apply:
+            def _already_ready():
+                _ui_info(f"Обновление {remote_version} уже скачано. Перезапусти Telegram, чтобы применить его.")
+            run_on_ui_thread(_already_ready)
+            self._eblannft_update_install_running = False
+            return
+
+        def _worker():
+            try:
+                def _start_notice():
+                    if str(source or "") == "manual":
+                        _ui_info(f"Скачиваю обновление {remote_version}…")
+                    else:
+                        _ui_info(f"Найдена новая версия {remote_version}. Скачиваю в фоне…")
+
+                run_on_ui_thread(_start_notice)
+                self._download_and_apply_update(info, progress_cb=None)
+
+                def _done_notice():
+                    _ui_info(f"Обновление {remote_version} скачано. Перезапусти Telegram.", "success")
+
+                run_on_ui_thread(_done_notice)
+            except Exception as e:
+                def _err_notice(err=e):
+                    _ui_info(f"Обновление: {err}", "error")
+
+                run_on_ui_thread(_err_notice)
+            finally:
+                self._eblannft_update_install_running = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _check_for_plugin_updates(self, show_no_updates=False, auto_download=None):
         if getattr(self, "_eblannft_update_check_running", False):
             return
@@ -15787,7 +15803,13 @@ class NftClonerPlugin(BasePlugin):
                         run_on_ui_thread(_show_latest_info)
                     return
                 auto_flag = self._is_auto_update_enabled() if auto_download is None else bool(auto_download)
-                self._schedule_update_popup_show(info, auto_start=auto_flag)
+                if auto_flag or show_no_updates:
+                    self._apply_update_silently(info, source=("manual" if show_no_updates else "auto"))
+                else:
+                    def _show_found_update():
+                        BulletinHelper.show_info(f"Найдена версия {info.get('version', '?')}. Включи автообновление или обнови плагин вручную.")
+
+                    run_on_ui_thread(_show_found_update)
             except Exception as e:
                 if show_no_updates:
                     def _show_check_error(err=e):

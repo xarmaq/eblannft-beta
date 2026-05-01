@@ -1,6 +1,6 @@
 {
-  "version": "1.5.7",
-  "notes": "Fix the remaining welcome-sheet Runnable crash by replacing the raw postDelayed proxy with the safe JRunnable wrapper",
+  "version": "1.5.8",
+  "notes": "Disable the crashy welcome/update popups and switch updates to a silent background flow with bulletins only",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
