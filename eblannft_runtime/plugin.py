@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -20056,7 +20056,7 @@ class NftClonerPlugin(BasePlugin):
                         target_view = before_view if before_view is not None else after_view
                 if target_view is None:
                     target_view = before_view if before_view is not None else after_view
-                target_view.setText("ÐŸÐ¾Ð´Ð°Ñ€Ð¾Ðº Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑÑ Ð² Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½Ðµ TON. ÐŸÐ¾ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ â€º")
+                target_view.setText(self._ui_text("Подарок хранится в блокчейне TON. Посмотреть ›"))
                 target_view.setVisibility(View.VISIBLE)
                 try:
                     target_view.setTextColor(Theme.getColor(Theme.key_dialogTextGray2))
@@ -20075,6 +20075,11 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                     target_view.setOnClickListener(JOnClickListener(_open_blockchain))
+                else:
+                    try:
+                        target_view.setOnClickListener(None)
+                    except:
+                        pass
                 try:
                     target_parent = target_view.getParent() if target_view is not None else None
                 except:
@@ -20205,7 +20210,7 @@ class NftClonerPlugin(BasePlugin):
             try:
                 if hasattr(node, "getText"):
                     raw = node.getText()
-                    plain = self._charsequence_to_plain_text(raw).strip()
+                    plain = self._ui_text(self._charsequence_to_plain_text(raw)).strip()
                     if plain:
                         texts.append(plain)
             except:
@@ -20223,13 +20228,109 @@ class NftClonerPlugin(BasePlugin):
         _walk(row, 0)
         if not texts:
             return ""
-        return str(texts[0] or "").strip()
+        return self._ui_text(str(texts[0] or "")).strip()
+
+    def _sync_library_order_from_visible_list(self, gifts_list, target_entity_id=0, limit=96):
+        if gifts_list is None:
+            return 0
+        try:
+            target_entity_id = int(target_entity_id or 0)
+        except:
+            target_entity_id = 0
+        try:
+            size = min(int(gifts_list.size() or 0), int(limit or 96))
+        except:
+            size = 0
+        if size <= 0:
+            return 0
+
+        changed = 0
+        pinned_index = 0
+        for i in range(size):
+            try:
+                wrapper = gifts_list.get(i)
+            except:
+                continue
+            try:
+                if not self._looks_like_saved_gift_wrapper(wrapper):
+                    continue
+            except:
+                continue
+            try:
+                entry = self._resolve_library_entry_for_wrapper(wrapper)
+            except:
+                entry = None
+            if not isinstance(entry, dict) or (not bool(entry.get("inject", False))):
+                continue
+            try:
+                if target_entity_id != 0 and (not self._entry_matches_target_entity(entry, target_entity_id)):
+                    continue
+            except:
+                continue
+
+            try:
+                has_pin, pin_val = self._saved_gift_pinned_value(wrapper)
+                is_pinned = bool(pin_val) if has_pin else bool(entry.get("pinned_override", False))
+            except:
+                is_pinned = bool(entry.get("pinned_override", False))
+            if is_pinned:
+                pinned_index += 1
+            desired_order_hint = int(pinned_index if is_pinned else 0)
+            try:
+                hidden_now = bool(self._saved_gift_is_hidden(wrapper))
+            except:
+                hidden_now = bool(entry.get("hidden_override", False))
+
+            local_changed = False
+            try:
+                if entry.get("pinned_override", None) != bool(is_pinned):
+                    entry["pinned_override"] = bool(is_pinned)
+                    local_changed = True
+            except:
+                pass
+            try:
+                if entry.get("hidden_override", None) != bool(hidden_now):
+                    entry["hidden_override"] = bool(hidden_now)
+                    local_changed = True
+            except:
+                pass
+            try:
+                if int(entry.get("order_hint", 0) or 0) != desired_order_hint:
+                    entry["order_hint"] = int(desired_order_hint)
+                    local_changed = True
+            except:
+                pass
+            try:
+                sid = int(self._extract_saved_id_from_wrapper(wrapper) or 0)
+            except:
+                sid = 0
+            try:
+                if sid > 0 and int(entry.get("saved_id", 0) or 0) != sid:
+                    entry["saved_id"] = int(sid)
+                    local_changed = True
+            except:
+                pass
+
+            if local_changed:
+                try:
+                    entry["updated_at"] = int(time.time())
+                except:
+                    pass
+                self._library_dirty = True
+                changed += 1
+
+        if changed:
+            try:
+                self._flush_library_if_dirty(min_interval_sec=0.0)
+            except:
+                pass
+        return int(changed or 0)
 
     def _is_local_identity_table_row(self, row):
         low = self._extract_table_row_title_text(row).lower()
         if not low:
             return False
-        for token in ["telegram", "host", "owner", "Ð²Ð»Ð°Ð´ÐµÐ»", "Ñ‚ÐµÐ»ÐµÐ³Ñ€Ð°Ð¼"]:
+        for token in ["telegram", "host", "owner", "владел", "телеграм"]:
             if token in low:
                 return True
         return False
@@ -20238,7 +20339,7 @@ class NftClonerPlugin(BasePlugin):
         low = self._extract_table_row_title_text(row).lower()
         if not low:
             return False
-        for token in ["model", "pattern", "background", "backdrop", "supply", "count", "value", "price", "Ð¼Ð¾Ð´ÐµÐ»", "ÑƒÐ·Ð¾Ñ€", "Ñ„Ð¾Ð½", "ÐºÐ¾Ð»Ð¸Ñ‡", "Ñ†ÐµÐ½Ð½Ð¾ÑÑ‚"]:
+        for token in ["model", "pattern", "background", "backdrop", "supply", "count", "value", "price", "модел", "узор", "фон", "колич", "ценност"]:
             if token in low:
                 return True
         return False
@@ -23039,6 +23140,10 @@ class NftClonerPlugin(BasePlugin):
                             self._ensure_unique_gift_availability(g, base_gift_id=0)
                     except:
                         continue
+                try:
+                    self._sync_library_order_from_visible_list(gifts_list, target_entity_id=target_user_id)
+                except Exception as sync_ex:
+                    _log(f"  Visible order sync error: {sync_ex}")
             except:
                 pass
 

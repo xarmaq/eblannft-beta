@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "notes": "Fix pinned NFT reorder persistence after reopening profile and add Random action for NFT Number",
+  "version": "1.4.1",
+  "notes": "Fix TON gift sheet duplicates/mojibake, keep saved NFT order after reopening profile, and keep Random action for NFT Number",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
