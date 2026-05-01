@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -13990,7 +13990,10 @@ class NftClonerPlugin(BasePlugin):
                         doc = plugin_self._pick_sticker_set_document(result, target_indexes)
                         if doc is not None:
                             try:
-                                run_on_ui_thread(lambda: plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter))
+                                def _apply_doc_ui():
+                                    plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter)
+
+                                run_on_ui_thread(_apply_doc_ui)
                             except:
                                 plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter)
                     except Exception as inner_e:
@@ -15253,16 +15256,17 @@ class NftClonerPlugin(BasePlugin):
                 cache_attr="_update_popup_sticker_document_cache",
                 image_filter="180_180",
             )
+            def _rebind_update_popup_sticker():
+                self._bind_sticker_from_set(
+                    sticker_view,
+                    EBLANNFT_UPDATE_POPUP_STICKER_SET,
+                    EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
+                    cache_attr="_update_popup_sticker_document_cache",
+                    image_filter="180_180",
+                )
+
             sticker_shell.postDelayed(
-                JRunnable(
-                    lambda: self._bind_sticker_from_set(
-                        sticker_view,
-                        EBLANNFT_UPDATE_POPUP_STICKER_SET,
-                        EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
-                        cache_attr="_update_popup_sticker_document_cache",
-                        image_filter="180_180",
-                    )
-                ),
+                JRunnable(_rebind_update_popup_sticker),
                 160,
             )
         except:
