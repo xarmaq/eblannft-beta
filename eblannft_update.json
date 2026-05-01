@@ -1,6 +1,6 @@
 {
-  "version": "1.4.7",
-  "notes": "Refresh the update popup with a cleaner animated UI, a real byte-accurate progress bar, and an animated sticker from konchhr_by_fStikBot",
+  "version": "1.5.0",
+  "notes": "Polish the update popup, remove the local stars item from local value, and fix broken Cyrillic across the plugin UI",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
