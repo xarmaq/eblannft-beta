@@ -86,7 +86,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.8"
+__version__ = "1.5.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -196,7 +196,7 @@ def _repair_mojibake_scalar(value, fallback=""):
 
     try:
         replacements = {
-            "â€¢": "\u2022",
+            "•": "\u2022",
             "â€º": "\u203a",
             "â„–": "\u2116",
             "â€”": "-",
@@ -2614,7 +2614,7 @@ class NftClonerPlugin(BasePlugin):
             Text(text=f"NFT Gifts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {gifts_text}", icon="msg_emoji_gem", on_click=lambda _: self._open_gift_library_menu()),
             Text(text=f"NFT Username ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {username_status}", icon="msg_edit", on_click=lambda _: self._open_nft_username_menu()),
             Text(text=f"NFT Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {number_status}", icon="msg_link", on_click=lambda _: self._open_nft_number_menu()),
-            Text(text=f"Local Rating â€¢ {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
+            Text(text=f"Local Rating • {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
             Switch(
                 key="eblannft_hide_official_gifts_local",
                 text="Hide official gifts locally",
@@ -2760,7 +2760,7 @@ class NftClonerPlugin(BasePlugin):
         try:
             actions = [
                 (
-                    f"ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² â€¢ {self._format_local_rating_points(self._get_local_rating_value())}",
+                    f"ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² • {self._format_local_rating_points(self._get_local_rating_value())}",
                     lambda: self._show_text_input_dialog(
                         'Количество очков рейтинга',
                         str(self._get_local_rating_value() or ""),
@@ -2769,7 +2769,7 @@ class NftClonerPlugin(BasePlugin):
                     ),
                 ),
                 (
-                    f"Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ â€¢ {self._get_local_rating_level()}",
+                    f"Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ • {self._get_local_rating_level()}",
                     lambda: self._show_text_input_dialog(
                         'Локальный уровень профиля',
                         str(self._get_local_rating_level()),
@@ -2778,7 +2778,7 @@ class NftClonerPlugin(BasePlugin):
                     ),
                 ),
                 (
-                    f"Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ â€¢ {self._format_local_rating_points(self._get_local_rating_next_goal())}",
+                    f"Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ • {self._format_local_rating_points(self._get_local_rating_next_goal())}",
                     lambda: self._show_text_input_dialog(
                         'Порог следующего уровня',
                         str(self._get_local_rating_next_goal()),
@@ -4103,7 +4103,7 @@ class NftClonerPlugin(BasePlugin):
                 pass
             tv = TextView(ctx)
             try:
-                tv.setText(f"\neblanNFT â€¢ v{__version__}")
+                tv.setText(f"\neblanNFT • v{__version__}")
                 tv.setGravity(Gravity.CENTER)
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 tv.setTextColor(self._theme_color("key_windowBackgroundWhiteGrayText2", 0xFF9A9A9A))
@@ -7021,12 +7021,12 @@ class NftClonerPlugin(BasePlugin):
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
             return 'Выкл'
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð·Ð²ÐµÐ·Ð´ â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð·Ð²ÐµÐ·Ð´ • ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
             return 'Выкл'
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð¾Ñ‡ÐºÐ¾Ð² â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð¾Ñ‡ÐºÐ¾Ð² • ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_stars_balance_value(self):
         return self._sanitize_local_stars_balance_value(getattr(self, "local_stars_balance_value", 0))
@@ -12004,10 +12004,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ('Открыть в конструкторе', lambda: self._open_constructor_for_library_key(key)),
-            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(('Удалить из библиотеки', lambda: self._delete_library_gift_key(key)))
         self._show_action_menu(title, actions, negative_text='Назад')
 
@@ -12551,7 +12551,7 @@ class NftClonerPlugin(BasePlugin):
             Divider(),
             Text(
                 text='Профиль',
-                subtext=f"Username â€¢ {username_status}   Number â€¢ {number_status}",
+                subtext=f"Username • {username_status}   Number • {number_status}",
                 icon="msg_edit",
                 create_sub_fragment=self._create_profile_settings_subfragment,
                 link_alias="eblannft_profile_subfragment",
@@ -12565,7 +12565,7 @@ class NftClonerPlugin(BasePlugin):
             ),
             Text(
                 text='Сервис',
-                subtext=f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸ ÐºÑÑˆ   â€¢   Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ {rating_status}",
+                subtext=f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸ ÐºÑÑˆ   •   Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ {rating_status}",
                 icon="msg_retry",
                 create_sub_fragment=self._create_service_settings_subfragment,
                 link_alias="eblannft_service_subfragment",
@@ -14720,7 +14720,13 @@ class NftClonerPlugin(BasePlugin):
             except:
                 sheet.show()
             try:
-                avatar_shell.post(lambda: avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start())
+                def _animate_avatar_shell():
+                    try:
+                        avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start()
+                    except:
+                        pass
+                    return None
+                avatar_shell.post(JRunnable(_animate_avatar_shell))
             except:
                 try:
                     avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start()
@@ -15866,7 +15872,7 @@ class NftClonerPlugin(BasePlugin):
 
         return self._normalize_settings_items([
             Divider(text='Настройка автообновления loader/runtime из GitHub репозитория.'),
-            Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} â€¢ {self._get_update_branch()}"),
+            Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} • {self._get_update_branch()}"),
             Switch(
                 key="eblannft_update_check_on_load",
                 text='Проверять при запуске',
@@ -20584,8 +20590,8 @@ class NftClonerPlugin(BasePlugin):
         wallet_text = wallet_value if wallet_value else 'не задан'
         preview_text = self._format_visual_ton_owner_text(e, cfg)
         actions = [
-            (f"ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº â€¢ {wallet_text}", lambda: self._show_text_input_dialog('Кошелёк TON', wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
-            (f"ÐŸÑ€ÐµÐ²ÑŒÑŽ â€¢ {preview_text}", lambda: None),
+            (f"ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº • {wallet_text}", lambda: self._show_text_input_dialog('Кошелёк TON', wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
+            (f"ÐŸÑ€ÐµÐ²ÑŒÑŽ • {preview_text}", lambda: None),
         ]
         self._show_action_menu('Владелец TON', actions, negative_text='Назад')
         return True
@@ -20632,7 +20638,7 @@ class NftClonerPlugin(BasePlugin):
                 _run()
 
         actions = [
-            (f"Ð¢ÐµÐºÑƒÑ‰ÐµÐµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ â€¢ {subtitle}", _open_constructor),
+            (f"Ð¢ÐµÐºÑƒÑ‰ÐµÐµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ • {subtitle}", _open_constructor),
             ('Изменить в конструкторе', _open_constructor),
         ]
         self._show_action_menu(title, actions, negative_text='Назад', context=context)
@@ -20666,7 +20672,7 @@ class NftClonerPlugin(BasePlugin):
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
         value_text = self._format_local_value_text(cfg, placeholder='не задана')
         if self._is_gift_stars_config_active(stars_cfg):
-            value_text = f"{value_text} â€¢ {self._format_gift_stars_text(stars_cfg)}"
+            value_text = f"{value_text} • {self._format_gift_stars_text(stars_cfg)}"
         button_text = 'подробнее'
 
         def _open_menu():
@@ -24166,10 +24172,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ('Открыть в конструкторе', lambda: self._open_constructor_for_library_key(key)),
-            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(('Удалить из библиотеки', lambda: self._delete_library_gift_key(key)))
         self._show_action_menu(title, actions, negative_text='Назад')
 
@@ -30940,9 +30946,9 @@ def _catalog_grid_update_ui_clean(self):
         except:
             pass
 
-    _set_btn(self.btn_model, f"â€¢ {self.filter_model}" if self.filter_model else None, 'Модель')
-    _set_btn(self.btn_pattern, f"â€¢ {self.filter_pattern}" if self.filter_pattern else None, 'Узор')
-    _set_btn(self.btn_backdrop, f"â€¢ {self.filter_backdrop}" if self.filter_backdrop else None, 'Фон')
+    _set_btn(self.btn_model, f"• {self.filter_model}" if self.filter_model else None, 'Модель')
+    _set_btn(self.btn_pattern, f"• {self.filter_pattern}" if self.filter_pattern else None, 'Узор')
+    _set_btn(self.btn_backdrop, f"• {self.filter_backdrop}" if self.filter_backdrop else None, 'Фон')
 
     clear_container = get_val(self.fragment, "clearFiltersContainer")
     if clear_container:
@@ -31217,23 +31223,4 @@ def _service_settings_subfragment_with_updates(self, parent_view=None):
             subtext=f"v{__version__} • GitHub loader/runtime",
             icon="msg_download",
             create_sub_fragment=self._create_update_settings_subfragment,
-            link_alias="eblannft_update_subfragment",
-        ),
-        Text(
-            text='Обновить каталог',
-            subtext='Загрузить актуальный список подарков',
-            icon="msg_retry",
-            on_click=lambda _: self._force_load_catalog(),
-        ),
-        Text(
-            text='Очистить кэш',
-            subtext='Сбросить локальные временные данные плагина',
-            icon="msg_delete",
-            on_click=lambda _: self._clear_cache(),
-            red=True,
-        ),
-    ])
-
-
-NftClonerPlugin._create_service_settings_subfragment = _service_settings_subfragment_with_updates
-EblanNftPlugin = NftClonerPlugin
+            link
