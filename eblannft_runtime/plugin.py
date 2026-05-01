@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.2"
+__version__ = "1.5.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -906,7 +906,10 @@ class ResaleGridClickHook(MethodHook):
                         uitem = param.args[0]
                         view = param.args[1]
                         pos = param.args[2]
-                        run_on_ui_thread(lambda: ctrl._on_click_uitem(uitem, view, pos, 0.0, 0.0))
+                        def _dispatch_click():
+                            ctrl._on_click_uitem(uitem, view, pos, 0.0, 0.0)
+
+                        run_on_ui_thread(_dispatch_click)
                         return
                 except:
                     continue
@@ -15693,12 +15696,18 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
+        def _handle_download_click(_v=None):
+            _download()
+
+        def _handle_dismiss_click(_v=None):
+            _dismiss()
+
         if OnClickListener:
-            btn.setOnClickListener(OnClickListener(lambda _v: _download()))
-            close_btn.setOnClickListener(OnClickListener(lambda _v: _dismiss()))
+            btn.setOnClickListener(OnClickListener(_handle_download_click))
+            close_btn.setOnClickListener(OnClickListener(_handle_dismiss_click))
         else:
-            btn.setOnClickListener(lambda _v: _download())
-            close_btn.setOnClickListener(lambda _v: _dismiss())
+            btn.setOnClickListener(_handle_download_click)
+            close_btn.setOnClickListener(_handle_dismiss_click)
 
         sheet.setCustomView(self._repair_view_tree_texts(root))
         run_on_ui_thread(sheet.show)
@@ -15781,6 +15790,15 @@ class NftClonerPlugin(BasePlugin):
                     pass
 
     def _create_update_settings_subfragment(self, parent_view=None):
+        def _set_update_check_on_load(value):
+            self.set_setting("eblannft_update_check_on_load", bool(value))
+
+        def _set_auto_update_enabled(value):
+            self.set_setting("eblannft_auto_update_enabled", bool(value))
+
+        def _trigger_manual_update_check(_item=None):
+            self._check_for_plugin_updates(show_no_updates=True, auto_download=False)
+
         return self._normalize_settings_items([
             Divider(text='Настройка автообновления loader/runtime из GitHub репозитория.'),
             Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} â€¢ {self._get_update_branch()}"),
@@ -15790,7 +15808,7 @@ class NftClonerPlugin(BasePlugin):
                 subtext='Фоновая проверка новых версий при загрузке плагина',
                 default=self._is_update_check_on_load_enabled(),
                 icon="msg_retry",
-                on_change=lambda v: self.set_setting("eblannft_update_check_on_load", bool(v)),
+                on_change=_set_update_check_on_load,
             ),
             Switch(
                 key="eblannft_auto_update_enabled",
@@ -15798,13 +15816,13 @@ class NftClonerPlugin(BasePlugin):
                 subtext='Если найдена новая версия, сразу начать загрузку',
                 default=self._is_auto_update_enabled(),
                 icon="msg_download",
-                on_change=lambda v: self.set_setting("eblannft_auto_update_enabled", bool(v)),
+                on_change=_set_auto_update_enabled,
             ),
             Text(
                 text='Проверить сейчас',
                 subtext=f"Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ: {__version__}",
                 icon="msg_download",
-                on_click=lambda _: self._check_for_plugin_updates(show_no_updates=True, auto_download=False),
+                on_click=_trigger_manual_update_check,
             ),
         ])
         return None

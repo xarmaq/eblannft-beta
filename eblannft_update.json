@@ -1,6 +1,6 @@
 {
-  "version": "1.5.2",
-  "notes": "Fix the remaining update-popup crash by removing non-void sticker UI callbacks in the updater flow",
+  "version": "1.5.3",
+  "notes": "Harden updater callbacks by removing non-void settings, popup, and UI dispatch listeners that could still crash update checks",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
