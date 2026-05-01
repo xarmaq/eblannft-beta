@@ -1,6 +1,6 @@
 {
-  "version": "1.4.6",
-  "notes": "Reduce gift sheet open lag by deferring heavy TON UI rebuilds and keep Random action for NFT Number",
+  "version": "1.4.7",
+  "notes": "Refresh the update popup with a cleaner animated UI, a real byte-accurate progress bar, and an animated sticker from konchhr_by_fStikBot",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

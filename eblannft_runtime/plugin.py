@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.6"
+__version__ = "1.4.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -113,6 +113,8 @@ EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
 EBLANNFT_WELCOME_STICKER_SET = "HappyHappyPepe"
 EBLANNFT_WELCOME_STICKER_INDEX = 0
+EBLANNFT_UPDATE_POPUP_STICKER_SET = "konchhr_by_fStikBot"
+EBLANNFT_UPDATE_POPUP_STICKER_INDEXES = [18, 17]
 EBLANNFT_LOCAL_ABOUT_AVATAR_FILES = [
     os.path.join("D:\\vcNFT", "about.jpg"),
     os.path.join("D:\\vcNFT", "about.jpeg"),
@@ -13640,32 +13642,67 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-    def _apply_welcome_sticker_document(self, sticker_view, document):
+    def _pick_sticker_set_document(self, sticker_set, indexes):
+        try:
+            documents = getattr(sticker_set, "documents", None)
+        except:
+            documents = None
+        if not documents:
+            return None
+        try:
+            count = int(documents.size())
+        except:
+            count = 0
+        if count <= 0:
+            return None
+        for raw_idx in list(indexes or []):
+            try:
+                idx = int(raw_idx)
+            except:
+                continue
+            if 0 <= idx < count:
+                try:
+                    return documents.get(idx)
+                except:
+                    pass
+        return None
+
+    def _apply_cached_sticker_document(self, sticker_view, document, cache_attr=None, image_filter="160_160"):
         try:
             if sticker_view is None or document is None or not hasattr(sticker_view, "setImage"):
                 return False
             image_location = ImageLocation.getForDocument(document)
             if image_location is None:
                 return False
-            sticker_view.setImage(image_location, "160_160", None, 0, document)
+            sticker_view.setImage(image_location, str(image_filter or "160_160"), None, 0, document)
             self._enable_welcome_sticker_animation(sticker_view)
-            try:
-                self._welcome_sticker_document_cache = document
-            except:
-                pass
+            if cache_attr:
+                try:
+                    setattr(self, str(cache_attr), document)
+                except:
+                    pass
             return True
         except Exception as e:
-            _log(f"apply welcome sticker fail: {e}")
+            _log(f"apply sticker document fail: {e}")
             return False
 
-    def _bind_welcome_pepe_sticker(self, sticker_view):
+    def _bind_sticker_from_set(self, sticker_view, sticker_set_name, indexes, cache_attr=None, image_filter="160_160"):
         if sticker_view is None:
             return False
+        sticker_set_name = str(sticker_set_name or "").strip()
+        if not sticker_set_name:
+            return False
+        index_list = []
+        for raw_idx in list(indexes or []):
+            try:
+                index_list.append(int(raw_idx))
+            except:
+                pass
         try:
-            cached = getattr(self, "_welcome_sticker_document_cache", None)
+            cached = getattr(self, str(cache_attr), None) if cache_attr else None
         except:
             cached = None
-        if cached is not None and self._apply_welcome_sticker_document(sticker_view, cached):
+        if cached is not None and self._apply_cached_sticker_document(sticker_view, cached, cache_attr=cache_attr, image_filter=image_filter):
             return True
         try:
             account = int(UserConfig.selectedAccount)
@@ -13678,41 +13715,60 @@ class NftClonerPlugin(BasePlugin):
         if media_controller is None:
             return False
         try:
-            sticker_set = media_controller.getStickerSetByName(EBLANNFT_WELCOME_STICKER_SET)
+            sticker_set = media_controller.getStickerSetByName(sticker_set_name)
         except:
             sticker_set = None
         try:
-            if sticker_set and sticker_set.documents and sticker_set.documents.size() > EBLANNFT_WELCOME_STICKER_INDEX:
-                doc = sticker_set.documents.get(EBLANNFT_WELCOME_STICKER_INDEX)
-                if self._apply_welcome_sticker_document(sticker_view, doc):
-                    return True
+            doc = self._pick_sticker_set_document(sticker_set, index_list)
+            if doc is not None and self._apply_cached_sticker_document(sticker_view, doc, cache_attr=cache_attr, image_filter=image_filter):
+                return True
         except:
             pass
         try:
             input_set = TLRPC.TL_inputStickerSetShortName()
-            input_set.short_name = EBLANNFT_WELCOME_STICKER_SET
+            input_set.short_name = sticker_set_name
             plugin_self = self
             target_view = sticker_view
+            target_indexes = list(index_list)
+            target_cache_attr = cache_attr
+            target_filter = str(image_filter or "160_160")
 
             class _StickerSetCallback(dynamic_proxy(jclass("org.telegram.messenger.Utilities$Callback"))):
                 def run(self_obj, result):
                     try:
-                        if result and result.documents and result.documents.size() > EBLANNFT_WELCOME_STICKER_INDEX:
-                            doc = result.documents.get(EBLANNFT_WELCOME_STICKER_INDEX)
+                        doc = plugin_self._pick_sticker_set_document(result, target_indexes)
+                        if doc is not None:
                             try:
-                                run_on_ui_thread(lambda: plugin_self._apply_welcome_sticker_document(target_view, doc))
+                                run_on_ui_thread(lambda: plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter))
                             except:
-                                plugin_self._apply_welcome_sticker_document(target_view, doc)
+                                plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter)
                     except Exception as inner_e:
                         try:
-                            _log(f"welcome sticker callback fail: {inner_e}")
+                            _log(f"sticker set callback fail: {inner_e}")
                         except:
                             pass
 
             media_controller.getStickerSet(input_set, None, False, _StickerSetCallback())
         except Exception as e:
-            _log(f"bind welcome sticker fail: {e}")
+            _log(f"bind sticker from set fail: {e}")
         return False
+
+    def _apply_welcome_sticker_document(self, sticker_view, document):
+        return self._apply_cached_sticker_document(
+            sticker_view,
+            document,
+            cache_attr="_welcome_sticker_document_cache",
+            image_filter="160_160",
+        )
+
+    def _bind_welcome_pepe_sticker(self, sticker_view):
+        return self._bind_sticker_from_set(
+            sticker_view,
+            EBLANNFT_WELCOME_STICKER_SET,
+            [EBLANNFT_WELCOME_STICKER_INDEX],
+            cache_attr="_welcome_sticker_document_cache",
+            image_filter="160_160",
+        )
 
     def _style_install_welcome_sheet_surface(self, sheet):
         try:
@@ -14492,6 +14548,22 @@ class NftClonerPlugin(BasePlugin):
         raw, _size = self._fetch_url_bytes_with_progress(url, timeout=timeout, progress_cb=None)
         return raw
 
+    def _fetch_url_content_length(self, url, timeout=15):
+        req = Request(
+            str(url),
+            headers={
+                "User-Agent": f"eblannft-updater/{__version__}",
+                "Accept": "*/*",
+                "Cache-Control": "no-cache",
+            },
+            method="HEAD",
+        )
+        with urlopen(req, timeout=timeout) as resp:
+            try:
+                return max(0, int(resp.headers.get("Content-Length", "0") or 0))
+            except:
+                return 0
+
     def _fetch_url_bytes_with_progress(self, url, timeout=20, progress_cb=None):
         req = Request(
             str(url),
@@ -14650,12 +14722,53 @@ class NftClonerPlugin(BasePlugin):
             pass
         payloads = []
         total = len(entries)
-        for idx, entry in enumerate(entries, 1):
+        size_hints = {}
+        for entry in entries:
+            pth = str(entry.get("path", "") or "")
+            hint = 0
             try:
-                def _on_bytes(loaded, total_bytes, _idx=idx, _entry=entry):
+                hint = max(0, int(entry.get("size", 0) or 0))
+            except:
+                hint = 0
+            if hint <= 0:
+                try:
+                    hint = self._fetch_url_content_length(entry["url"], timeout=12)
+                except:
+                    hint = 0
+            size_hints[pth] = max(0, int(hint or 0))
+
+        def _known_total_bytes():
+            try:
+                return max(0, sum(max(0, int(v or 0)) for v in size_hints.values()))
+            except:
+                return 0
+
+        completed_bytes = 0
+        for idx, entry in enumerate(entries, 1):
+            current_path = str(entry.get("path", "") or "")
+            try:
+                def _on_bytes(loaded, total_bytes, _idx=idx, _entry=entry, _path=current_path):
+                    total_hint = 0
+                    try:
+                        total_hint = max(0, int(total_bytes or 0))
+                    except:
+                        total_hint = 0
+                    if total_hint > int(size_hints.get(_path, 0) or 0):
+                        size_hints[_path] = total_hint
+                    overall_total = _known_total_bytes()
+                    overall_loaded = max(0, int(completed_bytes or 0) + max(0, int(loaded or 0)))
                     if callable(progress_cb):
                         try:
-                            progress_cb(_idx, total, _entry["path"], False, int(loaded or 0), int(total_bytes or 0))
+                            progress_cb(
+                                _idx,
+                                total,
+                                _entry["path"],
+                                False,
+                                int(loaded or 0),
+                                int(total_bytes or 0),
+                                int(overall_loaded or 0),
+                                int(overall_total or 0),
+                            )
                         except:
                             pass
                 raw, raw_total = self._fetch_url_bytes_with_progress(entry["url"], timeout=25, progress_cb=_on_bytes)
@@ -14668,12 +14781,29 @@ class NftClonerPlugin(BasePlugin):
                     raise RuntimeError(f"Download failed for {pth}: {e}")
             if not raw:
                 raise RuntimeError(f"Empty file: {entry['path']}")
+            actual_size = len(raw)
+            if actual_size > int(size_hints.get(current_path, 0) or 0):
+                size_hints[current_path] = actual_size
             payloads.append((entry["path"], raw))
+            overall_total = _known_total_bytes()
+            overall_loaded = int(completed_bytes or 0) + actual_size
             if callable(progress_cb):
                 try:
-                    progress_cb(idx, total, entry["path"], False, len(raw), int(raw_total or len(raw)))
+                    progress_cb(
+                        idx,
+                        total,
+                        entry["path"],
+                        False,
+                        actual_size,
+                        int(raw_total or actual_size),
+                        int(overall_loaded or 0),
+                        int(overall_total or overall_loaded or 0),
+                    )
                 except:
                     pass
+            completed_bytes += actual_size
+        apply_total_bytes = max(1, sum(len(raw) for _rel_path, raw in payloads))
+        applied_bytes = 0
         for idx, (rel_path, raw) in enumerate(payloads, 1):
             dest = self._resolve_update_dest_path(rel_path)
             ensure_dir_exists(os.path.dirname(dest))
@@ -14681,9 +14811,19 @@ class NftClonerPlugin(BasePlugin):
             with open(tmp_path, "wb") as f:
                 f.write(raw)
             os.replace(tmp_path, dest)
+            applied_bytes += len(raw)
             if callable(progress_cb):
                 try:
-                    progress_cb(idx, total, rel_path, True, len(raw), len(raw))
+                    progress_cb(
+                        idx,
+                        total,
+                        rel_path,
+                        True,
+                        len(raw),
+                        len(raw),
+                        int(applied_bytes or 0),
+                        int(apply_total_bytes or 1),
+                    )
                 except:
                     pass
         try:
@@ -14764,6 +14904,30 @@ class NftClonerPlugin(BasePlugin):
         pending_apply = self._is_pending_update_ready(info)
         sheet = BottomSheet(ctx, True)
         self._eblannft_update_popup_visible = True
+        try:
+            accent_color = int(Theme.getColor(Theme.key_featuredStickers_addButton))
+        except:
+            accent_color = 0xFF5B8CFF
+        try:
+            primary_text_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+        except:
+            primary_text_color = 0xFFFFFFFF
+        try:
+            secondary_text_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+        except:
+            secondary_text_color = 0xFF9AA3AE
+        try:
+            dialog_bg_color = int(Theme.getColor(Theme.key_dialogBackground))
+        except:
+            dialog_bg_color = 0xFF14161B
+        try:
+            neutral_bg_color = int(Theme.getColor(Theme.key_windowBackgroundGray))
+        except:
+            neutral_bg_color = 0x1AFFFFFF
+        remote_version = str(info.get("version", "?") or "?")
+        repo_name = str(info.get("repo", "") or "").strip()
+        branch_name = str(info.get("branch", "") or "").strip()
+        notes_text = str(info.get("notes", "") or "").strip()
         root = LinearLayout(ctx)
         root.setOrientation(LinearLayout.VERTICAL)
         try:
@@ -14771,93 +14935,233 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-        hero = LinearLayout(ctx)
-        hero.setOrientation(LinearLayout.VERTICAL)
+        surface = LinearLayout(ctx)
+        surface.setOrientation(LinearLayout.VERTICAL)
         try:
-            hero_bg = GradientDrawable()
+            surface_bg = GradientDrawable()
+            surface_bg.setCornerRadius(AndroidUtilities.dp(28))
+            surface_bg.setColor(dialog_bg_color)
+            surface.setBackground(surface_bg)
+            surface.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14))
+        except:
+            pass
+        root.addView(surface, LayoutHelper.createLinear(-1, -2))
+
+        hero = LinearLayout(ctx)
+        hero.setOrientation(LinearLayout.HORIZONTAL)
+        try:
+            hero_bg = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                [0xFF1D2130, 0xFF12161F],
+            )
             hero_bg.setCornerRadius(AndroidUtilities.dp(24))
-            hero_bg.setColor(0xFF101114)
             hero.setBackground(hero_bg)
-            hero.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(16), AndroidUtilities.dp(16))
+            hero.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14))
+        except:
+            pass
+
+        sticker_shell = FrameLayout(ctx)
+        try:
+            sticker_bg = GradientDrawable()
+            sticker_bg.setCornerRadius(AndroidUtilities.dp(20))
+            sticker_bg.setColor(0x20FFFFFF)
+            sticker_shell.setBackground(sticker_bg)
+            sticker_shell.setClipToOutline(True)
+            sticker_shell.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        except:
+            pass
+
+        sticker_view = None
+        try:
+            sticker_view = BackupImageView(ctx)
+            sticker_view.setRoundRadius(AndroidUtilities.dp(18))
+        except:
+            sticker_view = None
+        if sticker_view is None:
+            sticker_view = ImageView(ctx)
+            try:
+                sticker_view.setScaleType(ImageView.ScaleType.CENTER_CROP)
+            except:
+                pass
+        sticker_shell.addView(sticker_view, FrameLayout.LayoutParams(AndroidUtilities.dp(88), AndroidUtilities.dp(88), Gravity.CENTER))
+        hero.addView(sticker_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(88), AndroidUtilities.dp(88)))
+
+        text_col = LinearLayout(ctx)
+        text_col.setOrientation(LinearLayout.VERTICAL)
+        try:
+            text_lp = LinearLayout.LayoutParams(0, -2, 1.0)
+            text_lp.leftMargin = AndroidUtilities.dp(12)
+            hero.addView(text_col, text_lp)
+        except:
+            hero.addView(text_col, LayoutHelper.createLinear(-1, -2, Gravity.TOP, AndroidUtilities.dp(12), 0, 0, 0))
+        try:
+            self._bind_sticker_from_set(
+                sticker_view,
+                EBLANNFT_UPDATE_POPUP_STICKER_SET,
+                EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
+                cache_attr="_update_popup_sticker_document_cache",
+                image_filter="180_180",
+            )
+            sticker_shell.postDelayed(
+                JRunnable(
+                    lambda: self._bind_sticker_from_set(
+                        sticker_view,
+                        EBLANNFT_UPDATE_POPUP_STICKER_SET,
+                        EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
+                        cache_attr="_update_popup_sticker_document_cache",
+                        image_filter="180_180",
+                    )
+                ),
+                160,
+            )
         except:
             pass
 
         title = TextView(ctx)
-        title.setText("Update eblanNFT")
+        title.setText("Новая версия eblanNFT")
         title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21)
         try:
-            title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            title.setTextColor(0xFFFFFFFF)
             title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
         except:
             pass
-        hero.addView(title, LayoutHelper.createLinear(-1, -2))
-
-        repo_line = TextView(ctx)
-        try:
-            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
-            repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
-            repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
-        except:
-            pass
-        hero.addView(repo_line, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(4), 0, 0))
+        text_col.addView(title, LayoutHelper.createLinear(-1, -2))
 
         desc = TextView(ctx)
         try:
             if pending_apply:
-                desc.setText(f"Version {info.get('version', '?')} is already downloaded. Current runtime: {__version__}.")
+                desc.setText(f"v{remote_version} уже скачана\nСейчас установлено: v{__version__}")
             else:
-                desc.setText(f"Version {info.get('version', '?')} is available. Current version: {__version__}.")
-            desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-            desc.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+                desc.setText(f"v{remote_version} готова к установке\nСейчас установлено: v{__version__}")
+            desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+            desc.setTextColor(0xFFDDE4F0)
+            desc.setLineSpacing(0.0, 1.08)
         except:
             pass
-        hero.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
-        root.addView(hero, LayoutHelper.createLinear(-1, -2))
+        text_col.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(8), 0, 0))
+
+        repo_line = TextView(ctx)
+        try:
+            repo_line.setText(f"{repo_name} • {branch_name}" if repo_name or branch_name else "GitHub update channel")
+            repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
+            repo_line.setTextColor(0xFF9FB0C7)
+        except:
+            pass
+        text_col.addView(repo_line, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(8), 0, 0))
+        surface.addView(hero, LayoutHelper.createLinear(-1, -2))
 
         chip = TextView(ctx)
         try:
-            chip.setText("Restart required" if pending_apply else "Ready")
+            chip.setText("Нужен рестарт" if pending_apply else "Готово")
             chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
             chip.setGravity(Gravity.CENTER)
             chip.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(7), AndroidUtilities.dp(12), AndroidUtilities.dp(7))
             chip_bg = GradientDrawable()
             chip_bg.setCornerRadius(AndroidUtilities.dp(999))
-            chip_bg.setColor(0x1FFFFFFF if pending_apply else 0x1F5BE49B)
+            chip_bg.setColor(0x1FFFFFFF if pending_apply else 0x285B8CFF)
             chip.setBackground(chip_bg)
             chip.setTextColor(0xFFFFFFFF)
         except:
             pass
-        root.addView(chip, LayoutHelper.createLinear(-2, -2, Gravity.START, 0, AndroidUtilities.dp(14), 0, 0))
+        surface.addView(chip, LayoutHelper.createLinear(-2, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
 
-        status = TextView(ctx)
+        if notes_text:
+            notes = TextView(ctx)
+            try:
+                notes.setText(notes_text)
+                notes.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                notes.setTextColor(primary_text_color)
+                notes.setLineSpacing(0.0, 1.08)
+                notes.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(12))
+                notes_bg = GradientDrawable()
+                notes_bg.setCornerRadius(AndroidUtilities.dp(18))
+                notes_bg.setColor(0x0FFFFFFF)
+                notes.setBackground(notes_bg)
+            except:
+                pass
+            surface.addView(notes, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
+
+        progress_card = LinearLayout(ctx)
+        progress_card.setOrientation(LinearLayout.VERTICAL)
         try:
-            status.setText("Update files are already on disk. Restart the app to apply them." if pending_apply else "Ready to download.")
-            status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
-            status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            progress_card_bg = GradientDrawable()
+            progress_card_bg.setCornerRadius(AndroidUtilities.dp(20))
+            progress_card_bg.setColor(0x0DFFFFFF)
+            progress_card.setBackground(progress_card_bg)
+            progress_card.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(12), AndroidUtilities.dp(12))
         except:
             pass
-        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
+        surface.addView(progress_card, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
+
+        progress_head = LinearLayout(ctx)
+        progress_head.setOrientation(LinearLayout.HORIZONTAL)
+        progress_card.addView(progress_head, LayoutHelper.createLinear(-1, -2))
+
+        progress_title = TextView(ctx)
+        try:
+            progress_title.setText("Обнова готова" if pending_apply else "Готово к загрузке")
+            progress_title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+            progress_title.setTextColor(primary_text_color)
+            progress_title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+        except:
+            pass
+        try:
+            progress_head.addView(progress_title, LinearLayout.LayoutParams(0, -2, 1.0))
+        except:
+            progress_head.addView(progress_title, LayoutHelper.createLinear(-1, -2))
+
+        percent = TextView(ctx)
+        try:
+            percent.setText("100%" if pending_apply else "0%")
+            percent.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+            percent.setTextColor(primary_text_color)
+            percent.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+        except:
+            pass
+        progress_head.addView(percent, LayoutHelper.createLinear(-2, -2))
 
         progress_wrap = FrameLayout(ctx)
         progress_bg = View(ctx)
         progress_fill = View(ctx)
+        progress_glow = View(ctx)
         try:
             bg_draw = GradientDrawable()
             bg_draw.setCornerRadius(AndroidUtilities.dp(999))
-            bg_draw.setColor(0x1FFFFFFF)
+            bg_draw.setColor(0x12FFFFFF)
             progress_bg.setBackground(bg_draw)
             fill_draw = GradientDrawable()
             fill_draw.setCornerRadius(AndroidUtilities.dp(999))
-            fill_draw.setColor(0xFF7CFFB2 if not pending_apply else 0xFFFFFFFF)
+            fill_draw.setColor(accent_color if not pending_apply else 0xFFFFFFFF)
             progress_fill.setBackground(fill_draw)
+            glow_draw = GradientDrawable()
+            glow_draw.setCornerRadius(AndroidUtilities.dp(999))
+            glow_draw.setColor(0xFFFFFFFF)
+            progress_glow.setBackground(glow_draw)
         except:
             pass
-        progress_wrap.addView(progress_bg, FrameLayout.LayoutParams(-1, AndroidUtilities.dp(8)))
-        progress_wrap.addView(progress_fill, FrameLayout.LayoutParams(AndroidUtilities.dp(44 if pending_apply else 18), AndroidUtilities.dp(8)))
-        root.addView(progress_wrap, LayoutHelper.createLinear(-1, AndroidUtilities.dp(8), Gravity.TOP, 0, AndroidUtilities.dp(16), 0, 0))
+        try:
+            progress_fill.setPivotX(0.0)
+            progress_fill.setScaleX(1.0 if pending_apply else 0.0)
+            progress_glow.setAlpha(1.0 if pending_apply else 0.0)
+        except:
+            pass
+        progress_wrap.addView(progress_bg, FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL))
+        progress_wrap.addView(progress_fill, FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL))
+        progress_wrap.addView(progress_glow, FrameLayout.LayoutParams(AndroidUtilities.dp(12), AndroidUtilities.dp(12), Gravity.START | Gravity.CENTER_VERTICAL))
+        progress_card.addView(progress_wrap, LayoutHelper.createLinear(-1, AndroidUtilities.dp(12), Gravity.TOP, 0, AndroidUtilities.dp(12), 0, 0))
+
+        status = TextView(ctx)
+        try:
+            status.setText("Файлы уже загружены. Осталось перезапустить приложение." if pending_apply else "Нажми кнопку ниже, чтобы скачать обновление.")
+            status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+            status.setTextColor(secondary_text_color)
+            status.setLineSpacing(0.0, 1.06)
+        except:
+            pass
+        progress_card.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(10), 0, 0))
 
         btn = TextView(ctx)
-        btn.setText("Restart to apply" if pending_apply else "Download update")
+        btn.setText("Перезапустить" if pending_apply else "Скачать обнову")
         btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
         btn.setGravity(Gravity.CENTER)
         try:
@@ -14865,7 +15169,7 @@ class NftClonerPlugin(BasePlugin):
             btn_bg = GradientDrawable()
             btn_bg.setCornerRadius(AndroidUtilities.dp(22))
             try:
-                btn_bg.setColor(Theme.getColor(Theme.key_featuredStickers_addButton) if not pending_apply else 0xFF2B2C31)
+                btn_bg.setColor(accent_color if not pending_apply else 0xFF2B2C31)
                 btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
             except:
                 btn_bg.setColor(0xFF2B7FFF if not pending_apply else 0xFF2B2C31)
@@ -14873,10 +15177,9 @@ class NftClonerPlugin(BasePlugin):
             btn.setBackground(btn_bg)
         except:
             pass
-        root.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(18), 0, 0))
 
         close_btn = TextView(ctx)
-        close_btn.setText("Close")
+        close_btn.setText("Позже")
         close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
         close_btn.setGravity(Gravity.CENTER)
         try:
@@ -14884,54 +15187,93 @@ class NftClonerPlugin(BasePlugin):
             close_bg = GradientDrawable()
             close_bg.setCornerRadius(AndroidUtilities.dp(16))
             try:
-                close_bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray))
-                close_btn.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText))
+                close_bg.setColor(neutral_bg_color)
+                close_btn.setTextColor(primary_text_color)
             except:
                 close_bg.setColor(0x22394B6A)
                 close_btn.setTextColor(0xFFFFFFFF)
             close_btn.setBackground(close_bg)
         except:
             pass
-        root.addView(close_btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(10), 0, 0))
+
+        buttons = LinearLayout(ctx)
+        buttons.setOrientation(LinearLayout.HORIZONTAL)
+        try:
+            close_lp = LinearLayout.LayoutParams(0, -2, 0.9)
+            close_lp.rightMargin = AndroidUtilities.dp(8)
+            buttons.addView(close_btn, close_lp)
+            buttons.addView(btn, LinearLayout.LayoutParams(0, -2, 1.28))
+        except:
+            buttons.addView(close_btn, LayoutHelper.createLinear(-1, -2))
+            buttons.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(8), 0, 0))
+        surface.addView(buttons, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(14), 0, 0))
 
         try:
-            hero.setAlpha(0.0)
-            hero.setTranslationY(float(AndroidUtilities.dp(18)))
-            hero.animate().alpha(1.0).translationY(0.0).setDuration(260).start()
+            surface.setAlpha(0.0)
+            surface.setScaleX(0.985)
+            surface.setScaleY(0.985)
+            surface.setTranslationY(float(AndroidUtilities.dp(18)))
+            surface.animate().alpha(1.0).scaleX(1.0).scaleY(1.0).translationY(0.0).setDuration(260).start()
         except:
             pass
         try:
-            status.setAlpha(0.0)
-            status.setTranslationY(float(AndroidUtilities.dp(12)))
-            status.animate().alpha(1.0).translationY(0.0).setStartDelay(70).setDuration(220).start()
+            sticker_shell.setAlpha(0.0)
+            sticker_shell.setScaleX(0.92)
+            sticker_shell.setScaleY(0.92)
+            sticker_shell.animate().alpha(1.0).scaleX(1.0).scaleY(1.0).setStartDelay(40).setDuration(260).start()
         except:
             pass
         try:
-            progress_wrap.setAlpha(0.0)
-            progress_wrap.setTranslationY(float(AndroidUtilities.dp(10)))
-            progress_wrap.animate().alpha(1.0).translationY(0.0).setStartDelay(105).setDuration(260).start()
-            if not pending_apply:
-                progress_fill.setScaleX(0.35)
-                progress_fill.setPivotX(0.0)
-                progress_fill.animate().scaleX(1.0).setStartDelay(180).setDuration(520).start()
-            else:
-                progress_fill.setScaleX(1.0)
+            progress_card.setAlpha(0.0)
+            progress_card.setTranslationY(float(AndroidUtilities.dp(10)))
+            progress_card.animate().alpha(1.0).translationY(0.0).setStartDelay(95).setDuration(250).start()
         except:
             pass
         try:
-            btn.setAlpha(0.0)
-            btn.setScaleX(0.96)
-            btn.setScaleY(0.96)
-            btn.animate().alpha(1.0).scaleX(1.0).scaleY(1.0).setStartDelay(120).setDuration(240).start()
-        except:
-            pass
-        try:
-            close_btn.setAlpha(0.0)
-            close_btn.animate().alpha(1.0).setStartDelay(170).setDuration(220).start()
+            buttons.setAlpha(0.0)
+            buttons.setTranslationY(float(AndroidUtilities.dp(10)))
+            buttons.animate().alpha(1.0).translationY(0.0).setStartDelay(130).setDuration(240).start()
         except:
             pass
 
         state = {"started": False, "done": False, "pending_apply": bool(pending_apply)}
+
+        def _set_progress_ratio(ratio, animate=True):
+            try:
+                ratio = max(0.0, min(1.0, float(ratio or 0.0)))
+            except:
+                ratio = 0.0
+            try:
+                progress_fill.setPivotX(0.0)
+                if animate:
+                    progress_fill.animate().scaleX(ratio).setDuration(150).start()
+                else:
+                    progress_fill.setScaleX(ratio)
+            except:
+                pass
+
+            def _move_glow():
+                try:
+                    travel = max(0, int(progress_wrap.getWidth()) - int(progress_glow.getWidth()))
+                except:
+                    travel = 0
+                try:
+                    if ratio <= 0.001:
+                        progress_glow.setAlpha(0.0)
+                    else:
+                        progress_glow.setAlpha(1.0)
+                        target_x = float(travel) * ratio
+                        if animate:
+                            progress_glow.animate().translationX(target_x).setDuration(150).start()
+                        else:
+                            progress_glow.setTranslationX(target_x)
+                except:
+                    pass
+
+            try:
+                progress_wrap.post(JRunnable(_move_glow))
+            except:
+                _move_glow()
 
         def _apply_status(text, done=False):
             try:
@@ -14940,37 +15282,52 @@ class NftClonerPlugin(BasePlugin):
                 pass
             try:
                 if done:
-                    progress_fill.animate().scaleX(1.0).setDuration(180).start()
+                    _set_progress_ratio(1.0, animate=True)
                 else:
                     progress_fill.setVisibility(View.VISIBLE)
             except:
                 pass
 
-        def _apply_progress(done_idx, total, written=False, current_bytes=0, total_bytes=0):
+        def _apply_progress(done_idx, total, written=False, current_bytes=0, total_bytes=0, overall_loaded=0, overall_total=0):
             try:
                 total = max(1, int(total or 1))
                 done_idx = max(0, min(int(done_idx or 0), total))
-                ratio = 1.0 if written and total <= 1 else (done_idx / float(total))
                 try:
                     current_bytes = int(current_bytes or 0)
                     total_bytes = int(total_bytes or 0)
+                    overall_loaded = int(overall_loaded or 0)
+                    overall_total = int(overall_total or 0)
                 except:
                     current_bytes = 0
                     total_bytes = 0
-                if (not written) and total_bytes > 0:
+                    overall_loaded = 0
+                    overall_total = 0
+                if overall_total > 0:
+                    ratio = max(0.0, min(1.0, overall_loaded / float(overall_total)))
+                elif (not written) and total_bytes > 0:
                     ratio = max(0.0, min(1.0, current_bytes / float(total_bytes)))
-                width_dp = 18 + int(ratio * 250)
-                lp = progress_fill.getLayoutParams()
-                lp.width = AndroidUtilities.dp(width_dp if not written else min(268, width_dp + 8))
-                progress_fill.setLayoutParams(lp)
-                if written:
-                    chip.setText("Applying")
-                elif total_bytes > 0:
-                    chip.setText(f"Downloading {int(round(ratio * 100.0))}%")
+                elif written:
+                    ratio = max(0.0, min(1.0, done_idx / float(total)))
                 else:
-                    chip.setText("Downloading")
+                    ratio = max(0.0, min(1.0, (max(0, done_idx - 1) / float(total))))
+                _set_progress_ratio(ratio, animate=True)
+                percent.setText(f"{int(round(ratio * 100.0))}%")
+                if written:
+                    chip.setText("Применение")
+                    progress_title.setText("Устанавливаю файлы")
+                elif overall_total > 0 or total_bytes > 0:
+                    chip.setText("Загрузка")
+                    progress_title.setText("Скачиваю обновление")
+                else:
+                    chip.setText("Подготовка")
+                    progress_title.setText("Готовлю обновление")
             except:
                 pass
+
+        try:
+            _set_progress_ratio(1.0 if pending_apply else 0.0, animate=False)
+        except:
+            pass
 
         def _download():
             if state.get("pending_apply") or pending_apply:
@@ -14986,25 +15343,36 @@ class NftClonerPlugin(BasePlugin):
             state["started"] = True
             try:
                 btn.setEnabled(False)
-                btn.setAlpha(0.7)
+                btn.setAlpha(0.82)
+                btn.setText("Скачивается...")
             except:
                 pass
             try:
                 BulletinHelper.show_info(f"Downloading update {info.get('version', '?')}...")
             except:
                 pass
-            run_on_ui_thread(lambda: _apply_status("Preparing update files...", False))
+            run_on_ui_thread(lambda: (_apply_progress(0, 1, False, 0, 0, 0, 0), _apply_status("Собираю файлы обновления…", False)))
 
-            def _progress(done_idx, total, path, written, current_bytes=0, total_bytes=0):
-                phase = "Applying" if written else "Downloading"
-                if (not written) and int(total_bytes or 0) > 0:
+            def _progress(done_idx, total, path, written, current_bytes=0, total_bytes=0, overall_loaded=0, overall_total=0):
+                short_path = str(path or "").replace("\\", "/").split("/")[-1]
+                if int(overall_total or 0) > 0:
+                    loaded_text = self._format_progress_bytes(overall_loaded)
+                    total_text = self._format_progress_bytes(overall_total)
+                    left_text = self._format_progress_bytes(max(0, int(overall_total or 0) - int(overall_loaded or 0)))
+                    if written:
+                        status_text = f"{short_path} • {loaded_text} из {total_text}"
+                    else:
+                        status_text = f"{short_path} • {loaded_text} из {total_text} • осталось {left_text}"
+                elif (not written) and int(total_bytes or 0) > 0:
                     loaded_text = self._format_progress_bytes(current_bytes)
                     total_text = self._format_progress_bytes(total_bytes)
-                    left_text = self._format_progress_bytes(max(0, int(total_bytes or 0) - int(current_bytes or 0)))
-                    status_text = f"{phase}: {loaded_text} / {total_text} • left {left_text} • {path}"
+                    status_text = f"{short_path} • {loaded_text} из {total_text}"
                 else:
-                    status_text = f"{phase}: {done_idx}/{total} • {path}"
-                run_on_ui_thread(lambda d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, st=status_text: (_apply_progress(d, t, w, cb, tb), _apply_status(st, False)))
+                    status_text = f"{short_path or 'update'} • {done_idx}/{total}"
+                run_on_ui_thread(
+                    lambda d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, ol=overall_loaded, ot=overall_total, st=status_text:
+                        (_apply_progress(d, t, w, cb, tb, ol, ot), _apply_status(st, False))
+                )
 
             def _worker():
                 try:
@@ -15013,11 +15381,13 @@ class NftClonerPlugin(BasePlugin):
                         state["done"] = True
                         state["started"] = False
                         state["pending_apply"] = True
-                        _apply_progress(1, 1, True, 1, 1)
-                        chip.setText("Restart required")
-                        _apply_status("Update downloaded. Restart the app to apply it.", True)
+                        _apply_progress(1, 1, True, 1, 1, 1, 1)
+                        chip.setText("Нужен рестарт")
+                        progress_title.setText("Обнова готова")
+                        percent.setText("100%")
+                        _apply_status("Файлы уже на месте. Перезапусти приложение, чтобы применить обновление.", True)
                         try:
-                            btn.setText("Restart to apply")
+                            btn.setText("Перезапустить")
                             btn.setEnabled(True)
                             btn.setAlpha(1.0)
                         except:
@@ -15031,12 +15401,13 @@ class NftClonerPlugin(BasePlugin):
                     def _done_err():
                         state["started"] = False
                         try:
-                            chip.setText("Error")
+                            chip.setText("Ошибка")
+                            progress_title.setText("Не удалось скачать")
                         except:
                             pass
-                        _apply_status(f"Update error: {e}", True)
+                        _apply_status(f"Update error: {e}", False)
                         try:
-                            btn.setText("Retry download")
+                            btn.setText("Повторить")
                             btn.setEnabled(True)
                             btn.setAlpha(1.0)
                         except:
