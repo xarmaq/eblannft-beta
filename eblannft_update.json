@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
-  "notes": "Polish the update popup, remove the local stars item from local value, and fix broken Cyrillic across the plugin UI",
+  "version": "1.4.6",
+  "notes": "Reduce gift sheet open lag by deferring heavy TON UI rebuilds and keep Random action for NFT Number",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
