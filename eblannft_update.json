@@ -1,6 +1,6 @@
 {
-  "version": "1.4.3",
-  "notes": "Hide TON blockchain line for gifts without local TON mode and move the line higher in the gap",
+  "version": "1.4.4",
+  "notes": "Use the native TON line slot in gift sheet, keep it higher, and hide it for gifts without local TON mode",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
