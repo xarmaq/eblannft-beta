@@ -86,7 +86,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.5"
+__version__ = "1.5.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -633,10 +633,13 @@ def deserialize_fragment_collectible_info(b64_str):
         except:
             pass
 
-def gen(java_class, method_name, return_value=False, default_value=None):
+def gen(java_class, method_name, return_value=False, default_value=None, allow_return=False):
     def _run(instance, *java_args):
         try:
-            return instance._fn(*java_args)
+            result = instance._fn(*java_args)
+            if allow_return:
+                return result
+            return None
         except Exception:
             return default_value
 
@@ -656,7 +659,7 @@ JCallback5 = gen(jclass("org.telegram.messenger.Utilities$Callback5"), "run")
 JRequestDelegate = gen(RequestDelegate, "run")
 JOnClickListener = gen(jclass("android.view.View$OnClickListener"), "onClick")
 JRunnable = gen(jclass("java.lang.Runnable"), "run")
-JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False)
+JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False, allow_return=True)
 JOnGlobalLayoutListener = gen(jclass("android.view.ViewTreeObserver$OnGlobalLayoutListener"), "onGlobalLayout")
 JOnShowListener = gen(jclass("android.content.DialogInterface$OnShowListener"), "onShow")
 JOnDismissListener = gen(jclass("android.content.DialogInterface$OnDismissListener"), "onDismiss")
@@ -668,7 +671,8 @@ try:
 
     def _tw_on(self, s, start, before, count):
         try:
-            return self._fn(str(s))
+            self._fn(str(s))
+            return None
         except:
             return None
 
