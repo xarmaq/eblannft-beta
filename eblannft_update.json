@@ -1,6 +1,6 @@
 {
-  "version": "1.4.8",
-  "notes": "Fix broken Cyrillic on the first-install welcome page and keep embedded runtime/update flow aligned",
+  "version": "1.4.9",
+  "notes": "Fix broken Cyrillic on config import/export screens and keep embedded runtime/update flow aligned",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.8"
+__version__ = "1.4.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -12318,16 +12318,16 @@ class NftClonerPlugin(BasePlugin):
 
     def _create_data_settings_subfragment(self, parent_view=None):
         return self._normalize_settings_items([
-            Divider(text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€ÑƒÐ¹Ñ‚Ðµ Ñ‚ÐµÐºÑƒÑ‰ÑƒÑŽ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½ÑƒÑŽ ÐºÐ¾Ð½Ñ„Ð¸Ð³ÑƒÑ€Ð°Ñ†Ð¸ÑŽ Ð¸Ð»Ð¸ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚Ðµ Ð³Ð¾Ñ‚Ð¾Ð²Ñ‹Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ."),
+            Divider(text="\u042d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u0443\u0439\u0442\u0435 \u0442\u0435\u043a\u0443\u0449\u0443\u044e \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u0443\u044e \u043a\u043e\u043d\u0444\u0438\u0433\u0443\u0440\u0430\u0446\u0438\u044e \u0438\u043b\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0433\u043e\u0442\u043e\u0432\u044b\u0439 \u043f\u0440\u043e\u0444\u0438\u043b\u044c."),
             Text(
-                text="Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ .profile",
-                subtext="Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸",
+                text="\u042d\u043a\u0441\u043f\u043e\u0440\u0442 .profile",
+                subtext="\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0442\u0435\u043a\u0443\u0449\u0438\u0435 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438",
                 icon="msg_share",
                 on_click=lambda _: self._open_profile_export_name_dialog(),
             ),
             Text(
-                text="Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ .profile",
-                subtext="Ð—Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ€Ð°Ð½ÐµÐµ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ð¹ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ",
+                text="\u0418\u043c\u043f\u043e\u0440\u0442 .profile",
+                subtext="\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0440\u0430\u043d\u0435\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0439 \u043f\u0440\u043e\u0444\u0438\u043b\u044c",
                 icon="msg_download",
                 on_click=lambda _: self._show_profile_import_dialog(),
             ),
@@ -12470,10 +12470,10 @@ class NftClonerPlugin(BasePlugin):
 
     def _profile_option_defs(self):
         return [
-            ("nft_gifts", "Ð’ÑÐµ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸", "Ð‘Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐºÐ°, Ð°ÐºÑ‚Ð¸Ð²Ð½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¿Ð¾Ð´Ð°Ñ€Ð¾Ðº Ð¸ wear"),
-            ("nft_usernames", "NFT ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹", "Ð¡Ð¿Ð¸ÑÐ¾Ðº username, Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ username Ð¸ ÑˆÐ°Ð±Ð»Ð¾Ð½"),
-            ("nft_number", "NFT Ð½Ð¾Ð¼ÐµÑ€", "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð½Ð¾Ð¼ÐµÑ€Ð¾Ð², Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ð¸ ÑˆÐ°Ð±Ð»Ð¾Ð½"),
-            ("local_rating", "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³", "ÐžÑ‡ÐºÐ¸, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ Ð¸ ÑÐ»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ"),
+            ("nft_gifts", "\u0412\u0441\u0435 NFT \u043f\u043e\u0434\u0430\u0440\u043a\u0438", "\u0411\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0430, \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0439 \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043e\u0434\u0430\u0440\u043e\u043a \u0438 wear"),
+            ("nft_usernames", "NFT \u044e\u0437\u0435\u0440\u043d\u0435\u0439\u043c\u044b", "\u0421\u043f\u0438\u0441\u043e\u043a username, \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0439 username \u0438 \u0448\u0430\u0431\u043b\u043e\u043d"),
+            ("nft_number", "NFT \u043d\u043e\u043c\u0435\u0440", "\u0421\u043f\u0438\u0441\u043e\u043a \u043d\u043e\u043c\u0435\u0440\u043e\u0432, \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0438 \u0448\u0430\u0431\u043b\u043e\u043d"),
+            ("local_rating", "\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u0435\u0439\u0442\u0438\u043d\u0433", "\u041e\u0447\u043a\u0438, \u0443\u0440\u043e\u0432\u0435\u043d\u044c \u0438 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0430\u044f \u0446\u0435\u043b\u044c"),
         ]
 
     def _profile_option_title(self, option_key):
@@ -12642,11 +12642,11 @@ class NftClonerPlugin(BasePlugin):
         try:
             fragment = get_last_fragment()
             if not fragment:
-                BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
+                BulletinHelper.show_success(f"\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d: {filename}")
                 return
             activity = fragment.getParentActivity()
             if not activity:
-                BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
+                BulletinHelper.show_success(f"\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d: {filename}")
                 return
 
             container = LinearLayout(activity)
@@ -12654,7 +12654,7 @@ class NftClonerPlugin(BasePlugin):
             container.setPadding(AndroidUtilities.dp(20), AndroidUtilities.dp(20), AndroidUtilities.dp(20), AndroidUtilities.dp(12))
 
             title_view = TextView(activity)
-            title_view.setText("ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½")
+            title_view.setText("\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d")
             title_view.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
             title_view.setTypeface(AndroidUtilities.bold())
             title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
@@ -12677,14 +12677,14 @@ class NftClonerPlugin(BasePlugin):
             container.addView(path_view, lp_path)
 
             builder = AlertDialogBuilder(activity)
-            builder.set_title("Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ .profile")
+            builder.set_title("\u042d\u043a\u0441\u043f\u043e\u0440\u0442 .profile")
             builder.set_view(container)
-            builder.set_positive_button("ÐŸÐ¾Ð´ÐµÐ»Ð¸Ñ‚ÑŒÑÑ", lambda d, w: self._share_profile_file(filepath, activity))
-            builder.set_negative_button("Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ", None)
+            builder.set_positive_button("\u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f", lambda d, w: self._share_profile_file(filepath, activity))
+            builder.set_negative_button("\u0417\u0430\u043a\u0440\u044b\u0442\u044c", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
             _log(f"Profile saved sheet error: {e}")
-            BulletinHelper.show_success(f"ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {filename}")
+            BulletinHelper.show_success(f"\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d: {filename}")
 
     def _share_profile_file(self, filepath, activity):
         try:
@@ -12704,7 +12704,7 @@ class NftClonerPlugin(BasePlugin):
             chooser = Intent.createChooser(intent, "Share profile")
             activity.startActivity(chooser)
         except Exception as e:
-            BulletinHelper.show_error(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ ÑˆÐ°Ñ€Ð¸Ð½Ð³: {e}")
+            BulletinHelper.show_error(f"\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043a\u0440\u044b\u0442\u044c \u0448\u0430\u0440\u0438\u043d\u0433: {e}")
 
     def _show_profile_selection_sheet(self, sheet_title, subtitle, option_keys, default_selected, confirm_text, on_confirm):
         try:
@@ -12717,7 +12717,7 @@ class NftClonerPlugin(BasePlugin):
 
             available = [key for key in list(option_keys or []) if str(key or "").strip()]
             if not available:
-                BulletinHelper.show_error("ÐÐµÑ‚ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹Ñ… Ð¿ÑƒÐ½ÐºÑ‚Ð¾Ð²")
+                BulletinHelper.show_error("\u041d\u0435\u0442 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u044b\u0445 \u043f\u0443\u043d\u043a\u0442\u043e\u0432")
                 return False
 
             BottomSheetCls = jclass("org.telegram.ui.ActionBar.BottomSheet")
@@ -12729,7 +12729,7 @@ class NftClonerPlugin(BasePlugin):
             root.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(18), AndroidUtilities.dp(16), AndroidUtilities.dp(12))
 
             title_view = TextView(activity)
-            title_view.setText(str(sheet_title or "ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ"))
+            title_view.setText(str(sheet_title or "\u041f\u0440\u043e\u0444\u0438\u043b\u044c"))
             title_view.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
             title_view.setTypeface(AndroidUtilities.bold())
             title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
@@ -12784,7 +12784,7 @@ class NftClonerPlugin(BasePlugin):
             lp_buttons.topMargin = AndroidUtilities.dp(14)
 
             cancel_btn = TextView(activity)
-            cancel_btn.setText("ÐžÑ‚Ð¼ÐµÐ½Ð°")
+            cancel_btn.setText("\u041e\u0442\u043c\u0435\u043d\u0430")
             cancel_btn.setGravity(Gravity.CENTER)
             cancel_btn.setTypeface(AndroidUtilities.bold())
             cancel_btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_addButton))
@@ -12792,7 +12792,7 @@ class NftClonerPlugin(BasePlugin):
             cancel_btn.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(14), AndroidUtilities.dp(8), AndroidUtilities.dp(14))
 
             apply_btn = TextView(activity)
-            apply_btn.setText(str(confirm_text or "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾"))
+            apply_btn.setText(str(confirm_text or "\u0413\u043e\u0442\u043e\u0432\u043e"))
             apply_btn.setGravity(Gravity.CENTER)
             apply_btn.setTypeface(AndroidUtilities.bold())
             apply_btn.setTextColor(-1)
@@ -12811,7 +12811,7 @@ class NftClonerPlugin(BasePlugin):
             def _apply(_view=None):
                 chosen = [key for key in available if bool(selected.get(key, False))]
                 if not chosen:
-                    BulletinHelper.show_error("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð¸Ð½ Ð¿ÑƒÐ½ÐºÑ‚")
+                    BulletinHelper.show_error("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0445\u043e\u0442\u044f \u0431\u044b \u043e\u0434\u0438\u043d \u043f\u0443\u043d\u043a\u0442")
                     return
                 try:
                     sheet.dismiss()
@@ -12820,7 +12820,7 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     on_confirm(chosen)
                 except Exception as e:
-                    BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸Ñ: {e}")
+                    BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d\u0438\u044f: {e}")
 
             cancel_btn.setOnClickListener(JOnClickListener(_cancel))
             apply_btn.setOnClickListener(JOnClickListener(_apply))
@@ -12834,13 +12834,13 @@ class NftClonerPlugin(BasePlugin):
             sheet.show()
             return True
         except Exception as e:
-            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾ÐºÐ½Ð° Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ: {e}")
+            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u043e\u043a\u043d\u0430 \u043f\u0440\u043e\u0444\u0438\u043b\u044f: {e}")
             return False
 
     def _open_profile_export_name_dialog(self):
         current_name = time.strftime("profile_%Y%m%d_%H%M%S")
         self._show_text_input_dialog(
-            "Ð˜Ð¼Ñ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð°",
+            "\u0418\u043c\u044f \u043a\u043e\u043d\u0444\u0438\u0433\u0430",
             current_name,
             lambda raw: self._show_profile_export_sheet(raw),
             numeric=False,
@@ -12850,11 +12850,11 @@ class NftClonerPlugin(BasePlugin):
         safe_name = self._sanitize_profile_name(profile_name)
         defaults = {key: True for key, _title, _desc in self._profile_option_defs()}
         self._show_profile_selection_sheet(
-            f"Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ {safe_name}{PROFILE_CONFIG_FILE_EXTENSION}",
-            "ÐžÑ‚Ð¼ÐµÑ‚ÑŒÑ‚Ðµ, Ñ‡Ñ‚Ð¾ Ð½ÑƒÐ¶Ð½Ð¾ Ð¿Ð¾Ð»Ð¾Ð¶Ð¸Ñ‚ÑŒ Ð² ÐºÐ¾Ð½Ñ„Ð¸Ð³",
+            f"\u042d\u043a\u0441\u043f\u043e\u0440\u0442 {safe_name}{PROFILE_CONFIG_FILE_EXTENSION}",
+            "\u041e\u0442\u043c\u0435\u0442\u044c\u0442\u0435, \u0447\u0442\u043e \u043d\u0443\u0436\u043d\u043e \u043f\u043e\u043b\u043e\u0436\u0438\u0442\u044c \u0432 \u043a\u043e\u043d\u0444\u0438\u0433",
             [key for key, _title, _desc in self._profile_option_defs()],
             defaults,
-            "Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ",
+            "\u042d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c",
             lambda selected_keys: self._write_profile_config_file(safe_name, selected_keys),
         )
 
@@ -12862,12 +12862,12 @@ class NftClonerPlugin(BasePlugin):
         try:
             config_dir = self._get_profile_configs_dir()
             if not config_dir or (not os.path.exists(config_dir)):
-                BulletinHelper.show_error("ÐŸÐ°Ð¿ÐºÐ° Ñ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑÐ¼Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°")
+                BulletinHelper.show_error("\u041f\u0430\u043f\u043a\u0430 \u0441 \u043f\u0440\u043e\u0444\u0438\u043b\u044f\u043c\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u0430")
                 return
             files = [name for name in os.listdir(config_dir) if str(name).lower().endswith(PROFILE_CONFIG_FILE_EXTENSION)]
             files.sort(reverse=True)
             if not files:
-                BulletinHelper.show_info("ÐÐµÑ‚ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ñ… .profile")
+                BulletinHelper.show_info("\u041d\u0435\u0442 \u0441\u043e\u0445\u0440\u0430\u043d\u0451\u043d\u043d\u044b\u0445 .profile")
                 return
 
             ctx = self._get_menu_activity()
@@ -12884,22 +12884,22 @@ class NftClonerPlugin(BasePlugin):
                 filepath = os.path.join(config_dir, files[index])
                 data = self._load_profile_config_file(filepath)
                 if not data:
-                    BulletinHelper.show_error("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ ÐºÐ¾Ð½Ñ„Ð¸Ð³")
+                    BulletinHelper.show_error("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043f\u0440\u043e\u0447\u0438\u0442\u0430\u0442\u044c \u043a\u043e\u043d\u0444\u0438\u0433")
                     return
                 self._show_profile_import_sheet(data, files[index])
 
             builder = AlertDialogBuilder(ctx)
-            builder.set_title("Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ .profile")
+            builder.set_title("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 .profile")
             builder.set_items(files, _open_selected)
-            builder.set_negative_button("ÐžÑ‚Ð¼ÐµÐ½Ð°", None)
+            builder.set_negative_button("\u041e\u0442\u043c\u0435\u043d\u0430", None)
             run_on_ui_thread(builder.show)
         except Exception as e:
-            BulletinHelper.show_error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°: {e}")
+            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0438\u043c\u043f\u043e\u0440\u0442\u0430: {e}")
 
     def _show_profile_import_sheet(self, profile_data, filename):
         available = self._get_profile_available_option_keys(profile_data)
         if not available:
-            BulletinHelper.show_error("Ð’ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ðµ Ð½ÐµÑ‚ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÐ¼Ñ‹Ñ… Ð´Ð°Ð½Ð½Ñ‹Ñ…")
+            BulletinHelper.show_error("\u0412 \u043f\u0440\u043e\u0444\u0438\u043b\u0435 \u043d\u0435\u0442 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0435\u043c\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445")
             return
         profile_name = str(profile_data.get("profile_name", "") or "").strip()
         subtitle_parts = []
@@ -12908,11 +12908,11 @@ class NftClonerPlugin(BasePlugin):
         if filename:
             subtitle_parts.append(str(filename))
         self._show_profile_selection_sheet(
-            "Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ .profile",
+            "\u0418\u043c\u043f\u043e\u0440\u0442 .profile",
             " â€¢ ".join(subtitle_parts),
             available,
             {key: True for key in available},
-            "Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ",
+            "\u0418\u043c\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c",
             lambda selected_keys: self._import_profile_config(profile_data, selected_keys),
         )
 
