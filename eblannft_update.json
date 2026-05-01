@@ -1,6 +1,6 @@
 {
-  "version": "1.4.4",
-  "notes": "Use the native TON line slot in gift sheet, keep it higher, and hide it for gifts without local TON mode",
+  "version": "1.4.6",
+  "notes": "Reduce gift sheet open lag by deferring heavy TON UI rebuilds and keep Random action for NFT Number",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

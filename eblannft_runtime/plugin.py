@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.4"
+__version__ = "1.4.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -19920,22 +19920,22 @@ class NftClonerPlugin(BasePlugin):
         self._show_action_menu(title, actions, negative_text="ÐÐ°Ð·Ð°Ð´", context=context)
         return True
 
-    def _inject_local_gift_value_row(self, sheet, gift=None):
+    def _inject_local_gift_value_row(self, sheet, gift=None, key=None, entry=None):
         if sheet is None:
             return False
-        key = None
-        try:
-            key = self._resolve_library_key_from_gift_sheet(sheet)
-        except:
-            key = None
         if not key and gift is not None:
             try:
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
         if not key:
+            try:
+                key = self._resolve_library_key_from_gift_sheet(sheet)
+            except:
+                key = None
+        if not key:
             return False
-        e = self._library_find_entry(key)
+        e = entry if isinstance(entry, dict) else self._library_find_entry(key)
         if not e:
             return False
         try:
@@ -19964,22 +19964,22 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Local gift value row inject error: {e}")
             return False
 
-    def _inject_local_gift_ton_owner_row(self, sheet, gift=None):
+    def _inject_local_gift_ton_owner_row(self, sheet, gift=None, key=None, entry=None):
         if sheet is None:
             return False
-        key = None
-        try:
-            key = self._resolve_library_key_from_gift_sheet(sheet)
-        except:
-            key = None
         if not key and gift is not None:
             try:
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
         if not key:
+            try:
+                key = self._resolve_library_key_from_gift_sheet(sheet)
+            except:
+                key = None
+        if not key:
             return False
-        e = self._library_find_entry(key)
+        e = entry if isinstance(entry, dict) else self._library_find_entry(key)
         if not e:
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -19998,7 +19998,7 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Local TON owner row inject error: {ex}")
             return False
 
-    def _apply_local_ton_blockchain_line(self, sheet, gift=None):
+    def _apply_local_ton_blockchain_line(self, sheet, gift=None, key=None, entry=None):
         if sheet is None:
             return False
         def _hide_local_line():
@@ -20070,20 +20070,20 @@ class NftClonerPlugin(BasePlugin):
                             parent_local.removeView(child)
                         except:
                             pass
-        key = None
-        try:
-            key = self._resolve_library_key_from_gift_sheet(sheet)
-        except:
-            key = None
         if not key and gift is not None:
             try:
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
         if not key:
+            try:
+                key = self._resolve_library_key_from_gift_sheet(sheet)
+            except:
+                key = None
+        if not key:
             _hide_local_line()
             return False
-        e = self._library_find_entry(key)
+        e = entry if isinstance(entry, dict) else self._library_find_entry(key)
         if not e:
             _hide_local_line()
             return False
@@ -20434,22 +20434,22 @@ class NftClonerPlugin(BasePlugin):
                 return True
         return False
 
-    def _rebuild_local_ton_identity_rows(self, sheet, gift=None):
+    def _rebuild_local_ton_identity_rows(self, sheet, gift=None, key=None, entry=None):
         if sheet is None:
             return False
-        key = None
-        try:
-            key = self._resolve_library_key_from_gift_sheet(sheet)
-        except:
-            key = None
         if not key and gift is not None:
             try:
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
         if not key:
+            try:
+                key = self._resolve_library_key_from_gift_sheet(sheet)
+            except:
+                key = None
+        if not key:
             return False
-        entry = self._library_find_entry(key)
+        entry = entry if isinstance(entry, dict) else self._library_find_entry(key)
         if not entry:
             return False
         ton_cfg = self._sanitize_ton_display_config(entry.get("ton_display_config", None))
@@ -20595,20 +20595,20 @@ class NftClonerPlugin(BasePlugin):
                 return "Ð’Ñ‹Ð¿ÑƒÑ‰ÐµÐ½ @snoopdogg"
         return None
 
-    def _inject_local_gift_release_badge(self, sheet, gift=None):
+    def _inject_local_gift_release_badge(self, sheet, gift=None, key=None, entry=None):
         if sheet is None:
             return False
-        key = None
-        try:
-            key = self._resolve_library_key_from_gift_sheet(sheet)
-        except:
-            key = None
         if not key and gift is not None:
             try:
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        e = self._library_find_entry(key) if key else None
+        if not key:
+            try:
+                key = self._resolve_library_key_from_gift_sheet(sheet)
+            except:
+                key = None
+        e = entry if isinstance(entry, dict) else (self._library_find_entry(key) if key else None)
 
         text = self._resolve_local_gift_release_badge_text(e, gift=gift)
         if not text:
@@ -23531,23 +23531,48 @@ class GiftSheetLocalValueHook(MethodHook):
                     gift = param.args[0]
             except:
                 gift = None
-            self.plugin._apply_local_ton_blockchain_line(sheet, gift=gift)
-            self.plugin._inject_local_gift_release_badge(sheet, gift=gift)
-            self.plugin._rebuild_local_ton_identity_rows(sheet, gift=gift)
-            self.plugin._inject_local_gift_value_row(sheet, gift=gift)
+            key = None
+            entry = None
             try:
-                def _late_pass(target_sheet=sheet, target_gift=gift, plugin_self=self.plugin):
+                if gift is not None:
+                    key = self.plugin._resolve_library_key_for_gift(gift)
+            except:
+                key = None
+            if not key:
+                try:
+                    key = self.plugin._resolve_library_key_from_gift_sheet(sheet)
+                except:
+                    key = None
+            if key:
+                try:
+                    entry = self.plugin._library_find_entry(key)
+                except:
+                    entry = None
+            if not entry:
+                return
+            try:
+                ton_cfg = self.plugin._sanitize_ton_display_config(entry.get("ton_display_config", None))
+            except:
+                ton_cfg = self.plugin._sanitize_ton_display_config(None)
+            ton_enabled = bool(ton_cfg.get("enabled", False))
+            # Keep the initial sheet open fast: only apply lightweight patches
+            # synchronously and defer expensive row rebuilds until after first draw.
+            self.plugin._inject_local_gift_release_badge(sheet, gift=gift, key=key, entry=entry)
+            self.plugin._inject_local_gift_value_row(sheet, gift=gift, key=key, entry=entry)
+            try:
+                if not ton_enabled:
+                    return
+                def _late_pass(target_sheet=sheet, target_gift=gift, target_key=key, target_entry=entry, plugin_self=self.plugin):
                     try:
-                        plugin_self._apply_local_ton_blockchain_line(target_sheet, gift=target_gift)
+                        plugin_self._apply_local_ton_blockchain_line(target_sheet, gift=target_gift, key=target_key, entry=target_entry)
                     except Exception as inner_e:
                         _log(f"GiftSheet late TON line error: {inner_e}")
                     try:
-                        plugin_self._rebuild_local_ton_identity_rows(target_sheet, gift=target_gift)
+                        plugin_self._rebuild_local_ton_identity_rows(target_sheet, gift=target_gift, key=target_key, entry=target_entry)
                     except Exception as inner_e:
                         _log(f"GiftSheet late TON rows error: {inner_e}")
-                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 120)
-                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 320)
-                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 650)
+                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 90)
+                AndroidUtilities.runOnUIThread(JRunnable(_late_pass), 220)
             except Exception as inner_e:
                 _log(f"GiftSheet late pass schedule error: {inner_e}")
         except Exception as e:
