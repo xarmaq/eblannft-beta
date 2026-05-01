@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.1"
+__version__ = "1.4.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -20056,7 +20056,8 @@ class NftClonerPlugin(BasePlugin):
                         target_view = before_view if before_view is not None else after_view
                 if target_view is None:
                     target_view = before_view if before_view is not None else after_view
-                target_view.setText(self._ui_text("Подарок хранится в блокчейне TON. Посмотреть ›"))
+                ton_line_text = self._ui_text("Подарок хранится в блокчейне TON. Посмотреть ›")
+                target_view.setText(ton_line_text)
                 target_view.setVisibility(View.VISIBLE)
                 try:
                     target_view.setTextColor(Theme.getColor(Theme.key_dialogTextGray2))
@@ -20086,6 +20087,36 @@ class NftClonerPlugin(BasePlugin):
                     target_parent = None
                 try:
                     if parent is not None and isinstance(parent, ViewGroup):
+                        try:
+                            child_count = int(parent.getChildCount() or 0)
+                        except:
+                            child_count = 0
+                        for child_idx in range(child_count - 1, -1, -1):
+                            try:
+                                child = parent.getChildAt(child_idx)
+                            except:
+                                child = None
+                            if child is None or child == target_view:
+                                continue
+                            try:
+                                is_text_view = isinstance(child, TextView)
+                            except:
+                                is_text_view = False
+                            if not is_text_view:
+                                continue
+                            try:
+                                child_text = self._ui_text(self._charsequence_to_plain_text(child.getText())).strip()
+                            except:
+                                child_text = ""
+                            if child_text != ton_line_text:
+                                continue
+                            try:
+                                parent.removeViewAt(child_idx)
+                            except:
+                                try:
+                                    parent.removeView(child)
+                                except:
+                                    pass
                         insert_index = int(parent.indexOfChild(table))
                         if target_parent is not None and isinstance(target_parent, ViewGroup):
                             try:
