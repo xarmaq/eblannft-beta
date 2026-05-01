@@ -1,6 +1,6 @@
 {
-  "version": "1.4.2",
-  "notes": "Deduplicate TON blockchain line in gift sheet, keep saved NFT order after reopening profile, and keep Random action for NFT Number",
+  "version": "1.4.3",
+  "notes": "Hide TON blockchain line for gifts without local TON mode and move the line higher in the gap",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

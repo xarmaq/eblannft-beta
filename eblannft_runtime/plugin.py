@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -20001,6 +20001,75 @@ class NftClonerPlugin(BasePlugin):
     def _apply_local_ton_blockchain_line(self, sheet, gift=None):
         if sheet is None:
             return False
+        def _hide_local_line():
+            try:
+                before_view = get_val(sheet, "beforeTableTextView", None)
+            except:
+                before_view = None
+            try:
+                after_view = get_val(sheet, "afterTableTextView", None)
+            except:
+                after_view = None
+            try:
+                custom_view = get_val(sheet, "_eblannftTonLineView", None)
+            except:
+                custom_view = None
+            try:
+                table_local = get_val(sheet, "tableView", None)
+            except:
+                table_local = None
+            try:
+                parent_local = table_local.getParent() if table_local is not None else None
+            except:
+                parent_local = None
+            line_text = self._ui_text("Подарок хранится в блокчейне TON. Посмотреть ›")
+            if before_view is not None:
+                try:
+                    before_view.setVisibility(View.GONE)
+                except:
+                    pass
+            if after_view is not None:
+                try:
+                    after_view.setText("")
+                    after_view.setVisibility(View.GONE)
+                except:
+                    pass
+            if custom_view is not None:
+                try:
+                    custom_view.setVisibility(View.GONE)
+                except:
+                    pass
+            if parent_local is not None and isinstance(parent_local, ViewGroup):
+                try:
+                    child_count = int(parent_local.getChildCount() or 0)
+                except:
+                    child_count = 0
+                for child_idx in range(child_count - 1, -1, -1):
+                    try:
+                        child = parent_local.getChildAt(child_idx)
+                    except:
+                        child = None
+                    if child is None or child == custom_view:
+                        continue
+                    try:
+                        is_text_view = isinstance(child, TextView)
+                    except:
+                        is_text_view = False
+                    if not is_text_view:
+                        continue
+                    try:
+                        child_text = self._ui_text(self._charsequence_to_plain_text(child.getText())).strip()
+                    except:
+                        child_text = ""
+                    if child_text != line_text:
+                        continue
+                    try:
+                        parent_local.removeViewAt(child_idx)
+                    except:
+                        try:
+                            parent_local.removeView(child)
+                        except:
+                            pass
         key = None
         try:
             key = self._resolve_library_key_from_gift_sheet(sheet)
@@ -20012,9 +20081,11 @@ class NftClonerPlugin(BasePlugin):
             except:
                 key = None
         if not key:
+            _hide_local_line()
             return False
         e = self._library_find_entry(key)
         if not e:
+            _hide_local_line()
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         enabled = bool(ton_cfg.get("enabled", False))
@@ -20031,6 +20102,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             before_view = None
         if after_view is None and before_view is None:
+            _hide_local_line()
             return False
         try:
             if enabled:
@@ -20049,7 +20121,7 @@ class NftClonerPlugin(BasePlugin):
                         target_view = TextView(ctx)
                         target_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
                         target_view.setGravity(Gravity.CENTER_HORIZONTAL)
-                        target_view.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8), AndroidUtilities.dp(12), AndroidUtilities.dp(10))
+                        target_view.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(4), AndroidUtilities.dp(12), AndroidUtilities.dp(14))
                         self._set_field(sheet, "_eblannftTonLineView", target_view)
                     except Exception as inner_ex:
                         _log(f"Local TON line create error: {inner_ex}")
@@ -20147,23 +20219,8 @@ class NftClonerPlugin(BasePlugin):
                         after_view.setVisibility(View.GONE)
                 except:
                     pass
-            else:
-                if before_view is not None:
-                    try:
-                        before_view.setVisibility(View.GONE)
-                    except:
-                        pass
-                try:
-                    custom_view = get_val(sheet, "_eblannftTonLineView", None)
-                except:
-                    custom_view = None
-                if custom_view is not None:
-                    try:
-                        custom_view.setVisibility(View.GONE)
-                    except:
-                        pass
-                if after_view is not None:
-                    after_view.setVisibility(View.GONE)
+                else:
+                    _hide_local_line()
         except Exception as ex:
             _log(f"Local TON blockchain line error: {ex}")
             return False
