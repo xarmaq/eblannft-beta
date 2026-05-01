@@ -50,31 +50,14 @@ import re
 import math
 from urllib.request import Request, urlopen
 
-_android_run_on_ui_thread = run_on_ui_thread
-
-def _voidify_callback(fn):
-    if fn is None:
-        return None
-    def _wrapped(*args, **kwargs):
-        fn(*args, **kwargs)
-        return None
-    return _wrapped
-
-def run_on_ui_thread(fn):
-    wrapped = _voidify_callback(fn)
-    if wrapped is None:
-        return None
-    return _android_run_on_ui_thread(wrapped)
-
 def _gen(java_class, method_name):
     def _run(instance, *java_args):
         try:
-            instance._fn(*java_args)
+            return instance._fn(*java_args)
         except:
             pass
-        return None
     def __init__(self, fn, *args, **kwargs):
-        self._fn = _voidify_callback(fn)
+        self._fn = fn
         super(type(self), self).__init__()
     return type('Proxy_' + java_class.__name__.replace('$', '_'),
                 (dynamic_proxy(java_class),),
@@ -86,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.9"
+__version__ = "1.5.0"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -141,13 +124,6 @@ def _plain_text(value, fallback=""):
 
 def _repair_mojibake_scalar(value, fallback=""):
     text = _plain_text(value, fallback).replace("\ufeff", "")
-    try:
-        has_cyrillic = any(0x0400 <= ord(ch) <= 0x04FF for ch in text)
-        has_mojibake_markers = any(ch in text for ch in ["Ã", "Ð", "Ñ", "â", "€", "™", "œ", "ž", "Ÿ", "¢", "Â"])
-        if has_cyrillic and not has_mojibake_markers:
-            return text
-    except:
-        pass
 
     def _noise_score(src):
         try:
@@ -196,7 +172,7 @@ def _repair_mojibake_scalar(value, fallback=""):
 
     try:
         replacements = {
-            "•": "\u2022",
+            "â€¢": "\u2022",
             "â€º": "\u203a",
             "â„–": "\u2116",
             "â€”": "-",
@@ -633,13 +609,10 @@ def deserialize_fragment_collectible_info(b64_str):
         except:
             pass
 
-def gen(java_class, method_name, return_value=False, default_value=None, allow_return=False):
+def gen(java_class, method_name, return_value=False, default_value=None):
     def _run(instance, *java_args):
         try:
-            result = instance._fn(*java_args)
-            if allow_return:
-                return result
-            return None
+            return instance._fn(*java_args)
         except Exception:
             return default_value
 
@@ -659,7 +632,7 @@ JCallback5 = gen(jclass("org.telegram.messenger.Utilities$Callback5"), "run")
 JRequestDelegate = gen(RequestDelegate, "run")
 JOnClickListener = gen(jclass("android.view.View$OnClickListener"), "onClick")
 JRunnable = gen(jclass("java.lang.Runnable"), "run")
-JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False, allow_return=True)
+JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False)
 JOnGlobalLayoutListener = gen(jclass("android.view.ViewTreeObserver$OnGlobalLayoutListener"), "onGlobalLayout")
 JOnShowListener = gen(jclass("android.content.DialogInterface$OnShowListener"), "onShow")
 JOnDismissListener = gen(jclass("android.content.DialogInterface$OnDismissListener"), "onDismiss")
@@ -671,8 +644,7 @@ try:
 
     def _tw_on(self, s, start, before, count):
         try:
-            self._fn(str(s))
-            return None
+            return self._fn(str(s))
         except:
             return None
 
@@ -934,10 +906,7 @@ class ResaleGridClickHook(MethodHook):
                         uitem = param.args[0]
                         view = param.args[1]
                         pos = param.args[2]
-                        def _dispatch_click():
-                            ctrl._on_click_uitem(uitem, view, pos, 0.0, 0.0)
-
-                        run_on_ui_thread(_dispatch_click)
+                        run_on_ui_thread(lambda: ctrl._on_click_uitem(uitem, view, pos, 0.0, 0.0))
                         return
                 except:
                     continue
@@ -2549,8 +2518,7 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"Welcome bootstrap error: {inner_e}")
 
             try:
-                if not self._is_first_install_welcome_pending():
-                    self._maybe_auto_check_updates(reason="load")
+                self._maybe_auto_check_updates(reason="load")
             except Exception as inner_e:
                 _log(f"Auto update bootstrap error: {inner_e}")
 
@@ -2614,7 +2582,7 @@ class NftClonerPlugin(BasePlugin):
             Text(text=f"NFT Gifts ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {gifts_text}", icon="msg_emoji_gem", on_click=lambda _: self._open_gift_library_menu()),
             Text(text=f"NFT Username ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {username_status}", icon="msg_edit", on_click=lambda _: self._open_nft_username_menu()),
             Text(text=f"NFT Number ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ {number_status}", icon="msg_link", on_click=lambda _: self._open_nft_number_menu()),
-            Text(text=f"Local Rating • {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
+            Text(text=f"Local Rating â€¢ {rating_status}", icon="msg_edit", on_click=lambda _: self._open_local_rating_dialog()),
             Switch(
                 key="eblannft_hide_official_gifts_local",
                 text="Hide official gifts locally",
@@ -2760,7 +2728,7 @@ class NftClonerPlugin(BasePlugin):
         try:
             actions = [
                 (
-                    f"ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² • {self._format_local_rating_points(self._get_local_rating_value())}",
+                    f"ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¾Ñ‡ÐºÐ¾Ð² â€¢ {self._format_local_rating_points(self._get_local_rating_value())}",
                     lambda: self._show_text_input_dialog(
                         'Количество очков рейтинга',
                         str(self._get_local_rating_value() or ""),
@@ -2769,7 +2737,7 @@ class NftClonerPlugin(BasePlugin):
                     ),
                 ),
                 (
-                    f"Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ • {self._get_local_rating_level()}",
+                    f"Ð£Ñ€Ð¾Ð²ÐµÐ½ÑŒ Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ â€¢ {self._get_local_rating_level()}",
                     lambda: self._show_text_input_dialog(
                         'Локальный уровень профиля',
                         str(self._get_local_rating_level()),
@@ -2778,7 +2746,7 @@ class NftClonerPlugin(BasePlugin):
                     ),
                 ),
                 (
-                    f"Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ • {self._format_local_rating_points(self._get_local_rating_next_goal())}",
+                    f"Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð°Ñ Ñ†ÐµÐ»ÑŒ â€¢ {self._format_local_rating_points(self._get_local_rating_next_goal())}",
                     lambda: self._show_text_input_dialog(
                         'Порог следующего уровня',
                         str(self._get_local_rating_next_goal()),
@@ -4103,7 +4071,7 @@ class NftClonerPlugin(BasePlugin):
                 pass
             tv = TextView(ctx)
             try:
-                tv.setText(f"\neblanNFT • v{__version__}")
+                tv.setText(f"\neblanNFT â€¢ v{__version__}")
                 tv.setGravity(Gravity.CENTER)
                 tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 tv.setTextColor(self._theme_color("key_windowBackgroundWhiteGrayText2", 0xFF9A9A9A))
@@ -5255,13 +5223,6 @@ class NftClonerPlugin(BasePlugin):
             text = str(fallback or "")
         try:
             text = text.replace("\ufeff", "")
-        except:
-            pass
-        try:
-            has_cyrillic = any(0x0400 <= ord(ch) <= 0x04FF for ch in text)
-            has_mojibake_markers = any(ch in text for ch in ["Ã", "Ð", "Ñ", "â", "€", "™", "œ", "ž", "Ÿ", "¢", "Â"])
-            if has_cyrillic and not has_mojibake_markers:
-                return text
         except:
             pass
 
@@ -7021,12 +6982,12 @@ class NftClonerPlugin(BasePlugin):
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
             return 'Выкл'
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð·Ð²ÐµÐ·Ð´ • ÑƒÑ€. {self._get_local_rating_level()}"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð·Ð²ÐµÐ·Ð´ â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_rating_label(self):
         if not self._is_local_rating_active():
             return 'Выкл'
-        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð¾Ñ‡ÐºÐ¾Ð² • ÑƒÑ€. {self._get_local_rating_level()}"
+        return f"{self._format_local_rating_points(self._get_local_rating_value())} Ð¾Ñ‡ÐºÐ¾Ð² â€¢ ÑƒÑ€. {self._get_local_rating_level()}"
 
     def _get_local_stars_balance_value(self):
         return self._sanitize_local_stars_balance_value(getattr(self, "local_stars_balance_value", 0))
@@ -12004,10 +11965,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ('Открыть в конструкторе', lambda: self._open_constructor_for_library_key(key)),
-            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(('Удалить из библиотеки', lambda: self._delete_library_gift_key(key)))
         self._show_action_menu(title, actions, negative_text='Назад')
 
@@ -12551,7 +12512,7 @@ class NftClonerPlugin(BasePlugin):
             Divider(),
             Text(
                 text='Профиль',
-                subtext=f"Username • {username_status}   Number • {number_status}",
+                subtext=f"Username â€¢ {username_status}   Number â€¢ {number_status}",
                 icon="msg_edit",
                 create_sub_fragment=self._create_profile_settings_subfragment,
                 link_alias="eblannft_profile_subfragment",
@@ -12565,7 +12526,7 @@ class NftClonerPlugin(BasePlugin):
             ),
             Text(
                 text='Сервис',
-                subtext=f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸ ÐºÑÑˆ   •   Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ {rating_status}",
+                subtext=f"ÐšÐ°Ñ‚Ð°Ð»Ð¾Ð³ Ð¸ ÐºÑÑˆ   â€¢   Ñ€ÐµÐ¹Ñ‚Ð¸Ð½Ð³ {rating_status}",
                 icon="msg_retry",
                 create_sub_fragment=self._create_service_settings_subfragment,
                 link_alias="eblannft_service_subfragment",
@@ -14029,10 +13990,7 @@ class NftClonerPlugin(BasePlugin):
                         doc = plugin_self._pick_sticker_set_document(result, target_indexes)
                         if doc is not None:
                             try:
-                                def _apply_doc_ui():
-                                    plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter)
-
-                                run_on_ui_thread(_apply_doc_ui)
+                                run_on_ui_thread(lambda: plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter))
                             except:
                                 plugin_self._apply_cached_sticker_document(target_view, doc, cache_attr=target_cache_attr, image_filter=target_filter)
                     except Exception as inner_e:
@@ -14238,7 +14196,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(148), AndroidUtilities.dp(148)))
 
             title = TextView(ctx)
-            title.setText(self._ui_text("\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432\neblanNFT!"))
+            title.setText('Добро пожаловать в\neblanNFT!')
             title.setGravity(Gravity.CENTER)
             title.setTextSize(30)
             try:
@@ -14252,7 +14210,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(title, lp_title)
 
             desc = TextView(ctx)
-            desc.setText(self._ui_text("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0439 NFT-\u043f\u043e\u0434\u0430\u0440\u043a\u0438, NFT Username, NFT Number \u0438 \u0432\u0438\u0437\u0443\u0430\u043b \u043f\u0440\u043e\u0444\u0438\u043b\u044f. \u0411\u044b\u0441\u0442\u0440\u043e, \u043f\u043b\u0430\u0432\u043d\u043e \u0438 \u0441 \u0444\u0438\u0440\u043c\u0435\u043d\u043d\u044b\u043c \u0437\u0435\u043b\u0451\u043d\u044b\u043c eblannft \u0432\u0430\u0439\u0431\u043e\u043c."))
+            desc.setText('Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля. Быстро, плавно и с фирменным зелёным eblannft вайбом.')
             desc.setGravity(Gravity.CENTER)
             desc.setTextSize(15)
             try:
@@ -14263,7 +14221,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             open_btn = TextView(ctx)
-            open_btn.setText(self._ui_text("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438"))
+            open_btn.setText('Открыть настройки')
             open_btn.setGravity(Gravity.CENTER)
             open_btn.setTextSize(18)
             try:
@@ -14286,7 +14244,6 @@ class NftClonerPlugin(BasePlugin):
                         sheet.dismiss()
                     except:
                         pass
-                    return None
 
             open_btn.setOnClickListener(_OpenSettings())
 
@@ -14318,13 +14275,13 @@ class NftClonerPlugin(BasePlugin):
             except:
                 sheet.show()
             try:
-                def _after_show_void():
-                    try:
-                        self._style_install_welcome_sheet_surface(sheet)
-                    except:
-                        pass
-                    return None
-                root.postDelayed(JRunnable(_after_show_void), 32)
+                class _AfterShow(dynamic_proxy("java.lang.Runnable")):
+                    def run(self_obj):
+                        try:
+                            self._style_install_welcome_sheet_surface(sheet)
+                        except:
+                            pass
+                root.postDelayed(_AfterShow(), 32)
             except:
                 pass
             try:
@@ -14345,17 +14302,48 @@ class NftClonerPlugin(BasePlugin):
 
     def _maybe_show_first_install_welcome(self):
         try:
-            if not self._is_first_install_welcome_pending():
+            if bool(self.get_setting("eblannft_first_welcome_done", False)):
                 return
-            self.set_setting("eblannft_first_welcome_done", True)
-        except Exception as e:
-            _log(f"install welcome fail: {e}")
+            if bool(getattr(self, "_eblannft_welcome_launching", False)):
+                return
+            self._eblannft_welcome_launching = True
 
-    def _is_first_install_welcome_pending(self):
-        try:
-            return not bool(self.get_setting("eblannft_first_welcome_done", False))
-        except:
-            return True
+            def _worker():
+                try:
+                    target_ctx = None
+                    for _ in range(40):
+                        try:
+                            frag = get_last_fragment()
+                            if frag:
+                                act = frag.getParentActivity()
+                                if act:
+                                    target_ctx = act
+                                    break
+                        except:
+                            pass
+                        try:
+                            time.sleep(0.25)
+                        except:
+                            break
+                    if target_ctx is None:
+                        return
+
+                    def _show():
+                        try:
+                            shown = bool(self._show_install_welcome_sheet(target_ctx))
+                            if shown:
+                                self.set_setting("eblannft_first_welcome_done", True)
+                        except Exception as inner_e:
+                            _log(f"install welcome ui fail: {inner_e}")
+
+                    run_on_ui_thread(_show)
+                finally:
+                    self._eblannft_welcome_launching = False
+
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception as e:
+            self._eblannft_welcome_launching = False
+            _log(f"install welcome fail: {e}")
 
     def _on_about_click(self, _view=None):
         try:
@@ -14720,13 +14708,7 @@ class NftClonerPlugin(BasePlugin):
             except:
                 sheet.show()
             try:
-                def _animate_avatar_shell():
-                    try:
-                        avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start()
-                    except:
-                        pass
-                    return None
-                avatar_shell.post(JRunnable(_animate_avatar_shell))
+                avatar_shell.post(lambda: avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start())
             except:
                 try:
                     avatar_shell.animate().translationY(0.0).alpha(1.0).rotationY(0.0).setDuration(620).start()
@@ -15271,17 +15253,16 @@ class NftClonerPlugin(BasePlugin):
                 cache_attr="_update_popup_sticker_document_cache",
                 image_filter="180_180",
             )
-            def _rebind_update_popup_sticker():
-                self._bind_sticker_from_set(
-                    sticker_view,
-                    EBLANNFT_UPDATE_POPUP_STICKER_SET,
-                    EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
-                    cache_attr="_update_popup_sticker_document_cache",
-                    image_filter="180_180",
-                )
-
             sticker_shell.postDelayed(
-                JRunnable(_rebind_update_popup_sticker),
+                JRunnable(
+                    lambda: self._bind_sticker_from_set(
+                        sticker_view,
+                        EBLANNFT_UPDATE_POPUP_STICKER_SET,
+                        EBLANNFT_UPDATE_POPUP_STICKER_INDEXES,
+                        cache_attr="_update_popup_sticker_document_cache",
+                        image_filter="180_180",
+                    )
+                ),
                 160,
             )
         except:
@@ -15621,11 +15602,7 @@ class NftClonerPlugin(BasePlugin):
                 BulletinHelper.show_info(f"Downloading update {info.get('version', '?')}...")
             except:
                 pass
-            def _show_prepare_state():
-                _apply_progress(0, 1, False, 0, 0, 0, 0)
-                _apply_status("Собираю файлы обновления…", False)
-
-            run_on_ui_thread(_show_prepare_state)
+            run_on_ui_thread(lambda: (_apply_progress(0, 1, False, 0, 0, 0, 0), _apply_status("Собираю файлы обновления…", False)))
 
             def _progress(done_idx, total, path, written, current_bytes=0, total_bytes=0, overall_loaded=0, overall_total=0):
                 short_path = str(path or "").replace("\\", "/").split("/")[-1]
@@ -15643,11 +15620,10 @@ class NftClonerPlugin(BasePlugin):
                     status_text = f"{short_path} • {loaded_text} из {total_text}"
                 else:
                     status_text = f"{short_path or 'update'} • {done_idx}/{total}"
-                def _dispatch_progress_ui(d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, ol=overall_loaded, ot=overall_total, st=status_text):
-                    _apply_progress(d, t, w, cb, tb, ol, ot)
-                    _apply_status(st, False)
-
-                run_on_ui_thread(_dispatch_progress_ui)
+                run_on_ui_thread(
+                    lambda d=done_idx, t=total, w=written, cb=current_bytes, tb=total_bytes, ol=overall_loaded, ot=overall_total, st=status_text:
+                        (_apply_progress(d, t, w, cb, tb, ol, ot), _apply_status(st, False))
+                )
 
             def _worker():
                 try:
@@ -15708,18 +15684,12 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
-        def _handle_download_click(_v=None):
-            _download()
-
-        def _handle_dismiss_click(_v=None):
-            _dismiss()
-
         if OnClickListener:
-            btn.setOnClickListener(OnClickListener(_handle_download_click))
-            close_btn.setOnClickListener(OnClickListener(_handle_dismiss_click))
+            btn.setOnClickListener(OnClickListener(lambda _v: _download()))
+            close_btn.setOnClickListener(OnClickListener(lambda _v: _dismiss()))
         else:
-            btn.setOnClickListener(_handle_download_click)
-            close_btn.setOnClickListener(_handle_dismiss_click)
+            btn.setOnClickListener(lambda _v: _download())
+            close_btn.setOnClickListener(lambda _v: _dismiss())
 
         sheet.setCustomView(self._repair_view_tree_texts(root))
         run_on_ui_thread(sheet.show)
@@ -15728,59 +15698,6 @@ class NftClonerPlugin(BasePlugin):
                 AndroidUtilities.runOnUIThread(JRunnable(_download), 180)
             except:
                 run_on_ui_thread(_download)
-
-    def _apply_update_silently(self, info, source="auto"):
-        if not isinstance(info, dict):
-            return
-        if bool(getattr(self, "_eblannft_update_install_running", False)):
-            return
-        self._eblannft_update_install_running = True
-
-        remote_version = str(info.get("version", "") or "").strip() or "?"
-        pending_apply = bool(self._is_pending_update_ready(info))
-
-        def _ui_info(text, kind="info"):
-            try:
-                if kind == "success":
-                    BulletinHelper.show_success(str(text or ""))
-                elif kind == "error":
-                    BulletinHelper.show_error(str(text or ""))
-                else:
-                    BulletinHelper.show_info(str(text or ""))
-            except:
-                pass
-
-        if pending_apply:
-            def _already_ready():
-                _ui_info(f"Обновление {remote_version} уже скачано. Перезапусти Telegram, чтобы применить его.")
-            run_on_ui_thread(_already_ready)
-            self._eblannft_update_install_running = False
-            return
-
-        def _worker():
-            try:
-                def _start_notice():
-                    if str(source or "") == "manual":
-                        _ui_info(f"Скачиваю обновление {remote_version}…")
-                    else:
-                        _ui_info(f"Найдена новая версия {remote_version}. Скачиваю в фоне…")
-
-                run_on_ui_thread(_start_notice)
-                self._download_and_apply_update(info, progress_cb=None)
-
-                def _done_notice():
-                    _ui_info(f"Обновление {remote_version} скачано. Перезапусти Telegram.", "success")
-
-                run_on_ui_thread(_done_notice)
-            except Exception as e:
-                def _err_notice(err=e):
-                    _ui_info(f"Обновление: {err}", "error")
-
-                run_on_ui_thread(_err_notice)
-            finally:
-                self._eblannft_update_install_running = False
-
-        threading.Thread(target=_worker, daemon=True).start()
 
     def _check_for_plugin_updates(self, show_no_updates=False, auto_download=None):
         if getattr(self, "_eblannft_update_check_running", False):
@@ -15796,32 +15713,17 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 if not info:
                     if show_no_updates:
-                        def _show_repo_error():
-                            BulletinHelper.show_error("GitHub update repo is not configured")
-
-                        run_on_ui_thread(_show_repo_error)
+                        run_on_ui_thread(lambda: BulletinHelper.show_error("GitHub update repo is not configured"))
                     return
                 if not self._is_remote_version_newer(info.get("version", __version__), __version__):
                     if show_no_updates:
-                        def _show_latest_info():
-                            BulletinHelper.show_info(f"You already have the latest version: {__version__}")
-
-                        run_on_ui_thread(_show_latest_info)
+                        run_on_ui_thread(lambda: BulletinHelper.show_info(f"You already have the latest version: {__version__}"))
                     return
                 auto_flag = self._is_auto_update_enabled() if auto_download is None else bool(auto_download)
-                if auto_flag or show_no_updates:
-                    self._apply_update_silently(info, source=("manual" if show_no_updates else "auto"))
-                else:
-                    def _show_found_update():
-                        BulletinHelper.show_info(f"Найдена версия {info.get('version', '?')}. Включи автообновление или обнови плагин вручную.")
-
-                    run_on_ui_thread(_show_found_update)
+                self._schedule_update_popup_show(info, auto_start=auto_flag)
             except Exception as e:
                 if show_no_updates:
-                    def _show_check_error(err=e):
-                        BulletinHelper.show_error(f"Update check: {err}")
-
-                    run_on_ui_thread(_show_check_error)
+                    run_on_ui_thread(lambda: BulletinHelper.show_error(f"Update check: {e}"))
             finally:
                 self._eblannft_update_check_running = False
 
@@ -15861,25 +15763,16 @@ class NftClonerPlugin(BasePlugin):
                     pass
 
     def _create_update_settings_subfragment(self, parent_view=None):
-        def _set_update_check_on_load(value):
-            self.set_setting("eblannft_update_check_on_load", bool(value))
-
-        def _set_auto_update_enabled(value):
-            self.set_setting("eblannft_auto_update_enabled", bool(value))
-
-        def _trigger_manual_update_check(_item=None):
-            self._check_for_plugin_updates(show_no_updates=True, auto_download=False)
-
         return self._normalize_settings_items([
             Divider(text='Настройка автообновления loader/runtime из GitHub репозитория.'),
-            Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} • {self._get_update_branch()}"),
+            Divider(text=f"Ð˜ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {self._get_update_repo()} â€¢ {self._get_update_branch()}"),
             Switch(
                 key="eblannft_update_check_on_load",
                 text='Проверять при запуске',
                 subtext='Фоновая проверка новых версий при загрузке плагина',
                 default=self._is_update_check_on_load_enabled(),
                 icon="msg_retry",
-                on_change=_set_update_check_on_load,
+                on_change=lambda v: self.set_setting("eblannft_update_check_on_load", bool(v)),
             ),
             Switch(
                 key="eblannft_auto_update_enabled",
@@ -15887,13 +15780,13 @@ class NftClonerPlugin(BasePlugin):
                 subtext='Если найдена новая версия, сразу начать загрузку',
                 default=self._is_auto_update_enabled(),
                 icon="msg_download",
-                on_change=_set_auto_update_enabled,
+                on_change=lambda v: self.set_setting("eblannft_auto_update_enabled", bool(v)),
             ),
             Text(
                 text='Проверить сейчас',
                 subtext=f"Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ: {__version__}",
                 icon="msg_download",
-                on_click=_trigger_manual_update_check,
+                on_click=lambda _: self._check_for_plugin_updates(show_no_updates=True, auto_download=False),
             ),
         ])
         return None
@@ -20590,8 +20483,8 @@ class NftClonerPlugin(BasePlugin):
         wallet_text = wallet_value if wallet_value else 'не задан'
         preview_text = self._format_visual_ton_owner_text(e, cfg)
         actions = [
-            (f"ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº • {wallet_text}", lambda: self._show_text_input_dialog('Кошелёк TON', wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
-            (f"ÐŸÑ€ÐµÐ²ÑŒÑŽ • {preview_text}", lambda: None),
+            (f"ÐšÐ¾ÑˆÐµÐ»Ñ‘Ðº â€¢ {wallet_text}", lambda: self._show_text_input_dialog('Кошелёк TON', wallet_value, lambda text: self._save_library_ton_wallet(key, text))),
+            (f"ÐŸÑ€ÐµÐ²ÑŒÑŽ â€¢ {preview_text}", lambda: None),
         ]
         self._show_action_menu('Владелец TON', actions, negative_text='Назад')
         return True
@@ -20638,7 +20531,7 @@ class NftClonerPlugin(BasePlugin):
                 _run()
 
         actions = [
-            (f"Ð¢ÐµÐºÑƒÑ‰ÐµÐµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ • {subtitle}", _open_constructor),
+            (f"Ð¢ÐµÐºÑƒÑ‰ÐµÐµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ â€¢ {subtitle}", _open_constructor),
             ('Изменить в конструкторе', _open_constructor),
         ]
         self._show_action_menu(title, actions, negative_text='Назад', context=context)
@@ -20672,7 +20565,7 @@ class NftClonerPlugin(BasePlugin):
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
         value_text = self._format_local_value_text(cfg, placeholder='не задана')
         if self._is_gift_stars_config_active(stars_cfg):
-            value_text = f"{value_text} • {self._format_gift_stars_text(stars_cfg)}"
+            value_text = f"{value_text} â€¢ {self._format_gift_stars_text(stars_cfg)}"
         button_text = 'подробнее'
 
         def _open_menu():
@@ -24172,10 +24065,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ('Открыть в конструкторе', lambda: self._open_constructor_for_library_key(key)),
-            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ • {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
+            (f"TON Ð±Ð»Ð¾ÐºÑ‡ÐµÐ¹Ð½ â€¢ {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
         if bool(ton_cfg.get("enabled", False)):
-            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON • {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
+            actions.insert(2, (f"Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† TON â€¢ {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(('Удалить из библиотеки', lambda: self._delete_library_gift_key(key)))
         self._show_action_menu(title, actions, negative_text='Назад')
 
@@ -30946,9 +30839,9 @@ def _catalog_grid_update_ui_clean(self):
         except:
             pass
 
-    _set_btn(self.btn_model, f"• {self.filter_model}" if self.filter_model else None, 'Модель')
-    _set_btn(self.btn_pattern, f"• {self.filter_pattern}" if self.filter_pattern else None, 'Узор')
-    _set_btn(self.btn_backdrop, f"• {self.filter_backdrop}" if self.filter_backdrop else None, 'Фон')
+    _set_btn(self.btn_model, f"â€¢ {self.filter_model}" if self.filter_model else None, 'Модель')
+    _set_btn(self.btn_pattern, f"â€¢ {self.filter_pattern}" if self.filter_pattern else None, 'Узор')
+    _set_btn(self.btn_backdrop, f"â€¢ {self.filter_backdrop}" if self.filter_backdrop else None, 'Фон')
 
     clear_container = get_val(self.fragment, "clearFiltersContainer")
     if clear_container:
@@ -31223,4 +31116,23 @@ def _service_settings_subfragment_with_updates(self, parent_view=None):
             subtext=f"v{__version__} • GitHub loader/runtime",
             icon="msg_download",
             create_sub_fragment=self._create_update_settings_subfragment,
-            link
+            link_alias="eblannft_update_subfragment",
+        ),
+        Text(
+            text='Обновить каталог',
+            subtext='Загрузить актуальный список подарков',
+            icon="msg_retry",
+            on_click=lambda _: self._force_load_catalog(),
+        ),
+        Text(
+            text='Очистить кэш',
+            subtext='Сбросить локальные временные данные плагина',
+            icon="msg_delete",
+            on_click=lambda _: self._clear_cache(),
+            red=True,
+        ),
+    ])
+
+
+NftClonerPlugin._create_service_settings_subfragment = _service_settings_subfragment_with_updates
+EblanNftPlugin = NftClonerPlugin

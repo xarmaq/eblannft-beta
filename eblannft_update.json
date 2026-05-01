@@ -1,7 +1,9 @@
 {
-  "version": "1.5.9",
-  "notes": "Fix: wrap avatar_shell.post() lambda in JRunnable to prevent Chaquopy crash; fix mojibake bullet chars throughout settings UI",
+  "version": "1.5.0",
+  "notes": "Polish the update popup, remove the local stars item from local value, and fix broken Cyrillic across the plugin UI",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
-    "eblannft_runtime/
+    "eblannft_runtime/plugin.py"
+  ]
+}
