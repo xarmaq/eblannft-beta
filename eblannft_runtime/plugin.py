@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.9"
+__version__ = "1.5.0"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -113,6 +113,8 @@ EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
 EBLANNFT_WELCOME_STICKER_SET = "HappyHappyPepe"
 EBLANNFT_WELCOME_STICKER_INDEX = 0
+EBLANNFT_STARTUP_STICKER_SET = "konchhr_by_fStikBot"
+EBLANNFT_STARTUP_STICKER_INDEX = 18
 EBLANNFT_LOCAL_ABOUT_AVATAR_FILES = [
     os.path.join("D:\\vcNFT", "about.jpg"),
     os.path.join("D:\\vcNFT", "about.jpeg"),
@@ -959,6 +961,13 @@ class NftClonerPlugin(BasePlugin):
         self._catalog_nft_cache_last_ts = 0.0
         self._catalog_gift_lookup_sig = ""
         self._catalog_gift_lookup = {}
+        self._startup_loading_state = None
+        self._startup_loading_sheet = None
+        self._startup_loading_sheet_token = 0
+        self._startup_loading_status_text = ""
+        self._startup_loading_detail_text = ""
+        self._startup_loading_ratio = 0.0
+        self._startup_sticker_document_cache = None
 
         # Gift (three dots) menu integration on StarGiftSheet.
         self._inside_gift_menu = False
@@ -2219,12 +2228,14 @@ class NftClonerPlugin(BasePlugin):
     def on_plugin_load(self):
         try:
             self._plugin_unloading = False
+            self._startup_loading_begin()
             try:
                 pending_version = self._get_pending_update_version()
                 if pending_version and not self._is_remote_version_newer(pending_version, __version__):
                     self._set_pending_update_version("")
             except:
                 pass
+            self._startup_loading_advance("menu")
             self.add_menu_item(
                 MenuItemData(
                     menu_type=MenuItemType.PROFILE_ACTION_MENU,
@@ -2285,9 +2296,12 @@ class NftClonerPlugin(BasePlugin):
                     condition="false"
                 )
             )
+            self._startup_loading_advance("network")
             self._hook_network()
             self._hook_native_catalog_ui()
+            self._startup_loading_advance("context")
             self._ensure_user_context(force=True)
+            self._startup_loading_advance("hooks", "\u041f\u0440\u043e\u0444\u0438\u043b\u044c, gifts, config, drawer")
             self._hook_wear_user_cache()
             self._hook_updates_wear()
             self._hook_userconfig_wear()
@@ -2300,8 +2314,10 @@ class NftClonerPlugin(BasePlugin):
             self._hook_local_gift_value_ui()
             self._hook_drawer_phone_ui()
             # Custom settings header/footer disabled in runtime-loader build.
+            self._startup_loading_advance("prewarm")
             self._prewarm_self_user_info_cache(force=True)
 
+            self._startup_loading_advance("primer")
             if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active():
                 self._patch_my_cached_user()
                 # Explicit key prevents this startup primer from sharing the
@@ -2309,24 +2325,37 @@ class NftClonerPlugin(BasePlugin):
                 # schedules â€” they used to cancel each other out.
                 self._schedule_cached_user_patch([180, 560], key="initial_load_primer")
 
-            try:
-                self._maybe_show_first_install_welcome()
-            except Exception as inner_e:
-                _log(f"Welcome bootstrap error: {inner_e}")
-
-            try:
-                self._maybe_auto_check_updates(reason="load")
-            except Exception as inner_e:
-                _log(f"Auto update bootstrap error: {inner_e}")
-
+            self._startup_loading_advance("done")
+            def _post_load_ui():
+                try:
+                    self._maybe_show_first_install_welcome()
+                except Exception as inner_e:
+                    _log(f"Welcome bootstrap error: {inner_e}")
+                try:
+                    self._maybe_auto_check_updates(reason="load")
+                except Exception as inner_e:
+                    _log(f"Auto update bootstrap error: {inner_e}")
+            self._startup_loading_finish(
+                failed=False,
+                error_text="\u041f\u043b\u0430\u0433\u0438\u043d \u0437\u0430\u043f\u0443\u0449\u0435\u043d \u0438 \u0433\u043e\u0442\u043e\u0432 \u043a \u0440\u0430\u0431\u043e\u0442\u0435",
+                follow_up=_post_load_ui,
+            )
             _log(f"Plugin loaded v{__version__}")
         except Exception as e:
+            try:
+                self._startup_loading_finish(failed=True, error_text=str(e))
+            except:
+                pass
             _log(f"Load Error: {e}")
 
     def on_plugin_unload(self):
         try:
             self._plugin_unloading = True
             self._ui_batch_tokens = {}
+        except:
+            pass
+        try:
+            self._dismiss_startup_loading_sheet()
         except:
             pass
         try:
@@ -13645,6 +13674,39 @@ class NftClonerPlugin(BasePlugin):
             _log(f"welcome pattern bitmap fail: {e}")
             return None
 
+    def _loading_stage_defs(self):
+        return [
+            ("prepare", 8, "\u0413\u043e\u0442\u043e\u0432\u043b\u044e runtime", "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 loader \u0438 \u0432\u0435\u0440\u0441\u0438\u0438"),
+            ("menu", 14, "\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0430\u044e \u043c\u0435\u043d\u044e", "NFT Gifts, Username \u0438 Number"),
+            ("network", 14, "\u0412\u043a\u043b\u044e\u0447\u0430\u044e \u0441\u0435\u0442\u0435\u0432\u044b\u0435 \u0445\u0443\u043a\u0438", "\u041f\u0435\u0440\u0435\u0445\u0432\u0430\u0442 \u0438 \u043a\u0430\u0442\u0430\u043b\u043e\u0433"),
+            ("context", 10, "\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u0443\u044e \u043a\u043e\u043d\u0442\u0435\u043a\u0441\u0442", "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u0438 user cache"),
+            ("hooks", 28, "\u0421\u043e\u0431\u0438\u0440\u0430\u044e \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044e", "\u041f\u0440\u043e\u0444\u0438\u043b\u044c, drawer, gifts, config"),
+            ("prewarm", 10, "\u041f\u0440\u043e\u0433\u0440\u0435\u0432\u0430\u044e \u0434\u0430\u043d\u043d\u044b\u0435", "\u041a\u044d\u0448 \u0438 self info"),
+            ("primer", 8, "\u041f\u0440\u0438\u043c\u0435\u043d\u044f\u044e \u043e\u0432\u0435\u0440\u0440\u0430\u0439\u0434\u044b", "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0435 NFT \u0438 rating"),
+            ("done", 8, "\u0424\u0438\u043d\u0438\u0448\u043d\u0430\u044f \u0441\u0431\u043e\u0440\u043a\u0430", "\u0417\u0430\u043f\u0443\u0441\u043a \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430"),
+        ]
+
+    def _resolve_loading_ratio(self, stage_key):
+        defs = list(self._loading_stage_defs() or [])
+        total = float(sum(max(0, int(weight or 0)) for _key, weight, _title, _detail in defs) or 1.0)
+        done = 0.0
+        found = False
+        for key, weight, _title, _detail in defs:
+            weight_f = float(max(0, int(weight or 0)))
+            done += weight_f
+            if key == stage_key:
+                found = True
+                break
+        if not found:
+            return 0.0
+        return max(0.02, min(1.0, done / total))
+
+    def _resolve_loading_stage_meta(self, stage_key):
+        for key, _weight, title, detail in self._loading_stage_defs():
+            if key == stage_key:
+                return title, detail, self._resolve_loading_ratio(stage_key)
+        return "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430", "", 0.0
+
     def _enable_welcome_sticker_animation(self, sticker_view):
         try:
             receiver = sticker_view.getImageReceiver() if sticker_view is not None and hasattr(sticker_view, "getImageReceiver") else None
@@ -13668,33 +13730,42 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-    def _apply_welcome_sticker_document(self, sticker_view, document):
+    def _apply_pack_sticker_document(self, sticker_view, document, cache_attr=None):
         try:
             if sticker_view is None or document is None or not hasattr(sticker_view, "setImage"):
                 return False
             image_location = ImageLocation.getForDocument(document)
             if image_location is None:
                 return False
-            sticker_view.setImage(image_location, "160_160", None, 0, document)
+            sticker_view.setImage(image_location, "200_200", None, 0, document)
             self._enable_welcome_sticker_animation(sticker_view)
-            try:
-                self._welcome_sticker_document_cache = document
-            except:
-                pass
+            if cache_attr:
+                try:
+                    setattr(self, str(cache_attr), document)
+                except:
+                    pass
             return True
         except Exception as e:
-            _log(f"apply welcome sticker fail: {e}")
+            _log(f"apply pack sticker fail: {e}")
             return False
 
-    def _bind_welcome_pepe_sticker(self, sticker_view):
+    def _apply_welcome_sticker_document(self, sticker_view, document):
+        return self._apply_pack_sticker_document(sticker_view, document, "_welcome_sticker_document_cache")
+
+    def _bind_sticker_from_pack(self, sticker_view, short_name, sticker_index, cache_attr=None):
         if sticker_view is None:
             return False
         try:
-            cached = getattr(self, "_welcome_sticker_document_cache", None)
+            idx = max(0, int(sticker_index or 0))
         except:
-            cached = None
-        if cached is not None and self._apply_welcome_sticker_document(sticker_view, cached):
-            return True
+            idx = 0
+        if cache_attr:
+            try:
+                cached = getattr(self, str(cache_attr), None)
+            except:
+                cached = None
+            if cached is not None and self._apply_pack_sticker_document(sticker_view, cached, cache_attr):
+                return True
         try:
             account = int(UserConfig.selectedAccount)
         except:
@@ -13706,41 +13777,57 @@ class NftClonerPlugin(BasePlugin):
         if media_controller is None:
             return False
         try:
-            sticker_set = media_controller.getStickerSetByName(EBLANNFT_WELCOME_STICKER_SET)
+            sticker_set = media_controller.getStickerSetByName(short_name)
         except:
             sticker_set = None
         try:
-            if sticker_set and sticker_set.documents and sticker_set.documents.size() > EBLANNFT_WELCOME_STICKER_INDEX:
-                doc = sticker_set.documents.get(EBLANNFT_WELCOME_STICKER_INDEX)
-                if self._apply_welcome_sticker_document(sticker_view, doc):
+            if sticker_set and sticker_set.documents and sticker_set.documents.size() > idx:
+                doc = sticker_set.documents.get(idx)
+                if self._apply_pack_sticker_document(sticker_view, doc, cache_attr):
                     return True
         except:
             pass
         try:
             input_set = TLRPC.TL_inputStickerSetShortName()
-            input_set.short_name = EBLANNFT_WELCOME_STICKER_SET
+            input_set.short_name = short_name
             plugin_self = self
             target_view = sticker_view
 
             class _StickerSetCallback(dynamic_proxy(jclass("org.telegram.messenger.Utilities$Callback"))):
                 def run(self_obj, result):
                     try:
-                        if result and result.documents and result.documents.size() > EBLANNFT_WELCOME_STICKER_INDEX:
-                            doc = result.documents.get(EBLANNFT_WELCOME_STICKER_INDEX)
+                        if result and result.documents and result.documents.size() > idx:
+                            doc = result.documents.get(idx)
                             try:
-                                run_on_ui_thread(lambda: plugin_self._apply_welcome_sticker_document(target_view, doc))
+                                run_on_ui_thread(lambda: plugin_self._apply_pack_sticker_document(target_view, doc, cache_attr))
                             except:
-                                plugin_self._apply_welcome_sticker_document(target_view, doc)
+                                plugin_self._apply_pack_sticker_document(target_view, doc, cache_attr)
                     except Exception as inner_e:
                         try:
-                            _log(f"welcome sticker callback fail: {inner_e}")
+                            _log(f"sticker callback fail: {inner_e}")
                         except:
                             pass
 
             media_controller.getStickerSet(input_set, None, False, _StickerSetCallback())
         except Exception as e:
-            _log(f"bind welcome sticker fail: {e}")
+            _log(f"bind pack sticker fail: {e}")
         return False
+
+    def _bind_welcome_pepe_sticker(self, sticker_view):
+        return self._bind_sticker_from_pack(
+            sticker_view,
+            EBLANNFT_WELCOME_STICKER_SET,
+            EBLANNFT_WELCOME_STICKER_INDEX,
+            "_welcome_sticker_document_cache",
+        )
+
+    def _bind_startup_sticker(self, sticker_view):
+        return self._bind_sticker_from_pack(
+            sticker_view,
+            EBLANNFT_STARTUP_STICKER_SET,
+            EBLANNFT_STARTUP_STICKER_INDEX,
+            "_startup_sticker_document_cache",
+        )
 
     def _style_install_welcome_sheet_surface(self, sheet):
         try:
@@ -13796,6 +13883,391 @@ class NftClonerPlugin(BasePlugin):
                 pass
         except Exception as e:
             _log(f"welcome sheet style fail: {e}")
+
+    def _startup_loading_begin(self):
+        try:
+            self._startup_loading_sheet_token = int(getattr(self, "_startup_loading_sheet_token", 0) or 0) + 1
+        except:
+            self._startup_loading_sheet_token = 1
+        title, detail, ratio = self._resolve_loading_stage_meta("prepare")
+        self._startup_loading_ratio = float(ratio)
+        self._startup_loading_status_text = str(title or "")
+        self._startup_loading_detail_text = str(detail or "")
+        self._startup_loading_state = {
+            "token": int(self._startup_loading_sheet_token),
+            "ratio": float(ratio),
+            "title": str(title or ""),
+            "detail": str(detail or ""),
+            "shown": False,
+            "closed": False,
+        }
+        try:
+            AndroidUtilities.runOnUIThread(JRunnable(lambda: self._show_startup_loading_sheet(int(self._startup_loading_sheet_token))), 24)
+        except:
+            pass
+
+    def _startup_loading_advance(self, stage_key, detail_override=None):
+        title, detail, ratio = self._resolve_loading_stage_meta(stage_key)
+        if detail_override is not None:
+            detail = str(detail_override or "")
+        self._startup_loading_ratio = float(ratio)
+        self._startup_loading_status_text = str(title or "")
+        self._startup_loading_detail_text = str(detail or "")
+        state = getattr(self, "_startup_loading_state", None)
+        if isinstance(state, dict):
+            state["ratio"] = float(ratio)
+            state["title"] = str(title or "")
+            state["detail"] = str(detail or "")
+        try:
+            AndroidUtilities.runOnUIThread(JRunnable(lambda: self._apply_startup_loading_ui()))
+        except:
+            pass
+
+    def _startup_loading_finish(self, failed=False, error_text=None, follow_up=None):
+        state = getattr(self, "_startup_loading_state", None)
+        if not isinstance(state, dict):
+            if callable(follow_up):
+                try:
+                    follow_up()
+                except:
+                    pass
+            return
+        if failed:
+            state["ratio"] = 1.0
+            state["title"] = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0443\u0441\u043a\u0430"
+            state["detail"] = str(error_text or "\u041f\u043b\u0430\u0433\u0438\u043d \u043d\u0435 \u0441\u043c\u043e\u0433 \u0438\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c\u0441\u044f")
+        else:
+            state["ratio"] = 1.0
+            state["title"] = "\u0413\u043e\u0442\u043e\u0432\u043e"
+            state["detail"] = str(error_text or "\u041f\u043b\u0430\u0433\u0438\u043d \u0437\u0430\u043f\u0443\u0449\u0435\u043d \u0438 \u0433\u043e\u0442\u043e\u0432 \u043a \u0440\u0430\u0431\u043e\u0442\u0435")
+        self._startup_loading_ratio = float(state.get("ratio", 1.0) or 1.0)
+        self._startup_loading_status_text = str(state.get("title", "") or "")
+        self._startup_loading_detail_text = str(state.get("detail", "") or "")
+
+        def _close():
+            try:
+                self._apply_startup_loading_ui()
+            except:
+                pass
+            try:
+                self._dismiss_startup_loading_sheet()
+            except:
+                pass
+            if callable(follow_up):
+                try:
+                    follow_up()
+                except Exception as inner_e:
+                    _log(f"startup loading follow-up fail: {inner_e}")
+
+        try:
+            AndroidUtilities.runOnUIThread(JRunnable(_close), 360 if not failed else 520)
+        except:
+            _close()
+
+    def _dismiss_startup_loading_sheet(self):
+        try:
+            state = getattr(self, "_startup_loading_state", None)
+            if isinstance(state, dict):
+                state["closed"] = True
+        except:
+            pass
+        sheet = getattr(self, "_startup_loading_sheet", None)
+        self._startup_loading_sheet = None
+        if sheet is not None:
+            try:
+                sheet.dismiss()
+            except:
+                pass
+        self._startup_loading_state = None
+
+    def _apply_startup_loading_ui(self):
+        state = getattr(self, "_startup_loading_state", None)
+        if not isinstance(state, dict) or bool(state.get("closed", False)):
+            return
+        refs = state.get("refs", {}) if isinstance(state.get("refs", {}), dict) else {}
+        title_view = refs.get("title")
+        detail_view = refs.get("detail")
+        track_fill = refs.get("fill")
+        percent_view = refs.get("percent")
+        stage_view = refs.get("stage")
+        try:
+            ratio = max(0.0, min(1.0, float(state.get("ratio", 0.0) or 0.0)))
+        except:
+            ratio = 0.0
+        pct = int(round(ratio * 100.0))
+        try:
+            if title_view is not None:
+                title_view.setText(str(state.get("title", "") or ""))
+        except:
+            pass
+        try:
+            if detail_view is not None:
+                detail_view.setText(str(state.get("detail", "") or ""))
+        except:
+            pass
+        try:
+            if percent_view is not None:
+                percent_view.setText(f"{pct}%")
+        except:
+            pass
+        try:
+            if stage_view is not None:
+                stage_view.setText(f"\u0418\u043d\u0438\u0446\u0438\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u2022 {pct}%")
+        except:
+            pass
+        try:
+            track_w = int(state.get("track_width", 0) or 0)
+        except:
+            track_w = 0
+        if track_fill is not None and track_w > 0:
+            try:
+                target_w = max(AndroidUtilities.dp(18), int(round(float(track_w) * ratio)))
+                lp = track_fill.getLayoutParams()
+                if lp is not None and getattr(lp, "width", 0) != target_w:
+                    lp.width = target_w
+                    track_fill.setLayoutParams(lp)
+            except:
+                pass
+
+    def _show_startup_loading_sheet(self, token):
+        try:
+            state = getattr(self, "_startup_loading_state", None)
+            if not isinstance(state, dict) or int(state.get("token", 0) or 0) != int(token or 0) or bool(state.get("closed", False)):
+                return False
+            if bool(state.get("shown", False)):
+                self._apply_startup_loading_ui()
+                return True
+            frag = get_last_fragment()
+            ctx = frag.getParentActivity() if frag and frag.getParentActivity() else None
+            if ctx is None:
+                return False
+
+            sheet = BottomSheet(ctx, False)
+            try:
+                sheet.setApplyTopPadding(False)
+                sheet.setApplyBottomPadding(False)
+                sheet.setBackgroundColor(0x00000000)
+            except:
+                pass
+
+            root = FrameLayout(ctx)
+            try:
+                root.setBackgroundColor(0x00000000)
+            except:
+                pass
+
+            hero = FrameLayout(ctx)
+            hero_h = AndroidUtilities.dp(548)
+            hero_w = AndroidUtilities.dp(392)
+            hero_radius = float(AndroidUtilities.dp(30))
+            try:
+                bg = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    [Color.parseColor("#0C1512"), Color.parseColor("#0A100E")]
+                )
+                bg.setCornerRadius(hero_radius)
+                bg.setStroke(AndroidUtilities.dp(1), Color.parseColor("#243A31"))
+                hero.setBackground(bg)
+                hero.setClipToOutline(True)
+                hero.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+            except:
+                pass
+
+            try:
+                pattern = ImageView(ctx)
+                pattern.setScaleType(ImageView.ScaleType.CENTER_CROP)
+                bmp = self._build_install_welcome_pattern_bitmap(hero_w, hero_h)
+                if bmp is not None:
+                    pattern.setImageBitmap(bmp)
+                    pattern.setAlpha(0.12)
+                hero.addView(pattern, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
+            except:
+                pass
+
+            shell = LinearLayout(ctx)
+            shell.setOrientation(LinearLayout.VERTICAL)
+            shell.setGravity(Gravity.CENTER_HORIZONTAL)
+            try:
+                shell.setPadding(AndroidUtilities.dp(28), AndroidUtilities.dp(26), AndroidUtilities.dp(28), AndroidUtilities.dp(28))
+            except:
+                pass
+
+            avatar_shell = FrameLayout(ctx)
+            try:
+                av_bg = GradientDrawable()
+                av_bg.setColor(Color.parseColor("#102019"))
+                av_bg.setCornerRadius(float(AndroidUtilities.dp(26)))
+                avatar_shell.setBackground(av_bg)
+                avatar_shell.setClipToOutline(True)
+                avatar_shell.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+            except:
+                pass
+
+            sticker = None
+            try:
+                sticker = BackupImageView(ctx)
+                sticker.setRoundRadius(AndroidUtilities.dp(26))
+            except:
+                sticker = ImageView(ctx)
+                try:
+                    sticker.setScaleType(ImageView.ScaleType.CENTER_CROP)
+                except:
+                    pass
+            try:
+                self._bind_startup_sticker(sticker)
+            except:
+                pass
+            avatar_shell.addView(sticker, FrameLayout.LayoutParams(AndroidUtilities.dp(188), AndroidUtilities.dp(188), Gravity.CENTER))
+            shell.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(188), AndroidUtilities.dp(188)))
+
+            eyebrow = TextView(ctx)
+            try:
+                eyebrow.setText("eblanNFT")
+                eyebrow.setTextColor(Color.parseColor("#8FB3A4"))
+                eyebrow.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5)
+                eyebrow.setGravity(Gravity.CENTER)
+            except:
+                pass
+            lp_eyebrow = LinearLayout.LayoutParams(-2, -2)
+            lp_eyebrow.topMargin = AndroidUtilities.dp(22)
+            shell.addView(eyebrow, lp_eyebrow)
+
+            title = TextView(ctx)
+            try:
+                title.setText("\u0417\u0430\u043f\u0443\u0441\u043a\u0430\u044e eblanNFT")
+                title.setTextColor(0xFFFFFFFF)
+                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 28.0)
+                title.setGravity(Gravity.CENTER)
+                title.setLineSpacing(0.0, 1.0)
+                try:
+                    title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except:
+                    pass
+            except:
+                pass
+            lp_title = LinearLayout.LayoutParams(-1, -2)
+            lp_title.topMargin = AndroidUtilities.dp(10)
+            shell.addView(title, lp_title)
+
+            detail = TextView(ctx)
+            try:
+                detail.setTextColor(Color.parseColor("#C2D2CB"))
+                detail.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
+                detail.setGravity(Gravity.CENTER)
+            except:
+                pass
+            lp_detail = LinearLayout.LayoutParams(-1, -2)
+            lp_detail.topMargin = AndroidUtilities.dp(10)
+            shell.addView(detail, lp_detail)
+
+            stage = TextView(ctx)
+            try:
+                stage.setTextColor(Color.parseColor("#81A595"))
+                stage.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5)
+                stage.setGravity(Gravity.CENTER)
+            except:
+                pass
+            lp_stage = LinearLayout.LayoutParams(-1, -2)
+            lp_stage.topMargin = AndroidUtilities.dp(18)
+            shell.addView(stage, lp_stage)
+
+            track_wrap = FrameLayout(ctx)
+            track_w = AndroidUtilities.dp(302)
+            track_h = AndroidUtilities.dp(18)
+            try:
+                track_wrap.setLayoutParams(LinearLayout.LayoutParams(track_w, track_h))
+            except:
+                pass
+            track_bg = View(ctx)
+            track_fill = View(ctx)
+            try:
+                track_bg_draw = GradientDrawable()
+                track_bg_draw.setColor(Color.parseColor("#16241E"))
+                track_bg_draw.setCornerRadius(float(track_h) / 2.0)
+                track_bg.setBackground(track_bg_draw)
+            except:
+                pass
+            try:
+                fill_draw = GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    [Color.parseColor("#82F7A5"), Color.parseColor("#D5FF98")]
+                )
+                fill_draw.setCornerRadius(float(track_h) / 2.0)
+                track_fill.setBackground(fill_draw)
+            except:
+                pass
+            track_wrap.addView(track_bg, FrameLayout.LayoutParams(track_w, track_h, Gravity.LEFT | Gravity.CENTER_VERTICAL))
+            track_wrap.addView(track_fill, FrameLayout.LayoutParams(AndroidUtilities.dp(18), track_h, Gravity.LEFT | Gravity.CENTER_VERTICAL))
+            lp_track = LinearLayout.LayoutParams(track_w, track_h)
+            lp_track.topMargin = AndroidUtilities.dp(16)
+            shell.addView(track_wrap, lp_track)
+
+            percent = TextView(ctx)
+            try:
+                percent.setTextColor(Color.parseColor("#08110C"))
+                percent.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.5)
+                percent.setGravity(Gravity.CENTER)
+                try:
+                    percent.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except:
+                    pass
+                chip_bg = GradientDrawable()
+                chip_bg.setColor(Color.parseColor("#DFFFE8"))
+                chip_bg.setCornerRadius(float(AndroidUtilities.dp(14)))
+                percent.setBackground(chip_bg)
+                percent.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(7), AndroidUtilities.dp(12), AndroidUtilities.dp(7))
+            except:
+                pass
+            lp_percent = LinearLayout.LayoutParams(-2, -2)
+            lp_percent.topMargin = AndroidUtilities.dp(16)
+            shell.addView(percent, lp_percent)
+
+            hint = TextView(ctx)
+            try:
+                hint.setText("\u0418\u043d\u0434\u0438\u043a\u0430\u0442\u043e\u0440 \u0438\u0434\u0451\u0442 \u043f\u043e \u0440\u0435\u0430\u043b\u044c\u043d\u044b\u043c \u044d\u0442\u0430\u043f\u0430\u043c \u0437\u0430\u043f\u0443\u0441\u043a\u0430")
+                hint.setTextColor(Color.parseColor("#6F8B80"))
+                hint.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.5)
+                hint.setGravity(Gravity.CENTER)
+            except:
+                pass
+            lp_hint = LinearLayout.LayoutParams(-1, -2)
+            lp_hint.topMargin = AndroidUtilities.dp(14)
+            shell.addView(hint, lp_hint)
+
+            hero.addView(shell, FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL))
+            root.addView(hero, FrameLayout.LayoutParams(hero_w, hero_h, Gravity.CENTER))
+
+            state["refs"] = {
+                "title": title,
+                "detail": detail,
+                "fill": track_fill,
+                "percent": percent,
+                "stage": stage,
+            }
+            state["track_width"] = int(track_w)
+            state["shown"] = True
+            self._startup_loading_sheet = sheet
+            sheet.setCustomView(root)
+            self._style_install_welcome_sheet_surface(sheet)
+            sheet.show()
+            try:
+                hero.setAlpha(0.0)
+                hero.setScaleX(0.96)
+                hero.setScaleY(0.96)
+                hero.setTranslationY(float(AndroidUtilities.dp(14)))
+                hero.animate().alpha(1.0).scaleX(1.0).scaleY(1.0).translationY(0.0).setDuration(280).start()
+            except:
+                pass
+            try:
+                if hasattr(sticker, "postDelayed"):
+                    sticker.postDelayed(JRunnable(lambda: self._bind_startup_sticker(sticker)), 120)
+            except:
+                pass
+            self._apply_startup_loading_ui()
+            return True
+        except Exception as e:
+            _log(f"startup loading show fail: {e}")
+            return False
 
     def _show_install_welcome_sheet(self, ctx_override=None):
         try:
