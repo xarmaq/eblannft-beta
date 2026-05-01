@@ -86,7 +86,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.6"
+__version__ = "1.5.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -14318,14 +14318,13 @@ class NftClonerPlugin(BasePlugin):
             except:
                 sheet.show()
             try:
-                class _AfterShow(dynamic_proxy("java.lang.Runnable")):
-                    def run(self_obj):
-                        try:
-                            self._style_install_welcome_sheet_surface(sheet)
-                        except:
-                            pass
-                        return None
-                root.postDelayed(_AfterShow(), 32)
+                def _after_show_void():
+                    try:
+                        self._style_install_welcome_sheet_surface(sheet)
+                    except:
+                        pass
+                    return None
+                root.postDelayed(JRunnable(_after_show_void), 32)
             except:
                 pass
             try:

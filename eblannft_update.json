@@ -1,6 +1,6 @@
 {
-  "version": "1.5.6",
-  "notes": "Fix Chaquopy update-check crash by forcing Runnable and UI callbacks to return void, and keep safe auto-update behavior on startup",
+  "version": "1.5.7",
+  "notes": "Fix the remaining welcome-sheet Runnable crash by replacing the raw postDelayed proxy with the safe JRunnable wrapper",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
