@@ -1,6 +1,6 @@
 {
-  "version": "1.5.4",
-  "notes": "Fix first-install welcome startup by skipping auto-update on the initial launch and harden the welcome sheet callbacks and text rendering",
+  "version": "1.5.5",
+  "notes": "Wrap UI-thread callbacks and JRunnable handlers to force void returns, and stop mojibake repair from touching already-correct Cyrillic",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

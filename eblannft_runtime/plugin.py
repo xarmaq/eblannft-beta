@@ -50,14 +50,31 @@ import re
 import math
 from urllib.request import Request, urlopen
 
+_android_run_on_ui_thread = run_on_ui_thread
+
+def _voidify_callback(fn):
+    if fn is None:
+        return None
+    def _wrapped(*args, **kwargs):
+        fn(*args, **kwargs)
+        return None
+    return _wrapped
+
+def run_on_ui_thread(fn):
+    wrapped = _voidify_callback(fn)
+    if wrapped is None:
+        return None
+    return _android_run_on_ui_thread(wrapped)
+
 def _gen(java_class, method_name):
     def _run(instance, *java_args):
         try:
-            return instance._fn(*java_args)
+            instance._fn(*java_args)
         except:
             pass
+        return None
     def __init__(self, fn, *args, **kwargs):
-        self._fn = fn
+        self._fn = _voidify_callback(fn)
         super(type(self), self).__init__()
     return type('Proxy_' + java_class.__name__.replace('$', '_'),
                 (dynamic_proxy(java_class),),
@@ -69,7 +86,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.4"
+__version__ = "1.5.5"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -124,6 +141,13 @@ def _plain_text(value, fallback=""):
 
 def _repair_mojibake_scalar(value, fallback=""):
     text = _plain_text(value, fallback).replace("\ufeff", "")
+    try:
+        has_cyrillic = any(0x0400 <= ord(ch) <= 0x04FF for ch in text)
+        has_mojibake_markers = any(ch in text for ch in ["Ã", "Ð", "Ñ", "â", "€", "™", "œ", "ž", "Ÿ", "¢", "Â"])
+        if has_cyrillic and not has_mojibake_markers:
+            return text
+    except:
+        pass
 
     def _noise_score(src):
         try:
@@ -5227,6 +5251,13 @@ class NftClonerPlugin(BasePlugin):
             text = str(fallback or "")
         try:
             text = text.replace("\ufeff", "")
+        except:
+            pass
+        try:
+            has_cyrillic = any(0x0400 <= ord(ch) <= 0x04FF for ch in text)
+            has_mojibake_markers = any(ch in text for ch in ["Ã", "Ð", "Ñ", "â", "€", "™", "œ", "ž", "Ÿ", "¢", "Â"])
+            if has_cyrillic and not has_mojibake_markers:
+                return text
         except:
             pass
 
