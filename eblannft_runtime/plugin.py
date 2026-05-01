@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Ð­Ñ‚Ð¾ Ñ€ÐµÐ»Ð¸Ð· eblanNFT. \n\nÐŸÐ¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ NFT Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾ Ð² Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ, Ð¼ÐµÐ½ÑÑ‚ÑŒ ÑÐ²Ð¾Ð¹ Ð½Ð¾Ð¼ÐµÑ€ Ñ‚ÐµÐ»ÐµÑ„Ð¾Ð½Ð°, ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð»ÐµÐºÑ†Ð¸Ð½Ð½Ñ‹Ð¹ ÑŽÐ·ÐµÑ€Ð½ÐµÐ¹Ð¼Ñ‹. Ð˜Ð¼ÐµÐµÑ‚ ÑÐ¸ÑÑ‚ÐµÐ¼Ñƒ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð¾Ð². \n\nâ€¢ ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð²Ñ‹Ñ…Ð¾Ð´ÑÑ‚ Ð² [vc Ð´Ð¾Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.7"
+__version__ = "1.4.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -13917,7 +13917,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(148), AndroidUtilities.dp(148)))
 
             title = TextView(ctx)
-            title.setText("Ð”Ð¾Ð±Ñ€Ð¾ Ð¿Ð¾Ð¶Ð°Ð»Ð¾Ð²Ð°Ñ‚ÑŒ Ð²\neblanNFT!")
+            title.setText("\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432\neblanNFT!")
             title.setGravity(Gravity.CENTER)
             title.setTextSize(30)
             try:
@@ -13931,7 +13931,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(title, lp_title)
 
             desc = TextView(ctx)
-            desc.setText("Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾ Ð½Ð°ÑÑ‚Ñ€Ð°Ð¸Ð²Ð°Ð¹ NFT-Ð¿Ð¾Ð´Ð°Ñ€ÐºÐ¸, NFT Username, NFT Number Ð¸ Ð²Ð¸Ð·ÑƒÐ°Ð» Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ. Ð‘Ñ‹ÑÑ‚Ñ€Ð¾, Ð¿Ð»Ð°Ð²Ð½Ð¾ Ð¸ Ñ Ñ„Ð¸Ñ€Ð¼ÐµÐ½Ð½Ñ‹Ð¼ Ð·ÐµÐ»Ñ‘Ð½Ñ‹Ð¼ eblannft Ð²Ð°Ð¹Ð±Ð¾Ð¼.")
+            desc.setText("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0439 NFT-\u043f\u043e\u0434\u0430\u0440\u043a\u0438, NFT Username, NFT Number \u0438 \u0432\u0438\u0437\u0443\u0430\u043b \u043f\u0440\u043e\u0444\u0438\u043b\u044f. \u0411\u044b\u0441\u0442\u0440\u043e, \u043f\u043b\u0430\u0432\u043d\u043e \u0438 \u0441 \u0444\u0438\u0440\u043c\u0435\u043d\u043d\u044b\u043c \u0437\u0435\u043b\u0451\u043d\u044b\u043c eblannft \u0432\u0430\u0439\u0431\u043e\u043c.")
             desc.setGravity(Gravity.CENTER)
             desc.setTextSize(15)
             try:
@@ -13942,7 +13942,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             open_btn = TextView(ctx)
-            open_btn.setText("ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸")
+            open_btn.setText("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438")
             open_btn.setGravity(Gravity.CENTER)
             open_btn.setTextSize(18)
             try:

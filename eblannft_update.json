@@ -1,6 +1,6 @@
 {
-  "version": "1.4.7",
-  "notes": "Fix embedded runtime loading after clean installs and add Random action directly to NFT Number input/settings",
+  "version": "1.4.8",
+  "notes": "Fix broken Cyrillic on the first-install welcome page and keep embedded runtime/update flow aligned",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
