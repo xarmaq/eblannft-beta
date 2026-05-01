@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = 'Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)'
 __author__ = "@xarmaq"
-__version__ = "1.5.3"
+__version__ = "1.5.4"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -2521,7 +2521,8 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"Welcome bootstrap error: {inner_e}")
 
             try:
-                self._maybe_auto_check_updates(reason="load")
+                if not self._is_first_install_welcome_pending():
+                    self._maybe_auto_check_updates(reason="load")
             except Exception as inner_e:
                 _log(f"Auto update bootstrap error: {inner_e}")
 
@@ -14202,7 +14203,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(avatar_shell, LinearLayout.LayoutParams(AndroidUtilities.dp(148), AndroidUtilities.dp(148)))
 
             title = TextView(ctx)
-            title.setText('Добро пожаловать в\neblanNFT!')
+            title.setText(self._ui_text("\u0414\u043e\u0431\u0440\u043e \u043f\u043e\u0436\u0430\u043b\u043e\u0432\u0430\u0442\u044c \u0432\neblanNFT!"))
             title.setGravity(Gravity.CENTER)
             title.setTextSize(30)
             try:
@@ -14216,7 +14217,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(title, lp_title)
 
             desc = TextView(ctx)
-            desc.setText('Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля. Быстро, плавно и с фирменным зелёным eblannft вайбом.')
+            desc.setText(self._ui_text("\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u0439 NFT-\u043f\u043e\u0434\u0430\u0440\u043a\u0438, NFT Username, NFT Number \u0438 \u0432\u0438\u0437\u0443\u0430\u043b \u043f\u0440\u043e\u0444\u0438\u043b\u044f. \u0411\u044b\u0441\u0442\u0440\u043e, \u043f\u043b\u0430\u0432\u043d\u043e \u0438 \u0441 \u0444\u0438\u0440\u043c\u0435\u043d\u043d\u044b\u043c \u0437\u0435\u043b\u0451\u043d\u044b\u043c eblannft \u0432\u0430\u0439\u0431\u043e\u043c."))
             desc.setGravity(Gravity.CENTER)
             desc.setTextSize(15)
             try:
@@ -14227,7 +14228,7 @@ class NftClonerPlugin(BasePlugin):
             content.addView(desc, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
 
             open_btn = TextView(ctx)
-            open_btn.setText('Открыть настройки')
+            open_btn.setText(self._ui_text("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438"))
             open_btn.setGravity(Gravity.CENTER)
             open_btn.setTextSize(18)
             try:
@@ -14250,6 +14251,7 @@ class NftClonerPlugin(BasePlugin):
                         sheet.dismiss()
                     except:
                         pass
+                    return None
 
             open_btn.setOnClickListener(_OpenSettings())
 
@@ -14287,6 +14289,7 @@ class NftClonerPlugin(BasePlugin):
                             self._style_install_welcome_sheet_surface(sheet)
                         except:
                             pass
+                        return None
                 root.postDelayed(_AfterShow(), 32)
             except:
                 pass
@@ -14308,7 +14311,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _maybe_show_first_install_welcome(self):
         try:
-            if bool(self.get_setting("eblannft_first_welcome_done", False)):
+            if not self._is_first_install_welcome_pending():
                 return
             if bool(getattr(self, "_eblannft_welcome_launching", False)):
                 return
@@ -14350,6 +14353,12 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             self._eblannft_welcome_launching = False
             _log(f"install welcome fail: {e}")
+
+    def _is_first_install_welcome_pending(self):
+        try:
+            return not bool(self.get_setting("eblannft_first_welcome_done", False))
+        except:
+            return True
 
     def _on_about_click(self, _view=None):
         try:

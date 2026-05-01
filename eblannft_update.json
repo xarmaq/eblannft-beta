@@ -1,6 +1,6 @@
 {
-  "version": "1.5.3",
-  "notes": "Harden updater callbacks by removing non-void settings, popup, and UI dispatch listeners that could still crash update checks",
+  "version": "1.5.4",
+  "notes": "Fix first-install welcome startup by skipping auto-update on the initial launch and harden the welcome sheet callbacks and text rendering",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
