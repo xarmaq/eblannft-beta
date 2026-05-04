@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -520,6 +520,29 @@ def _patch_runtime_nft_to_chat():
             if BulletinHelper:
                 BulletinHelper.show_error("Не удалось определить чат")
             return
+
+        actions = [
+            (
+                "Из библиотеки",
+                lambda: self._nft_chat_pick_from_library(account, dialog_id),
+            ),
+            (
+                "Конструктор (создать новый)",
+                lambda: self._nft_chat_open_constructor(account, dialog_id),
+            ),
+        ]
+        try:
+            self._show_action_menu("Откуда взять NFT?", actions, negative_text="Отмена")
+        except Exception as e:
+            _bootstrap_log(f"NFT-to-chat root menu failed: {e}")
+            if BulletinHelper:
+                BulletinHelper.show_error(f"Не удалось открыть меню: {e}")
+
+    def _nft_chat_pick_from_library(self, account, dialog_id):
+        try:
+            from ui.bulletin import BulletinHelper
+        except Exception:
+            BulletinHelper = None
         entries = list(getattr(self, "gift_library", None) or [])
         try:
             entries.sort(key=lambda e: int(e.get("created_at", 0) or 0), reverse=True)
@@ -528,7 +551,7 @@ def _patch_runtime_nft_to_chat():
         if not entries:
             if BulletinHelper:
                 BulletinHelper.show_info(
-                    "В библиотеке пока нет NFT. Открой конструктор в профиле, собери и сохрани — потом возвращайся сюда."
+                    "Библиотека пуста. Используй «Конструктор» здесь же, чтобы собрать первый NFT."
                 )
             return
         actions = []
@@ -539,33 +562,148 @@ def _patch_runtime_nft_to_chat():
             title = str(e.get("title") or e.get("slug") or "NFT")
             num = e.get("num", 1)
             label = f"{title} #{num}"
-            actions.append((label, lambda k=key: self._choose_nft_chat_sender(account, dialog_id, k)))
+            actions.append(
+                (label, lambda k=key: self._choose_nft_chat_sender(account, dialog_id, k))
+            )
         if not actions:
             if BulletinHelper:
                 BulletinHelper.show_error("Библиотека NFT пуста")
             return
         try:
-            self._show_action_menu("Какой NFT отправить?", actions, negative_text="Отмена")
+            self._show_action_menu(
+                "Какой NFT отправить?", actions, negative_text="Отмена"
+            )
         except Exception as e:
-            _bootstrap_log(f"NFT-to-chat picker failed: {e}")
+            _bootstrap_log(f"NFT-to-chat library picker failed: {e}")
             if BulletinHelper:
                 BulletinHelper.show_error(f"Не удалось открыть пикер: {e}")
+
+    def _nft_chat_open_constructor(self, account, dialog_id):
+        try:
+            from ui.bulletin import BulletinHelper
+        except Exception:
+            BulletinHelper = None
+        # One-shot flag — _library_upsert_wrapper hook reads this to know that
+        # the next save was triggered from the chat-action flow and should be
+        # followed by the sender chooser instead of just landing in the library.
+        self._eblannft_chat_send_pending = {
+            "account": int(account or 0),
+            "dialog_id": int(dialog_id or 0),
+            "ts": time.time(),
+        }
+        if BulletinHelper:
+            BulletinHelper.show_info(
+                "Собери NFT в конструкторе и сохрани. После сохранения спрошу — от кого отправить."
+            )
+        try:
+            self._open_constructor(None)
+        except Exception as e:
+            self._eblannft_chat_send_pending = None
+            _bootstrap_log(f"NFT-to-chat constructor open failed: {e}")
+            if BulletinHelper:
+                BulletinHelper.show_error(f"Не удалось открыть конструктор: {e}")
 
     def _choose_nft_chat_sender(self, account, dialog_id, key):
         actions = [
             (
                 "От собеседника (входящее)",
-                lambda: self._inject_unique_gift_into_chat(account, dialog_id, key, is_out=False),
+                lambda: self._send_nft_to_chat_with_assignment(account, dialog_id, key, is_out=False),
             ),
             (
                 "От меня (исходящее)",
-                lambda: self._inject_unique_gift_into_chat(account, dialog_id, key, is_out=True),
+                lambda: self._send_nft_to_chat_with_assignment(account, dialog_id, key, is_out=True),
             ),
         ]
         try:
             self._show_action_menu("От кого пришёл NFT?", actions, negative_text="Отмена")
         except Exception as e:
             _bootstrap_log(f"sender chooser failed: {e}")
+
+    def _send_nft_to_chat_with_assignment(self, account, dialog_id, key, is_out):
+        # Inject the local TL_messageService bubble first.
+        try:
+            self._inject_unique_gift_into_chat(account, dialog_id, key, is_out=bool(is_out))
+        except Exception as e:
+            _bootstrap_log(f"chat inject failed: {e}")
+
+        # Assign profile ownership: outgoing → peer's profile, incoming → my profile.
+        try:
+            if int(dialog_id or 0) > 0 and bool(is_out):
+                target_user_id = int(dialog_id)
+            else:
+                try:
+                    target_user_id = int(self._get_my_user_id() or 0)
+                except Exception:
+                    target_user_id = 0
+        except Exception:
+            target_user_id = 0
+
+        if target_user_id <= 0:
+            return
+
+        try:
+            self._reassign_library_entry_owner(key, target_user_id)
+        except Exception as e:
+            _bootstrap_log(f"profile assignment failed: {e}")
+
+    def _reassign_library_entry_owner(self, key, target_user_id):
+        """Patch a library entry's identity_config.owner_user_id so the NFT
+        appears in the corresponding user's profile when their saved gifts are
+        loaded. Triggers the existing injection-payloads rebuild + profile
+        notification refresh so the change shows up without restart."""
+        try:
+            from ui.bulletin import BulletinHelper
+        except Exception:
+            BulletinHelper = None
+        target_user_id = int(target_user_id or 0)
+        if target_user_id <= 0:
+            return False
+        entry = None
+        try:
+            entry = self._library_find_entry(key)
+        except Exception as e:
+            _bootstrap_log(f"library_find_entry failed: {e}")
+        if entry is None:
+            return False
+        try:
+            cfg = entry.get("identity_config") or {}
+        except Exception:
+            cfg = {}
+        try:
+            cfg = self._sanitize_identity_config(cfg)
+        except Exception:
+            if not isinstance(cfg, dict):
+                cfg = {}
+        try:
+            cfg["owner_user_id"] = int(target_user_id)
+        except Exception:
+            cfg["owner_user_id"] = target_user_id
+        entry["identity_config"] = cfg
+        try:
+            self._library_dirty = True
+        except Exception:
+            pass
+        try:
+            self._save_cache()
+        except Exception:
+            pass
+        try:
+            self._rebuild_injection_payloads()
+        except Exception:
+            pass
+        try:
+            self._post_local_profile_notifications(reason="nft_chat_assignment", cooldown=0.2)
+        except Exception:
+            pass
+        if BulletinHelper:
+            try:
+                if int(target_user_id) == int(self._get_my_user_id() or 0):
+                    BulletinHelper.show_success("NFT прикреплён к твоему профилю")
+                else:
+                    BulletinHelper.show_success("NFT прикреплён к профилю собеседника")
+            except Exception:
+                pass
+        return True
 
     def _inject_unique_gift_into_chat(self, account, dialog_id, key, is_out=False):
         try:
@@ -709,9 +847,63 @@ def _patch_runtime_nft_to_chat():
                 pass
             _bootstrap_log(f"NFT inject error: {e}")
 
+    # Hook _library_upsert_wrapper to detect saves from the constructor flow
+    # that originated in the chat-action menu. The flag is set in
+    # _nft_chat_open_constructor and cleared on first hit so we don't fire the
+    # sender chooser for unrelated saves later in the session.
+    try:
+        original_upsert = _EblanNftImpl.__dict__.get("_library_upsert_wrapper")
+    except Exception:
+        original_upsert = None
+    if original_upsert is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("_library_upsert_wrapper") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original_upsert = cand
+                break
+    if original_upsert is not None and not getattr(original_upsert, "_eblannft_chat_save_hook", False):
+        def patched_upsert(self, *a, **kw):
+            try:
+                k = original_upsert(self, *a, **kw)
+            except Exception:
+                raise
+            try:
+                pending = getattr(self, "_eblannft_chat_send_pending", None)
+            except Exception:
+                pending = None
+            if pending and k:
+                try:
+                    self._eblannft_chat_send_pending = None
+                    account = int(pending.get("account") or 0)
+                    dialog_id = int(pending.get("dialog_id") or 0)
+                except Exception:
+                    account, dialog_id = 0, 0
+                if dialog_id:
+                    try:
+                        from android_utils import run_on_ui_thread
+                        # Defer slightly so the constructor sheet has time to dismiss.
+                        run_on_ui_thread(lambda k=k, a=account, d=dialog_id: self._choose_nft_chat_sender(a, d, k))
+                    except Exception:
+                        try:
+                            self._choose_nft_chat_sender(account, dialog_id, k)
+                        except Exception as e:
+                            _bootstrap_log(f"post-constructor chooser launch failed: {e}")
+            return k
+
+        patched_upsert._eblannft_chat_save_hook = True
+        try:
+            _EblanNftImpl._library_upsert_wrapper = patched_upsert
+            _bootstrap_log("library upsert hook installed (chat-flow handoff)")
+        except Exception as e:
+            _bootstrap_log(f"library upsert hook install failed: {e}")
+
     try:
         _EblanNftImpl._open_nft_to_chat_menu = _open_nft_to_chat_menu
+        _EblanNftImpl._nft_chat_pick_from_library = _nft_chat_pick_from_library
+        _EblanNftImpl._nft_chat_open_constructor = _nft_chat_open_constructor
         _EblanNftImpl._choose_nft_chat_sender = _choose_nft_chat_sender
+        _EblanNftImpl._send_nft_to_chat_with_assignment = _send_nft_to_chat_with_assignment
+        _EblanNftImpl._reassign_library_entry_owner = _reassign_library_entry_owner
         _EblanNftImpl._inject_unique_gift_into_chat = _inject_unique_gift_into_chat
         _EblanNftImpl.on_plugin_load = patched_load
         _bootstrap_log("NFT-to-chat methods + chat menu patch installed")
