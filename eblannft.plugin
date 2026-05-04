@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -872,6 +872,15 @@ def _patch_runtime_nft_to_chat():
             except Exception:
                 pass
             return
+
+        # Pull availability_total / limited_count from the catalog onto the
+        # injected gift so the Quantity row in StarGiftSheet renders 'X / Y
+        # issued' instead of a blank rectangle. Same call the in-profile
+        # injection path makes inside process_response.
+        try:
+            self._ensure_unique_gift_availability(gift, base_gift_id=0)
+        except Exception as e:
+            _bootstrap_log(f"availability fill failed: {e}")
 
         ActionClass = None
         for cn in (

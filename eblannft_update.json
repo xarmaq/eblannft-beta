@@ -1,6 +1,6 @@
 {
-  "version": "1.0.12",
-  "notes": "В пути «NFT в чат → Конструктор» теперь открывается тот же каталог NFT, что используется при добавлении в профиль (ResaleGridController через _open_catalog_nft_sheet). Выбираешь NFT в сетке → автоматически открывается конструктор для этой базы → собираешь и сохраняешь → дальше выбор отправителя и привязка к профилю. Без бага v1.0.9 — каталог использует ResaleGridController.finishFragment() перед AttrLoader.start(), что не корраптит view tree.",
+  "version": "1.0.13",
+  "notes": "Фикс пустого поля «Quantity» при открытии NFT-подарка из чата. Перед инжектом TL_messageActionStarGiftUnique теперь зовётся _ensure_unique_gift_availability(gift) — он подтягивает availability_total / limited_count из загруженного StarsController-каталога, и Telegram-UI снова рисует «X из Y issued».",
   "files": [
     "eblannft.plugin"
   ]
