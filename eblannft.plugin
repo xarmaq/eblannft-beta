@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -647,10 +647,13 @@ def _patch_runtime_nft_to_chat():
             _bootstrap_log(f"profile assignment failed: {e}")
 
     def _reassign_library_entry_owner(self, key, target_user_id):
-        """Patch a library entry's identity_config.owner_user_id so the NFT
-        appears in the corresponding user's profile when their saved gifts are
-        loaded. Triggers the existing injection-payloads rebuild + profile
-        notification refresh so the change shows up without restart."""
+        """Patch a library entry's identity_config.owner_user_id AND rewrite
+        the underlying TL_savedStarGift wrapper so its owner_id / from_id /
+        to_id fields actually point at the target user. Without this second
+        step the UI still treats the gift as 'mine' (showing Transfer / Wear
+        / Sell on the bottom sheet), even though the entry sits in the
+        target's profile. Re-serializes the wrapper to b64 so the assignment
+        persists across restarts."""
         try:
             from ui.bulletin import BulletinHelper
         except Exception:
@@ -674,11 +677,47 @@ def _patch_runtime_nft_to_chat():
         except Exception:
             if not isinstance(cfg, dict):
                 cfg = {}
-        try:
-            cfg["owner_user_id"] = int(target_user_id)
-        except Exception:
-            cfg["owner_user_id"] = target_user_id
+        # owner / from / to all need to point at the target so Telegram's gift
+        # bottom-sheet, the small "Owner" row, and the "You bought / received"
+        # caption all flip away from the local user.
+        for key_name in ("owner_user_id", "from_user_id", "to_user_id"):
+            try:
+                cfg[key_name] = int(target_user_id)
+            except Exception:
+                cfg[key_name] = target_user_id
         entry["identity_config"] = cfg
+
+        # Step 2: actually mutate the wrapper's Java fields and persist b64.
+        try:
+            wrapper = self._library_get_wrapper(key)
+        except Exception as e:
+            wrapper = None
+            _bootstrap_log(f"reassign: wrapper load failed: {e}")
+        gift = None
+        try:
+            gift = self._extract_wrapper_gift(wrapper) if wrapper is not None else None
+        except Exception:
+            gift = None
+
+        if wrapper is not None:
+            try:
+                self._apply_identity_config_to_objects(gift=gift, wrapper=wrapper, identity_config=cfg)
+            except Exception as e:
+                _bootstrap_log(f"reassign: apply_identity_config failed: {e}")
+            # Re-serialize so the persisted b64 carries the new owner. Use the
+            # module-level serializer that lives in the runtime namespace.
+            try:
+                runtime_mod = sys.modules.get(f"{_RUNTIME_PACKAGE_ALIAS}.plugin") or sys.modules.get(
+                    f"{_RUNTIME_PACKAGE_NAME}.plugin"
+                )
+                serializer = getattr(runtime_mod, "serialize_tl_object", None) if runtime_mod else None
+                if callable(serializer):
+                    new_b64 = serializer(wrapper)
+                    if new_b64:
+                        entry["b64"] = str(new_b64)
+            except Exception as e:
+                _bootstrap_log(f"reassign: serialize failed: {e}")
+
         try:
             self._library_dirty = True
         except Exception:
