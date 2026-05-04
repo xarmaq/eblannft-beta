@@ -1,9 +1,7 @@
 {
-  "version": "1.0.0",
-  "notes": "Wrapper-loader build on top of the proven v1.0.0 plugin body. eblannft.plugin is now a thin loader that delegates to eblannft_runtime/plugin.py — same NftClonerPlugin code that worked before, just split for future updates.",
+  "version": "1.0.1",
+  "notes": "Добавлен авто-апдейт: при появлении новой версии плагин показывает MD3 BottomSheet с change-notes из этого манифеста, реальным per-byte progress bar, и кнопкой «Перезапустить» — она убивает процесс приложения, и после перезапуска обновлённая версия загружается автоматически.",
   "files": [
-    "eblannft.plugin",
-    "eblannft_runtime/__init__.py",
-    "eblannft_runtime/plugin.py"
+    "eblannft.plugin"
   ]
 }

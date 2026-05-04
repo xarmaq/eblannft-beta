@@ -6,24 +6,34 @@
 # // |  __/ |_) | | (_| | | | | |\  | |       | |
 # //  \___|_.__/|_|\__,_|_| |_|_| \_|_|       |_|
 # //
-# // Self-bootstrapping loader-wrapper. The user installs THIS file only.
-# // On first plugin load it downloads eblannft_runtime/ from GitHub into
-# // Downloads/eblannft/ (or a fallback dir) and loads NftClonerPlugin
-# // from there. Subsequent loads reuse the on-disk copy.
+# // Self-bootstrapping loader-wrapper with auto-update.
+# //   * On first enable: downloads eblannft_runtime/ into Downloads/eblannft/
+# //   * On every enable + on a 4-hour throttle: polls GitHub manifest and, if
+# //     a newer version is published, shows an MD3 BottomSheet with change
+# //     notes, a real per-byte progress bar, and a Restart button.
 
 from base_plugin import BasePlugin
 import importlib
 import importlib.util
+import json
 import os
+import re
 import sys
+import threading
+import time
 
 __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __icon__ = "HappyHappyPepe/31"
 
+
+# ---------------------------------------------------------------------------
+# Bootstrap section: locate or download the eblannft_runtime/ package and
+# import its NftClonerPlugin class. Mirrors the previously-shipped wrapper.
+# ---------------------------------------------------------------------------
 
 _RUNTIME_REPO = "xarmaq/eblannft"
 _RUNTIME_BRANCH = "main"
@@ -36,6 +46,11 @@ _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
 )
 _DOWNLOAD_TIMEOUT_SEC = 35
+
+_UPDATE_MANIFEST_PATH = "eblannft_update.json"
+_UPDATE_CHECK_INTERVAL_SEC = 4 * 60 * 60       # ~4 hours between polls
+_UPDATE_CHECK_DELAY_MS = 2200                  # let the UI settle first
+_UPDATE_TIMESTAMP_FILE = ".eblannft_last_update_check"
 
 
 def _bootstrap_log(msg):
@@ -52,7 +67,6 @@ def _raw_url(rel_path):
 
 
 def _candidate_install_roots():
-    """Ordered list of directories to consider for the runtime install."""
     seen = set()
     roots = []
 
@@ -67,7 +81,6 @@ def _candidate_install_roots():
             seen.add(ap)
             roots.append(ap)
 
-    # 1. Public Downloads/eblannft — visible to the user via any file manager.
     try:
         from java import jclass
         Environment = jclass("android.os.Environment")
@@ -79,8 +92,6 @@ def _candidate_install_roots():
     except Exception as e:
         _bootstrap_log(f"public Downloads lookup failed: {e}")
 
-    # 2. App-specific external files dir — always writable, also user-visible
-    #    under Android/data/com.exteragram.messenger/files/eblannft/.
     try:
         from org.telegram.messenger import ApplicationLoader
         ctx = ApplicationLoader.applicationContext
@@ -94,7 +105,6 @@ def _candidate_install_roots():
     except Exception as e:
         _bootstrap_log(f"app dir lookup failed: {e}")
 
-    # 3. Same directory as this loader file — last-resort, also legacy layout.
     try:
         _push(os.path.dirname(os.path.abspath(__file__)))
     except Exception:
@@ -104,13 +114,11 @@ def _candidate_install_roots():
 
 
 def _runtime_present(root):
-    """Return True only if every runtime file exists at this root."""
     for rel in _RUNTIME_FILES:
         path = os.path.join(root, rel.replace("/", os.sep))
         if not os.path.isfile(path):
             return False
         try:
-            # __init__.py is intentionally ~1 byte, plugin.py is ~1 MB; reject empty.
             if os.path.getsize(path) <= 0:
                 return False
         except Exception:
@@ -144,7 +152,8 @@ def _pick_writable_install_root():
     raise RuntimeError("No writable directory available for eblannft runtime")
 
 
-def _download_to(path, url):
+def _http_get(url, timeout=None, progress_cb=None):
+    """Blocking GET. Returns (bytes_payload, total_bytes_hint)."""
     from urllib.request import Request, urlopen
     req = Request(
         url,
@@ -154,8 +163,31 @@ def _download_to(path, url):
             "Cache-Control": "no-cache",
         },
     )
-    with urlopen(req, timeout=_DOWNLOAD_TIMEOUT_SEC) as resp:
-        data = resp.read()
+    timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
+    with urlopen(req, timeout=timeout) as resp:
+        try:
+            total = int(resp.headers.get("Content-Length", "0") or 0)
+        except Exception:
+            total = 0
+        chunks = []
+        loaded = 0
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            loaded += len(chunk)
+            if callable(progress_cb):
+                try:
+                    progress_cb(loaded, total)
+                except Exception:
+                    pass
+    data = b"".join(chunks)
+    return data, (total or len(data))
+
+
+def _download_to(path, url, progress_cb=None):
+    data, _total = _http_get(url, progress_cb=progress_cb)
     if not data:
         raise RuntimeError(f"Empty response: {url}")
     parent = os.path.dirname(path)
@@ -169,7 +201,6 @@ def _download_to(path, url):
 
 
 def _bootstrap_runtime():
-    """Return (install_root, mode) where mode is 'reused' or 'downloaded'."""
     existing = _existing_runtime_root()
     if existing:
         _bootstrap_log(f"runtime found at {existing}")
@@ -221,30 +252,714 @@ def _import_runtime_from(install_root):
 
 
 def _load_eblannft_impl():
-    # If something already exposed the runtime as a regular package on sys.path
-    # (e.g. legacy layout with eblannft_runtime/ next to the wrapper), prefer it.
     try:
         plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
         for attr in _IMPL_ATTR_CANDIDATES:
             impl = getattr(plugin_mod, attr, None)
             if isinstance(impl, type):
                 _bootstrap_log("loaded runtime via existing sys.path import")
-                return impl
+                return impl, None
     except Exception:
         pass
 
     install_root, mode = _bootstrap_runtime()
     _bootstrap_log(f"using runtime root ({mode}): {install_root}")
-    return _import_runtime_from(install_root)
+    impl = _import_runtime_from(install_root)
+    return impl, install_root
 
 
 _LOAD_ERROR = None
+_RUNTIME_INSTALL_ROOT = None
 try:
-    _EblanNftImpl = _load_eblannft_impl()
+    _EblanNftImpl, _RUNTIME_INSTALL_ROOT = _load_eblannft_impl()
 except Exception as _e:
     _EblanNftImpl = BasePlugin
     _LOAD_ERROR = _e
     _bootstrap_log(f"FATAL bootstrap failure: {_e}")
+
+
+# ---------------------------------------------------------------------------
+# Auto-update section: poll the GitHub manifest, present an MD3 BottomSheet
+# with change notes + a real progress bar, then restart the app.
+# ---------------------------------------------------------------------------
+
+
+def _version_tuple(version_str):
+    parts = re.findall(r"\d+", str(version_str or ""))
+    if not parts:
+        return (0,)
+    nums = tuple(int(p) for p in parts[:4])
+    while len(nums) < 4:
+        nums = nums + (0,)
+    return nums
+
+
+def _is_remote_newer(remote_version):
+    return _version_tuple(remote_version) > _version_tuple(__version__)
+
+
+def _wrapper_file_path():
+    try:
+        return os.path.abspath(__file__)
+    except Exception:
+        return ""
+
+
+def _resolve_dest_for_manifest_entry(rel_path):
+    """Map a manifest path to an absolute on-disk destination."""
+    rel = str(rel_path or "").replace("\\", "/").strip().lstrip("/")
+    if not rel:
+        return None
+    if rel == "eblannft.plugin":
+        wrapper = _wrapper_file_path()
+        if wrapper:
+            return wrapper
+        return None
+    if rel.startswith(f"{_RUNTIME_PACKAGE_NAME}/"):
+        root = _RUNTIME_INSTALL_ROOT or _existing_runtime_root() or _pick_writable_install_root()
+        return os.path.abspath(os.path.join(root, rel.replace("/", os.sep)))
+    # Anything else lands next to the runtime, in a sibling path mirroring repo layout.
+    root = _RUNTIME_INSTALL_ROOT or _existing_runtime_root()
+    if root:
+        return os.path.abspath(os.path.join(root, rel.replace("/", os.sep)))
+    return None
+
+
+def _fetch_manifest():
+    url = f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{_UPDATE_MANIFEST_PATH}"
+    raw, _total = _http_get(url, timeout=12)
+    text = raw.decode("utf-8", errors="replace")
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise RuntimeError("Manifest is not a JSON object")
+    version = str(data.get("version") or "").strip()
+    if not version:
+        raise RuntimeError("Manifest is missing 'version'")
+    files = data.get("files") or list(_RUNTIME_FILES) + ["eblannft.plugin"]
+    if not isinstance(files, list) or not files:
+        files = list(_RUNTIME_FILES) + ["eblannft.plugin"]
+    return {
+        "version": version,
+        "notes": str(data.get("notes") or "").strip(),
+        "files": [str(x).strip() for x in files if str(x).strip()],
+    }
+
+
+def _last_check_marker_path():
+    base = _RUNTIME_INSTALL_ROOT or _existing_runtime_root()
+    if not base:
+        return ""
+    try:
+        return os.path.join(base, _UPDATE_TIMESTAMP_FILE)
+    except Exception:
+        return ""
+
+
+def _read_last_check_ts():
+    path = _last_check_marker_path()
+    if not path or not os.path.isfile(path):
+        return 0.0
+    try:
+        with open(path, "r") as f:
+            return float((f.read() or "0").strip() or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _write_last_check_ts(ts=None):
+    path = _last_check_marker_path()
+    if not path:
+        return
+    try:
+        with open(path, "w") as f:
+            f.write(str(float(ts if ts is not None else time.time())))
+    except Exception:
+        pass
+
+
+def _format_bytes(n):
+    try:
+        n = float(n or 0)
+    except Exception:
+        return "0 B"
+    units = ["B", "KB", "MB", "GB"]
+    i = 0
+    while n >= 1024.0 and i < len(units) - 1:
+        n /= 1024.0
+        i += 1
+    if i == 0:
+        return f"{int(n)} B"
+    return f"{n:.1f} {units[i]}"
+
+
+def _format_progress_status(short_path, current_bytes, total_bytes, applying=False):
+    if applying:
+        return f"{short_path} • {_format_bytes(current_bytes)}"
+    if total_bytes > 0:
+        loaded = _format_bytes(current_bytes)
+        total = _format_bytes(total_bytes)
+        return f"{short_path} • {loaded} / {total}"
+    return f"{short_path} • {_format_bytes(current_bytes)}"
+
+
+def _restart_application():
+    """Force the Telegram process to die so the user can relaunch it cleanly."""
+    try:
+        from java import jclass
+        Process = jclass("android.os.Process")
+        myPid = int(Process.myPid())
+        Process.killProcess(myPid)
+        return True
+    except Exception as e:
+        _bootstrap_log(f"restart failed: {e}")
+        try:
+            os._exit(0)
+        except Exception:
+            pass
+        return False
+
+
+def _download_and_apply_update(manifest, progress_cb=None):
+    """Download every file from the manifest, then atomically replace on disk."""
+    files = list(manifest.get("files") or [])
+    if not files:
+        raise RuntimeError("Manifest has no files")
+
+    plan = []
+    sizes = {}
+    for rel in files:
+        dest = _resolve_dest_for_manifest_entry(rel)
+        if not dest:
+            _bootstrap_log(f"skip update entry, unresolved dest: {rel}")
+            continue
+        plan.append((rel, dest))
+        # HEAD-style size hint via streaming; we'll get the real total when
+        # we actually start the body fetch.
+        sizes[rel] = 0
+
+    if not plan:
+        raise RuntimeError("Update plan is empty after resolving destinations")
+
+    payloads = []
+    completed_bytes = 0
+
+    def _known_total():
+        return sum(int(v or 0) for v in sizes.values())
+
+    for idx, (rel, dest) in enumerate(plan, 1):
+        url = _raw_url(rel)
+        short = rel.split("/")[-1]
+
+        def _on_bytes(loaded, total, _rel=rel, _short=short, _idx=idx):
+            if total and total > sizes.get(_rel, 0):
+                sizes[_rel] = total
+            overall_total = _known_total()
+            overall_loaded = completed_bytes + loaded
+            if callable(progress_cb):
+                try:
+                    progress_cb(
+                        idx=_idx,
+                        total_steps=len(plan),
+                        current_path=_short,
+                        applying=False,
+                        current_bytes=loaded,
+                        current_total=total or 0,
+                        overall_bytes=overall_loaded,
+                        overall_total=overall_total,
+                    )
+                except Exception:
+                    pass
+
+        data, total = _http_get(url, progress_cb=_on_bytes)
+        if not data:
+            raise RuntimeError(f"Empty download for {rel}")
+        if total > sizes.get(rel, 0):
+            sizes[rel] = total
+        payloads.append((rel, dest, data))
+        completed_bytes += len(data)
+
+    # All downloads succeeded — now write atomically.
+    apply_total = max(1, sum(len(d) for _r, _de, d in payloads))
+    applied = 0
+    for idx, (rel, dest, data) in enumerate(payloads, 1):
+        parent = os.path.dirname(dest)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        tmp = dest + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
+        applied += len(data)
+        if callable(progress_cb):
+            try:
+                progress_cb(
+                    idx=idx,
+                    total_steps=len(payloads),
+                    current_path=rel.split("/")[-1],
+                    applying=True,
+                    current_bytes=len(data),
+                    current_total=len(data),
+                    overall_bytes=applied,
+                    overall_total=apply_total,
+                )
+            except Exception:
+                pass
+
+
+def _show_update_popup(manifest):
+    """Build and present an MD3 BottomSheet describing the available update."""
+    try:
+        from android_utils import run_on_ui_thread, log as _log_ui
+    except Exception:
+        return False
+    try:
+        from java import jclass
+        from client_utils import get_last_fragment
+        from org.telegram.ui.ActionBar import BottomSheet, Theme
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
+        from android.view import View, Gravity, ViewOutlineProvider
+        from android.widget import LinearLayout, FrameLayout, TextView, ScrollView
+        from android.graphics.drawable import GradientDrawable
+        from android.util import TypedValue
+    except Exception as e:
+        _bootstrap_log(f"update popup imports failed: {e}")
+        return False
+
+    try:
+        frag = get_last_fragment()
+        ctx = frag.getParentActivity() if frag and frag.getParentActivity() else None
+        if ctx is None:
+            try:
+                ctx = ApplicationLoader.applicationContext
+            except Exception:
+                ctx = None
+        if ctx is None:
+            return False
+    except Exception:
+        return False
+
+    state = {"started": False, "done": False}
+
+    def _build_and_show():
+        try:
+            try:
+                accent = int(Theme.getColor(Theme.key_featuredStickers_addButton))
+            except Exception:
+                accent = 0xFF5B8CFF
+            try:
+                bg_color = int(Theme.getColor(Theme.key_dialogBackground))
+            except Exception:
+                bg_color = 0xFF14161B
+            try:
+                text_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            except Exception:
+                text_color = 0xFFFFFFFF
+            try:
+                muted_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            except Exception:
+                muted_color = 0xFF9AA3AE
+            try:
+                neutral_color = int(Theme.getColor(Theme.key_windowBackgroundGray))
+            except Exception:
+                neutral_color = 0x1AFFFFFF
+
+            sheet = BottomSheet(ctx, True)
+
+            outer = LinearLayout(ctx)
+            outer.setOrientation(LinearLayout.VERTICAL)
+            outer.setPadding(
+                AndroidUtilities.dp(18),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(18),
+                AndroidUtilities.dp(16),
+            )
+
+            title = TextView(ctx)
+            title.setText(f"Доступно обновление eblanNFT")
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20)
+            try:
+                title.setTextColor(text_color)
+                title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except Exception:
+                pass
+            outer.addView(title, LinearLayout.LayoutParams(-1, -2))
+
+            ver_line = TextView(ctx)
+            try:
+                ver_line.setText(
+                    f"v{manifest.get('version', '?')} • установлено: v{__version__}"
+                )
+                ver_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                ver_line.setTextColor(muted_color)
+            except Exception:
+                pass
+            lp_ver = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_ver.topMargin = AndroidUtilities.dp(6)
+            except Exception:
+                pass
+            outer.addView(ver_line, lp_ver)
+
+            notes_text = manifest.get("notes") or ""
+            if notes_text:
+                notes_scroll = ScrollView(ctx)
+                notes = TextView(ctx)
+                try:
+                    notes.setText(notes_text)
+                    notes.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                    notes.setTextColor(text_color)
+                    notes.setLineSpacing(0.0, 1.1)
+                    notes.setPadding(
+                        AndroidUtilities.dp(14),
+                        AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(14),
+                        AndroidUtilities.dp(12),
+                    )
+                    notes_bg = GradientDrawable()
+                    notes_bg.setCornerRadius(AndroidUtilities.dp(16))
+                    notes_bg.setColor(0x10FFFFFF)
+                    notes.setBackground(notes_bg)
+                except Exception:
+                    pass
+                notes_scroll.addView(notes, FrameLayout.LayoutParams(-1, -2))
+                lp_notes = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(160))
+                lp_notes.topMargin = AndroidUtilities.dp(14)
+                outer.addView(notes_scroll, lp_notes)
+
+            # MD3-style track + animated fill.
+            progress_card = LinearLayout(ctx)
+            progress_card.setOrientation(LinearLayout.VERTICAL)
+            try:
+                pc_bg = GradientDrawable()
+                pc_bg.setCornerRadius(AndroidUtilities.dp(20))
+                pc_bg.setColor(0x10FFFFFF)
+                progress_card.setBackground(pc_bg)
+                progress_card.setPadding(
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(12),
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(14),
+                )
+            except Exception:
+                pass
+            lp_pc = LinearLayout.LayoutParams(-1, -2)
+            lp_pc.topMargin = AndroidUtilities.dp(14)
+            outer.addView(progress_card, lp_pc)
+
+            head = LinearLayout(ctx)
+            head.setOrientation(LinearLayout.HORIZONTAL)
+            progress_card.addView(head, LinearLayout.LayoutParams(-1, -2))
+
+            progress_label = TextView(ctx)
+            try:
+                progress_label.setText("Готово к загрузке")
+                progress_label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                progress_label.setTextColor(text_color)
+                progress_label.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except Exception:
+                pass
+            try:
+                head.addView(progress_label, LinearLayout.LayoutParams(0, -2, 1.0))
+            except Exception:
+                head.addView(progress_label, LinearLayout.LayoutParams(-1, -2))
+
+            percent = TextView(ctx)
+            try:
+                percent.setText("0%")
+                percent.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                percent.setTextColor(text_color)
+                percent.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except Exception:
+                pass
+            head.addView(percent, LinearLayout.LayoutParams(-2, -2))
+
+            track_wrap = FrameLayout(ctx)
+            track_bg = View(ctx)
+            track_fill = View(ctx)
+            try:
+                tb = GradientDrawable()
+                tb.setCornerRadius(AndroidUtilities.dp(999))
+                tb.setColor(0x12FFFFFF)
+                track_bg.setBackground(tb)
+                tf = GradientDrawable()
+                tf.setCornerRadius(AndroidUtilities.dp(999))
+                tf.setColor(accent)
+                track_fill.setBackground(tf)
+                track_fill.setPivotX(0.0)
+                track_fill.setScaleX(0.0)
+            except Exception:
+                pass
+            track_wrap.addView(
+                track_bg,
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL),
+            )
+            track_wrap.addView(
+                track_fill,
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL),
+            )
+            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(12))
+            lp_track.topMargin = AndroidUtilities.dp(12)
+            progress_card.addView(track_wrap, lp_track)
+
+            status = TextView(ctx)
+            try:
+                status.setText("Нажми «Скачать», чтобы начать.")
+                status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                status.setTextColor(muted_color)
+                status.setLineSpacing(0.0, 1.05)
+            except Exception:
+                pass
+            lp_status = LinearLayout.LayoutParams(-1, -2)
+            lp_status.topMargin = AndroidUtilities.dp(10)
+            progress_card.addView(status, lp_status)
+
+            # Action buttons.
+            btn_row = LinearLayout(ctx)
+            btn_row.setOrientation(LinearLayout.HORIZONTAL)
+            lp_btn_row = LinearLayout.LayoutParams(-1, -2)
+            lp_btn_row.topMargin = AndroidUtilities.dp(16)
+            outer.addView(btn_row, lp_btn_row)
+
+            close_btn = TextView(ctx)
+            close_btn.setText("Позже")
+            close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
+            close_btn.setGravity(Gravity.CENTER)
+            try:
+                close_bg = GradientDrawable()
+                close_bg.setCornerRadius(AndroidUtilities.dp(18))
+                close_bg.setColor(neutral_color)
+                close_btn.setBackground(close_bg)
+                close_btn.setTextColor(text_color)
+                close_btn.setPadding(
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(12),
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(12),
+                )
+            except Exception:
+                pass
+
+            action_btn = TextView(ctx)
+            action_btn.setText("Скачать")
+            action_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
+            action_btn.setGravity(Gravity.CENTER)
+            try:
+                ab = GradientDrawable()
+                ab.setCornerRadius(AndroidUtilities.dp(22))
+                ab.setColor(accent)
+                action_btn.setBackground(ab)
+                try:
+                    action_btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
+                except Exception:
+                    action_btn.setTextColor(0xFFFFFFFF)
+                action_btn.setPadding(
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(12),
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(12),
+                )
+            except Exception:
+                pass
+
+            try:
+                lp_close = LinearLayout.LayoutParams(0, -2, 1.0)
+                lp_close.rightMargin = AndroidUtilities.dp(8)
+                btn_row.addView(close_btn, lp_close)
+                btn_row.addView(action_btn, LinearLayout.LayoutParams(0, -2, 1.4))
+            except Exception:
+                btn_row.addView(close_btn, LinearLayout.LayoutParams(-1, -2))
+                btn_row.addView(action_btn, LinearLayout.LayoutParams(-1, -2))
+
+            def _set_ratio(ratio):
+                try:
+                    r = max(0.0, min(1.0, float(ratio or 0.0)))
+                except Exception:
+                    r = 0.0
+                try:
+                    track_fill.setPivotX(0.0)
+                    track_fill.animate().scaleX(r).setDuration(140).start()
+                except Exception:
+                    try:
+                        track_fill.setScaleX(r)
+                    except Exception:
+                        pass
+
+            def _set_status(text):
+                try:
+                    status.setText(str(text or ""))
+                except Exception:
+                    pass
+
+            def _set_label(text):
+                try:
+                    progress_label.setText(str(text or ""))
+                except Exception:
+                    pass
+
+            def _set_percent(value):
+                try:
+                    percent.setText(f"{int(round(value))}%")
+                except Exception:
+                    pass
+
+            def _ui_progress(idx, total_steps, current_path, applying, current_bytes,
+                              current_total, overall_bytes, overall_total):
+                if overall_total > 0:
+                    ratio = overall_bytes / float(overall_total)
+                elif current_total > 0:
+                    ratio = current_bytes / float(current_total)
+                else:
+                    ratio = max(0.0, (idx - 1) / float(max(1, total_steps)))
+                _set_ratio(ratio)
+                _set_percent(ratio * 100.0)
+                _set_label("Применение…" if applying else "Скачивание…")
+                _set_status(_format_progress_status(current_path, current_bytes,
+                                                    current_total, applying=applying))
+
+            def _on_progress(**kw):
+                def _do():
+                    _ui_progress(**kw)
+                run_on_ui_thread(_do)
+
+            def _do_download():
+                try:
+                    _download_and_apply_update(manifest, progress_cb=_on_progress)
+                    def _done():
+                        state["done"] = True
+                        _set_ratio(1.0)
+                        _set_percent(100)
+                        _set_label("Готово")
+                        _set_status("Файлы установлены. Нажми «Перезапустить», чтобы применить обновление.")
+                        try:
+                            action_btn.setText("Перезапустить")
+                            action_btn.setEnabled(True)
+                            action_btn.setAlpha(1.0)
+                        except Exception:
+                            pass
+                    run_on_ui_thread(_done)
+                except Exception as e:
+                    err = e
+                    def _err():
+                        state["started"] = False
+                        _set_label("Ошибка")
+                        _set_status(f"Не удалось скачать: {err}")
+                        try:
+                            action_btn.setText("Повторить")
+                            action_btn.setEnabled(True)
+                            action_btn.setAlpha(1.0)
+                        except Exception:
+                            pass
+                    run_on_ui_thread(_err)
+
+            try:
+                from android_utils import OnClickListener
+            except Exception:
+                OnClickListener = None
+
+            def _on_action():
+                if state["done"]:
+                    _restart_application()
+                    return
+                if state["started"]:
+                    return
+                state["started"] = True
+                try:
+                    action_btn.setEnabled(False)
+                    action_btn.setAlpha(0.85)
+                    action_btn.setText("Скачивается…")
+                except Exception:
+                    pass
+                _set_label("Скачивание…")
+                _set_status("Получаю файлы из GitHub…")
+                threading.Thread(target=_do_download, daemon=True).start()
+
+            def _on_close():
+                try:
+                    sheet.dismiss()
+                except Exception:
+                    pass
+
+            if OnClickListener is not None:
+                try:
+                    action_btn.setOnClickListener(OnClickListener(lambda _v=None: _on_action()))
+                    close_btn.setOnClickListener(OnClickListener(lambda _v=None: _on_close()))
+                except Exception:
+                    pass
+
+            sheet.setCustomView(outer)
+            try:
+                sheet.show()
+            except Exception:
+                run_on_ui_thread(sheet.show)
+        except Exception as e:
+            _bootstrap_log(f"popup build failure: {e}")
+
+    run_on_ui_thread(_build_and_show)
+    return True
+
+
+def _maybe_check_for_update(force=False):
+    """Background-poll the manifest. Show popup if a newer version is published."""
+    if _LOAD_ERROR is not None:
+        return
+    try:
+        last_ts = _read_last_check_ts()
+        now = time.time()
+        if not force and last_ts and (now - last_ts) < _UPDATE_CHECK_INTERVAL_SEC:
+            return
+    except Exception:
+        pass
+
+    def _worker():
+        try:
+            manifest = _fetch_manifest()
+            _write_last_check_ts(time.time())
+            if not _is_remote_newer(manifest.get("version")):
+                _bootstrap_log(f"up to date: local v{__version__} ≥ remote v{manifest.get('version')}")
+                return
+            _bootstrap_log(
+                f"update available: v{__version__} -> v{manifest.get('version')}"
+            )
+            _show_update_popup(manifest)
+        except Exception as e:
+            _bootstrap_log(f"update check error: {e}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _schedule_update_check():
+    """Defer the check so we don't race with plugin/UI initialization."""
+    try:
+        from java import jclass
+        from org.telegram.messenger import AndroidUtilities
+        Runnable = jclass("java.lang.Runnable")
+        from java import dynamic_proxy
+
+        class _Tick(dynamic_proxy(Runnable)):
+            def run(self_obj):
+                try:
+                    _maybe_check_for_update()
+                except Exception as e:
+                    _bootstrap_log(f"scheduled check error: {e}")
+                return None
+
+        AndroidUtilities.runOnUIThread(_Tick(), int(_UPDATE_CHECK_DELAY_MS))
+        return True
+    except Exception:
+        # Fallback: pure Python timer thread.
+        def _delayed():
+            try:
+                time.sleep(_UPDATE_CHECK_DELAY_MS / 1000.0)
+                _maybe_check_for_update()
+            except Exception:
+                pass
+        threading.Thread(target=_delayed, daemon=True).start()
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Plugin class — subclasses the runtime impl and adds the update check on load.
+# ---------------------------------------------------------------------------
 
 
 if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
@@ -254,7 +969,12 @@ if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
                 raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
             parent = getattr(super(), "on_plugin_load", None)
             if callable(parent):
-                return parent()
+                parent()
+            try:
+                _schedule_update_check()
+            except Exception as e:
+                _bootstrap_log(f"update bootstrap error: {e}")
+            return None
 else:
     class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
