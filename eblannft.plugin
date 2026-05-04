@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.20"
+__version__ = "1.0.21"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1336,6 +1336,65 @@ def _patch_runtime_library_label_for_sent():
 _patch_runtime_library_label_for_sent()
 
 
+# Map of dev-y / placeholder strings the runtime hands to TextView.setText
+# via _ui_text — replaced here with friendlier copy. Keys MUST match the
+# runtime's literals exactly (Cyrillic + punctuation).
+_EBLANNFT_TEXT_REWRITES = {
+    # Welcome sheet description on first install
+    "Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля. Быстро, плавно и с фирменным зелёным eblannft вайбом.":
+        "Меняй визуал своего профиля одним тапом — коллекционные NFT-подарки, NFT-юзернейм и NFT-номер. Видно только тебе. Без покупок, без риска для аккаунта.",
+}
+
+
+def _patch_runtime_ui_text_rewrites():
+    """Wrap NftClonerPlugin._ui_text so a small dictionary of dev-y strings
+    can be swapped for friendlier copy without touching the runtime file."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original = _EblanNftImpl.__dict__.get("_ui_text")
+    except Exception:
+        original = None
+    if original is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("_ui_text") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original = cand
+                break
+    if original is None:
+        _bootstrap_log("ui_text rewrite: no _ui_text method on runtime")
+        return
+    if getattr(original, "_eblannft_text_rewritten", False):
+        return
+
+    def patched(self, value, *a, **kw):
+        try:
+            key = str(value or "")
+        except Exception:
+            key = ""
+        if key and key in _EBLANNFT_TEXT_REWRITES:
+            try:
+                value = _EBLANNFT_TEXT_REWRITES[key]
+            except Exception:
+                pass
+        try:
+            return original(self, value, *a, **kw)
+        except Exception:
+            return value
+
+    patched._eblannft_text_rewritten = True
+    try:
+        _EblanNftImpl._ui_text = patched
+        _bootstrap_log(
+            f"ui_text rewrite map installed ({len(_EBLANNFT_TEXT_REWRITES)} entries)"
+        )
+    except Exception as e:
+        _bootstrap_log(f"ui_text rewrite install failed: {e}")
+
+
+_patch_runtime_ui_text_rewrites()
+
+
 # ---------------------------------------------------------------------------
 # Auto-update section: poll the GitHub manifest, present an MD3 BottomSheet
 # with change notes + a real progress bar, then restart the app.
@@ -1593,9 +1652,9 @@ def _show_update_interval_picker():
 
             subtitle = TextView(ctx)
             subtitle.setText(
-                "Как часто плагин будет в фоне дёргать GitHub-манифест после "
-                "загрузки приложения. Resume из «недавних» всегда дёргает чаще "
-                "(2 минуты) — этот интервал на это не влияет."
+                "Как часто плагин сам проверяет, есть ли новая версия. "
+                "Когда возвращаешься в приложение — проверка идёт быстрее в "
+                "любом случае."
             )
             try:
                 subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
