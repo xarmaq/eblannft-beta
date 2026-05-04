@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.19"
+__version__ = "1.0.20"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -48,8 +48,20 @@ _RUNTIME_FILES = (
 _DOWNLOAD_TIMEOUT_SEC = 35
 
 _UPDATE_MANIFEST_PATH = "eblannft_update.json"
-_UPDATE_CHECK_INTERVAL_SEC = 4 * 60 * 60       # ~4 hours between polls (load-time)
 _UPDATE_CHECK_RESUME_THROTTLE_SEC = 2 * 60     # 2 min between resume-triggered polls
+
+# User-selectable load-time check intervals (key in settings:
+# 'eblannft_update_interval_idx', default 0 = 5 hours).
+_UPDATE_INTERVAL_OPTIONS = (
+    (5 * 60 * 60,        "Каждые 5 часов"),
+    (24 * 60 * 60,       "Каждый день"),
+    (7 * 24 * 60 * 60,   "Каждую неделю"),
+    (30 * 24 * 60 * 60,  "Каждый месяц"),
+)
+_UPDATE_INTERVAL_DEFAULT_IDX = 0
+# Back-compat — used to live as a constant; now derived from the user's
+# setting via _get_update_interval_sec().
+_UPDATE_CHECK_INTERVAL_SEC = _UPDATE_INTERVAL_OPTIONS[_UPDATE_INTERVAL_DEFAULT_IDX][0]
 _UPDATE_CHECK_DELAY_MS = 2200                  # let the UI settle first
 _UPDATE_TIMESTAMP_FILE = ".eblannft_last_update_check"
 
@@ -385,20 +397,28 @@ def _patch_runtime_service_menu():
             _bootstrap_log(f"ui.settings import failed in patch: {e}")
             return base_items
         try:
-            row = Text(
+            row_version = Text(
                 text="Версия и обновления",
                 subtext=f"v{__version__} • проверить на GitHub",
                 icon="msg_retry",
                 on_click=lambda _: _check_for_update_interactive(),
             )
+            row_interval = Text(
+                text="Интервал проверки",
+                subtext=_get_update_interval_label(),
+                icon="msg_calendar",
+                on_click=lambda _: _show_update_interval_picker(),
+            )
+
             insert_at = 0
             for i, item in enumerate(base_items):
                 if type(item).__name__ == "Divider":
                     insert_at = i + 1
                     break
-            base_items.insert(insert_at, row)
+            base_items.insert(insert_at, row_version)
+            base_items.insert(insert_at + 1, row_interval)
             _bootstrap_log(
-                f"service menu: row injected at {insert_at}, total={len(base_items)}"
+                f"service menu: 2 rows injected at {insert_at}, total={len(base_items)}"
             )
         except Exception as e:
             _bootstrap_log(f"service menu inject failed: {e}")
@@ -1441,6 +1461,268 @@ def _write_last_check_ts(ts=None):
         pass
 
 
+def _get_update_interval_idx():
+    """Read the user-chosen interval index from plugin settings (defaults to
+    the constant default if the runtime instance isn't ready yet)."""
+    if _plugin_instance is None:
+        return _UPDATE_INTERVAL_DEFAULT_IDX
+    try:
+        idx = int(
+            _plugin_instance.get_setting(
+                "eblannft_update_interval_idx", _UPDATE_INTERVAL_DEFAULT_IDX
+            )
+            or 0
+        )
+    except Exception:
+        idx = _UPDATE_INTERVAL_DEFAULT_IDX
+    if 0 <= idx < len(_UPDATE_INTERVAL_OPTIONS):
+        return idx
+    return _UPDATE_INTERVAL_DEFAULT_IDX
+
+
+def _set_update_interval_idx(idx):
+    if _plugin_instance is None:
+        return
+    try:
+        _plugin_instance.set_setting("eblannft_update_interval_idx", int(idx))
+    except Exception:
+        pass
+
+
+def _get_update_interval_sec():
+    return int(_UPDATE_INTERVAL_OPTIONS[_get_update_interval_idx()][0])
+
+
+def _get_update_interval_label():
+    return str(_UPDATE_INTERVAL_OPTIONS[_get_update_interval_idx()][1])
+
+
+def _show_update_interval_picker():
+    """BottomSheet with a SlideChooseView letting the user pick how often
+    the plugin polls GitHub for updates (5 часов / День / Неделя / Месяц).
+    The choice persists into plugin settings and is read on every poll."""
+    try:
+        from android_utils import run_on_ui_thread
+    except Exception:
+        return False
+    try:
+        from java import jclass, dynamic_proxy
+        from client_utils import get_last_fragment
+        from org.telegram.ui.ActionBar import BottomSheet, Theme
+        from org.telegram.ui.Components import SlideChooseView
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
+        from android.view import Gravity
+        from android.widget import LinearLayout, TextView
+        from android.graphics.drawable import GradientDrawable
+        from android.util import TypedValue
+    except Exception as e:
+        _bootstrap_log(f"interval picker imports failed: {e}")
+        return False
+
+    frag = None
+    try:
+        frag = get_last_fragment()
+    except Exception:
+        frag = None
+    ctx = None
+    try:
+        ctx = frag.getParentActivity() if frag and frag.getParentActivity() else None
+    except Exception:
+        ctx = None
+    if ctx is None:
+        try:
+            ctx = ApplicationLoader.applicationContext
+        except Exception:
+            ctx = None
+    if ctx is None:
+        return False
+
+    def _build():
+        try:
+            try:
+                accent = int(Theme.getColor(Theme.key_featuredStickers_addButton))
+            except Exception:
+                accent = 0xFF5B8CFF
+            try:
+                text_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            except Exception:
+                text_color = 0xFFFFFFFF
+            try:
+                muted_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            except Exception:
+                muted_color = 0xFF9AA3AE
+            try:
+                bg_color = int(Theme.getColor(Theme.key_dialogBackground))
+            except Exception:
+                bg_color = 0xFF14161B
+
+            def _blend(over_argb, base_argb, alpha_over):
+                a = max(0.0, min(1.0, float(alpha_over)))
+                inv = 1.0 - a
+                ro = (over_argb >> 16) & 0xFF
+                go = (over_argb >> 8) & 0xFF
+                bo = over_argb & 0xFF
+                rb = (base_argb >> 16) & 0xFF
+                gb = (base_argb >> 8) & 0xFF
+                bb = base_argb & 0xFF
+                r = int(round(ro * a + rb * inv))
+                g = int(round(go * a + gb * inv))
+                b = int(round(bo * a + bb * inv))
+                return (0xFF << 24) | (r << 16) | (g << 8) | b
+
+            sheet = BottomSheet(ctx, True)
+
+            outer = LinearLayout(ctx)
+            outer.setOrientation(LinearLayout.VERTICAL)
+            outer.setPadding(
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(22),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(20),
+            )
+
+            title = TextView(ctx)
+            title.setText("Интервал проверки обновлений")
+            try:
+                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 19)
+                title.setTextColor(text_color)
+                title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except Exception:
+                pass
+            outer.addView(title, LinearLayout.LayoutParams(-1, -2))
+
+            subtitle = TextView(ctx)
+            subtitle.setText(
+                "Как часто плагин будет в фоне дёргать GitHub-манифест после "
+                "загрузки приложения. Resume из «недавних» всегда дёргает чаще "
+                "(2 минуты) — этот интервал на это не влияет."
+            )
+            try:
+                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                subtitle.setTextColor(muted_color)
+                subtitle.setLineSpacing(0.0, 1.15)
+            except Exception:
+                pass
+            lp_sub = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_sub.topMargin = AndroidUtilities.dp(8)
+            except Exception:
+                pass
+            outer.addView(subtitle, lp_sub)
+
+            # Card containing the SlideChooseView.
+            card = LinearLayout(ctx)
+            card.setOrientation(LinearLayout.VERTICAL)
+            try:
+                cb = GradientDrawable()
+                cb.setCornerRadius(AndroidUtilities.dp(20))
+                cb.setColor(_blend(accent, bg_color, 0.10))
+                card.setBackground(cb)
+                card.setPadding(
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(18),
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(14),
+                )
+            except Exception:
+                pass
+            lp_card = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_card.topMargin = AndroidUtilities.dp(20)
+            except Exception:
+                pass
+            outer.addView(card, lp_card)
+
+            try:
+                selector = SlideChooseView(ctx)
+            except Exception:
+                # Some builds expect (context, resourcesProvider). Pass null.
+                selector = SlideChooseView(ctx, None)
+            current_idx = _get_update_interval_idx()
+            try:
+                selector.setOptions(
+                    int(current_idx),
+                    "5 часов",
+                    "День",
+                    "Неделя",
+                    "Месяц",
+                )
+            except Exception as e:
+                _bootstrap_log(f"setOptions failed: {e}")
+
+            cb_cls = jclass("org.telegram.ui.Components.SlideChooseView$Callback")
+
+            class _Cb(dynamic_proxy(cb_cls)):
+                def onOptionSelected(self_obj, index):
+                    try:
+                        _set_update_interval_idx(int(index))
+                        _bootstrap_log(
+                            f"update interval set to idx={int(index)} ({_UPDATE_INTERVAL_OPTIONS[int(index)][1]})"
+                        )
+                    except Exception as e:
+                        _bootstrap_log(f"interval onOptionSelected failed: {e}")
+
+                def onTouchEnd(self_obj):
+                    return None
+
+            try:
+                selector.setCallback(_Cb())
+            except Exception as e:
+                _bootstrap_log(f"setCallback failed: {e}")
+
+            card.addView(selector, LinearLayout.LayoutParams(-1, -2))
+
+            # OK button.
+            ok_btn = TextView(ctx)
+            ok_btn.setText("Готово")
+            try:
+                ok_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
+                ok_btn.setGravity(Gravity.CENTER)
+                ab = GradientDrawable()
+                ab.setCornerRadius(AndroidUtilities.dp(24))
+                ab.setColor(accent)
+                ok_btn.setBackground(ab)
+                try:
+                    ok_btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
+                except Exception:
+                    ok_btn.setTextColor(0xFFFFFFFF)
+                try:
+                    ok_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
+                ok_btn.setPadding(
+                    AndroidUtilities.dp(20),
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(20),
+                    AndroidUtilities.dp(14),
+                )
+            except Exception:
+                pass
+            lp_ok = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_ok.topMargin = AndroidUtilities.dp(18)
+            except Exception:
+                pass
+            outer.addView(ok_btn, lp_ok)
+
+            try:
+                from android_utils import OnClickListener
+                ok_btn.setOnClickListener(OnClickListener(lambda _v=None: sheet.dismiss()))
+            except Exception:
+                pass
+
+            sheet.setCustomView(outer)
+            try:
+                sheet.show()
+            except Exception:
+                pass
+        except Exception as e:
+            _bootstrap_log(f"interval picker build failed: {e}")
+
+    run_on_ui_thread(_build)
+    return True
+
+
 def _format_bytes(n):
     try:
         n = float(n or 0)
@@ -2422,7 +2704,7 @@ def _maybe_check_for_update(force=False, reason="load"):
         threshold = (
             _UPDATE_CHECK_RESUME_THROTTLE_SEC
             if str(reason or "") == "resume"
-            else _UPDATE_CHECK_INTERVAL_SEC
+            else _get_update_interval_sec()
         )
         if not force and last_ts and (now - last_ts) < threshold:
             return
