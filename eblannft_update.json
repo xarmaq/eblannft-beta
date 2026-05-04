@@ -1,9 +1,7 @@
 {
-  "version": "1.5.5",
-  "notes": "Wrap UI-thread callbacks and JRunnable handlers to force void returns, and stop mojibake repair from touching already-correct Cyrillic",
+  "version": "1.0.0",
+  "notes": "Rollback to v1.0.0 monolithic build. The 1.5.5 wrapper-loader caused an immediate ClassCastException (bool→void) on plugin enable, so the GitHub channel is reverted to the last known-good single-file build until the wrapper bug is found and fixed.",
   "files": [
-    "eblannft.plugin",
-    "eblannft_runtime/__init__.py",
-    "eblannft_runtime/plugin.py"
+    "eblannft.plugin"
   ]
 }
