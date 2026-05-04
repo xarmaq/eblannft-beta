@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -452,6 +452,274 @@ def _patch_runtime_about_relocation():
 
 
 _patch_runtime_about_relocation()
+
+
+def _patch_runtime_nft_to_chat():
+    """Add 'NFT в чат' to the chat 'three-dots → My Plugins' menu.
+
+    Click flow: pick a unique gift from the eblannft library → choose sender
+    (incoming / outgoing) → inject as a local TL_messageService carrying a
+    TL_messageActionStarGiftUnique. Mirrors Vv1.plugin's NFT-in-chat path
+    but reuses eblannft's library, peer-builder and id-allocator helpers.
+    """
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original_load = _EblanNftImpl.__dict__.get("on_plugin_load")
+    except Exception as e:
+        _bootstrap_log(f"NFT-to-chat lookup failed: {e}")
+        return
+    if original_load is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("on_plugin_load") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original_load = cand
+                break
+    if original_load is None:
+        _bootstrap_log("NFT-to-chat: no on_plugin_load found in MRO")
+        return
+    if getattr(original_load, "_eblannft_nft_chat_patched", False):
+        return
+
+    def patched_load(self, *a, **kw):
+        try:
+            result = original_load(self, *a, **kw)
+        except Exception as e:
+            _bootstrap_log(f"on_plugin_load original error: {e}")
+            result = None
+        try:
+            from base_plugin import MenuItemData, MenuItemType
+            self.add_menu_item(
+                MenuItemData(
+                    menu_type=MenuItemType.CHAT_ACTION_MENU,
+                    item_id="eblannft_nft_to_chat",
+                    text="NFT в чат",
+                    icon="msg_emoji_gem",
+                    on_click=self._open_nft_to_chat_menu,
+                    condition="user != null",
+                )
+            )
+            _bootstrap_log("CHAT_ACTION_MENU 'NFT в чат' registered")
+        except Exception as e:
+            _bootstrap_log(f"NFT-to-chat menu register failed: {e}")
+        return result
+
+    patched_load._eblannft_nft_chat_patched = True
+
+    def _open_nft_to_chat_menu(self, context=None):
+        try:
+            account, dialog_id = self._resolve_fake_incoming_target(context)
+        except Exception as e:
+            _bootstrap_log(f"NFT-to-chat resolve failed: {e}")
+            account, dialog_id = 0, 0
+        try:
+            from ui.bulletin import BulletinHelper
+        except Exception:
+            BulletinHelper = None
+        if not dialog_id:
+            if BulletinHelper:
+                BulletinHelper.show_error("Не удалось определить чат")
+            return
+        entries = list(getattr(self, "gift_library", None) or [])
+        try:
+            entries.sort(key=lambda e: int(e.get("created_at", 0) or 0), reverse=True)
+        except Exception:
+            pass
+        if not entries:
+            if BulletinHelper:
+                BulletinHelper.show_info(
+                    "В библиотеке пока нет NFT. Открой конструктор в профиле, собери и сохрани — потом возвращайся сюда."
+                )
+            return
+        actions = []
+        for e in entries:
+            key = e.get("key")
+            if not key:
+                continue
+            title = str(e.get("title") or e.get("slug") or "NFT")
+            num = e.get("num", 1)
+            label = f"{title} #{num}"
+            actions.append((label, lambda k=key: self._choose_nft_chat_sender(account, dialog_id, k)))
+        if not actions:
+            if BulletinHelper:
+                BulletinHelper.show_error("Библиотека NFT пуста")
+            return
+        try:
+            self._show_action_menu("Какой NFT отправить?", actions, negative_text="Отмена")
+        except Exception as e:
+            _bootstrap_log(f"NFT-to-chat picker failed: {e}")
+            if BulletinHelper:
+                BulletinHelper.show_error(f"Не удалось открыть пикер: {e}")
+
+    def _choose_nft_chat_sender(self, account, dialog_id, key):
+        actions = [
+            (
+                "От собеседника (входящее)",
+                lambda: self._inject_unique_gift_into_chat(account, dialog_id, key, is_out=False),
+            ),
+            (
+                "От меня (исходящее)",
+                lambda: self._inject_unique_gift_into_chat(account, dialog_id, key, is_out=True),
+            ),
+        ]
+        try:
+            self._show_action_menu("От кого пришёл NFT?", actions, negative_text="Отмена")
+        except Exception as e:
+            _bootstrap_log(f"sender chooser failed: {e}")
+
+    def _inject_unique_gift_into_chat(self, account, dialog_id, key, is_out=False):
+        try:
+            from java import jclass
+            from java.util import ArrayList
+            from org.telegram.messenger import (
+                MessageObject,
+                MessagesController,
+                MessagesStorage,
+                UserConfig,
+                NotificationCenter,
+            )
+            from org.telegram.tgnet import TLRPC
+            from ui.bulletin import BulletinHelper
+            from android_utils import run_on_ui_thread
+        except Exception as e:
+            _bootstrap_log(f"NFT-chat inject imports failed: {e}")
+            return
+
+        wrapper = None
+        try:
+            wrapper = self._library_get_wrapper(key)
+        except Exception as e:
+            _bootstrap_log(f"library wrapper load failed: {e}")
+        gift = None
+        try:
+            gift = self._extract_wrapper_gift(wrapper) if wrapper is not None else None
+        except Exception:
+            gift = None
+        if gift is None:
+            try:
+                BulletinHelper.show_error("Не удалось загрузить выбранный NFT")
+            except Exception:
+                pass
+            return
+
+        ActionClass = None
+        for cn in (
+            "org.telegram.tgnet.TLRPC$TL_messageActionStarGiftUnique",
+            "org.telegram.tgnet.TLRPC$TL_messageActionStarGift",
+        ):
+            try:
+                ActionClass = jclass(cn)
+                break
+            except Exception:
+                continue
+        if ActionClass is None:
+            try:
+                BulletinHelper.show_error("Нет класса TL_messageActionStarGiftUnique в этой сборке")
+            except Exception:
+                pass
+            return
+
+        try:
+            action = ActionClass()
+            try:
+                action.gift = gift
+            except Exception:
+                try:
+                    field = action.getClass().getField("gift")
+                    field.set(action, gift)
+                except Exception as e:
+                    _bootstrap_log(f"gift field set failed: {e}")
+            for attr in ("upgrade", "saved", "refunded"):
+                try:
+                    setattr(action, attr, False)
+                except Exception:
+                    pass
+            try:
+                action.transferred = bool(not is_out)
+            except Exception:
+                pass
+
+            peer_dialog = self._build_peer_for_entity(int(dialog_id))
+            if peer_dialog is None:
+                BulletinHelper.show_error("Этот тип диалога пока не поддерживается")
+                return
+
+            msg = TLRPC.TL_messageService()
+            try:
+                msg.id = int(self._allocate_fake_incoming_message_id())
+            except Exception:
+                msg.id = int(UserConfig.getInstance(account).getNewMessageId())
+            msg.peer_id = peer_dialog
+            msg.dialog_id = int(dialog_id)
+            msg.date = int(time.time())
+            msg.action = action
+            msg.unread = True
+            msg.out = bool(is_out)
+            msg.flags = 256 | (2 if is_out else 0)
+
+            if is_out:
+                me = TLRPC.TL_peerUser()
+                me.user_id = int(UserConfig.getInstance(account).getClientUserId())
+                msg.from_id = me
+            else:
+                msg.from_id = peer_dialog
+
+            obj = MessageObject(account, msg, False, True)
+            obj_list = ArrayList()
+            obj_list.add(obj)
+
+            try:
+                ml = ArrayList()
+                ml.add(msg)
+                MessagesStorage.getInstance(account).putMessages(ml, True, True, False, 0, 0, 0)
+            except Exception as e:
+                _bootstrap_log(f"MessagesStorage.putMessages failed (non-fatal): {e}")
+
+            MessagesController.getInstance(account).updateInterfaceWithMessages(
+                int(dialog_id), obj_list, 0
+            )
+            try:
+                NotificationCenter.getInstance(account).postNotificationName(
+                    NotificationCenter.dialogsNeedReload
+                )
+            except Exception:
+                pass
+
+            try:
+                BulletinHelper.show_success("NFT добавлен в чат локально")
+            except Exception:
+                pass
+
+            def _fireworks():
+                try:
+                    LaunchActivity = jclass("org.telegram.ui.LaunchActivity")
+                    inst = getattr(LaunchActivity, "instance", None)
+                    if inst is not None and inst.getFireworksOverlay() is not None:
+                        inst.getFireworksOverlay().start(True)
+                except Exception:
+                    pass
+            try:
+                run_on_ui_thread(_fireworks)
+            except Exception:
+                _fireworks()
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"NFT в чат: {e}")
+            except Exception:
+                pass
+            _bootstrap_log(f"NFT inject error: {e}")
+
+    try:
+        _EblanNftImpl._open_nft_to_chat_menu = _open_nft_to_chat_menu
+        _EblanNftImpl._choose_nft_chat_sender = _choose_nft_chat_sender
+        _EblanNftImpl._inject_unique_gift_into_chat = _inject_unique_gift_into_chat
+        _EblanNftImpl.on_plugin_load = patched_load
+        _bootstrap_log("NFT-to-chat methods + chat menu patch installed")
+    except Exception as e:
+        _bootstrap_log(f"NFT-to-chat install failed: {e}")
+
+
+_patch_runtime_nft_to_chat()
 
 
 # ---------------------------------------------------------------------------
