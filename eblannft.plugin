@@ -1,0 +1,135 @@
+### Powered by xarmaq
+# //      _     _             _   _ ______ _______
+# //     | |   | |           | \ | |  ____|__   __|
+# //   ___| |__ | | __ _ _ __ |  \| | |__     | |
+# //  / _ \ '_ \| |/ _` | '_ \| . ` |  __|    | |
+# // |  __/ |_) | | (_| | | | | |\  | |       | |
+# //  \___|_.__/|_|\__,_|_| |_|_| \_|_|       |_|
+# //
+# // Thin loader-wrapper. The actual plugin lives in eblannft_runtime/plugin.py
+# // and is downloaded/updated from https://github.com/xarmaq/eblannft.
+
+from base_plugin import BasePlugin
+import importlib
+import importlib.util
+import os
+import sys
+
+__id__ = "eblannft"
+__name__ = "eblanNFT"
+__description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
+__author__ = "@xarmaq"
+__version__ = "1.5.5"
+__icon__ = "HappyHappyPepe/31"
+
+
+_RUNTIME_PACKAGE_DIR_NAME = "eblannft_runtime"
+_RUNTIME_PACKAGE_ALIAS = "_eblannft_runtime_pkg"
+_IMPL_ATTR_CANDIDATES = ("EblanNftPlugin", "NftClonerPlugin")
+
+
+def _try_attrs(module):
+    for attr in _IMPL_ATTR_CANDIDATES:
+        impl = getattr(module, attr, None)
+        if isinstance(impl, type):
+            return impl
+    return None
+
+
+def _load_eblannft_impl():
+    direct_errors = []
+    # 1) Already-installed package on sys.path (e.g. when shipped via wheel).
+    for module_name in (f"{_RUNTIME_PACKAGE_DIR_NAME}.plugin",):
+        try:
+            plugin_mod = importlib.import_module(module_name)
+            impl = _try_attrs(plugin_mod)
+            if impl is not None:
+                return impl
+        except Exception as e:
+            direct_errors.append(f"{module_name}: {e}")
+
+    # 2) File-system fallback: load eblannft_runtime/ that sits next to this
+    #    loader (or anywhere on sys.path). Mirrors the nowfy_beta wrapper.
+    try:
+        current_file = os.path.abspath(__file__)
+    except Exception:
+        current_file = ""
+    current_dir = os.path.abspath(os.path.dirname(current_file)) if current_file else ""
+
+    candidate_bases = []
+    if current_dir:
+        candidate_bases.append(current_dir)
+    for _base in list(sys.path):
+        if _base and _base not in candidate_bases:
+            candidate_bases.append(_base)
+
+    for base in candidate_bases:
+        try:
+            base_abs = os.path.abspath(base)
+            pkg_dir = os.path.join(base_abs, _RUNTIME_PACKAGE_DIR_NAME)
+            init_py = os.path.join(pkg_dir, "__init__.py")
+            plugin_py = os.path.join(pkg_dir, "plugin.py")
+            if not (os.path.isfile(init_py) and os.path.isfile(plugin_py)):
+                continue
+
+            if _RUNTIME_PACKAGE_ALIAS not in sys.modules:
+                pkg_spec = importlib.util.spec_from_file_location(
+                    _RUNTIME_PACKAGE_ALIAS,
+                    init_py,
+                    submodule_search_locations=[pkg_dir],
+                )
+                if pkg_spec is None or pkg_spec.loader is None:
+                    continue
+                pkg_mod = importlib.util.module_from_spec(pkg_spec)
+                sys.modules[_RUNTIME_PACKAGE_ALIAS] = pkg_mod
+                pkg_spec.loader.exec_module(pkg_mod)
+
+            plugin_mod_name = f"{_RUNTIME_PACKAGE_ALIAS}.plugin"
+            plugin_mod = sys.modules.get(plugin_mod_name)
+            if plugin_mod is None:
+                plugin_spec = importlib.util.spec_from_file_location(plugin_mod_name, plugin_py)
+                if plugin_spec is None or plugin_spec.loader is None:
+                    continue
+                plugin_mod = importlib.util.module_from_spec(plugin_spec)
+                sys.modules[plugin_mod_name] = plugin_mod
+                plugin_spec.loader.exec_module(plugin_mod)
+
+            impl = _try_attrs(plugin_mod)
+            if impl is not None:
+                return impl
+        except Exception as e:
+            direct_errors.append(f"{base}: {e}")
+            continue
+
+    extra = f" | {'; '.join(direct_errors)}" if direct_errors else ""
+    raise ModuleNotFoundError(f"eblannft_runtime not found on disk{extra}")
+
+
+_LOAD_ERROR = None
+try:
+    _EblanNftImpl = _load_eblannft_impl()
+except Exception as _e:
+    _EblanNftImpl = BasePlugin
+    _LOAD_ERROR = _e
+
+
+if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
+    class EblanNftPlugin(_EblanNftImpl):
+        def on_plugin_load(self):
+            if _LOAD_ERROR is not None:
+                raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
+            parent = getattr(super(), "on_plugin_load", None)
+            if callable(parent):
+                return parent()
+else:
+    class EblanNftPlugin(_EblanNftImpl, BasePlugin):
+        def on_plugin_load(self):
+            if _LOAD_ERROR is not None:
+                raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
+            parent = getattr(super(), "on_plugin_load", None)
+            if callable(parent):
+                return parent()
+
+
+# Aliases so external lookups (`getattr(mod, "...")`) keep working.
+NftClonerPlugin = EblanNftPlugin
