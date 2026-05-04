@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.13"
+__version__ = "1.0.14"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -48,7 +48,8 @@ _RUNTIME_FILES = (
 _DOWNLOAD_TIMEOUT_SEC = 35
 
 _UPDATE_MANIFEST_PATH = "eblannft_update.json"
-_UPDATE_CHECK_INTERVAL_SEC = 4 * 60 * 60       # ~4 hours between polls
+_UPDATE_CHECK_INTERVAL_SEC = 4 * 60 * 60       # ~4 hours between polls (load-time)
+_UPDATE_CHECK_RESUME_THROTTLE_SEC = 2 * 60     # 2 min between resume-triggered polls
 _UPDATE_CHECK_DELAY_MS = 2200                  # let the UI settle first
 _UPDATE_TIMESTAMP_FILE = ".eblannft_last_update_check"
 
@@ -1135,6 +1136,62 @@ def _patch_runtime_foreign_profile_gates():
 _patch_runtime_foreign_profile_gates()
 
 
+def _patch_runtime_resume_update_check():
+    """Wire the wrapper's update-check into the runtime's existing
+    AppResumeRefreshHook so that returning to the app from the recents
+    panel re-polls the manifest (subject to the 2-min resume throttle).
+    Without this, _maybe_check_for_update only fires inside on_plugin_load
+    and the user has to force-stop / cold-start to see a new release."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    runtime_mod = sys.modules.get(f"{_RUNTIME_PACKAGE_ALIAS}.plugin") or sys.modules.get(
+        f"{_RUNTIME_PACKAGE_NAME}.plugin"
+    )
+    if runtime_mod is None:
+        _bootstrap_log("resume hook patch skipped: runtime module not found")
+        return
+    AppResumeRefreshHook = getattr(runtime_mod, "AppResumeRefreshHook", None)
+    if AppResumeRefreshHook is None:
+        _bootstrap_log("resume hook patch skipped: AppResumeRefreshHook missing")
+        return
+
+    try:
+        original = AppResumeRefreshHook.__dict__.get("after_hooked_method")
+    except Exception:
+        original = None
+    if original is None:
+        for base in getattr(AppResumeRefreshHook, "__mro__", ()):
+            cand = base.__dict__.get("after_hooked_method") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original = cand
+                break
+    if original is None:
+        _bootstrap_log("resume hook patch: no after_hooked_method to wrap")
+        return
+    if getattr(original, "_eblannft_resume_update_patched", False):
+        return
+
+    def patched(self, param):
+        try:
+            original(self, param)
+        except Exception as e:
+            _bootstrap_log(f"AppResumeRefreshHook original error: {e}")
+        try:
+            _maybe_check_for_update(reason="resume")
+        except Exception as e:
+            _bootstrap_log(f"resume update trigger failed: {e}")
+
+    patched._eblannft_resume_update_patched = True
+    try:
+        AppResumeRefreshHook.after_hooked_method = patched
+        _bootstrap_log("AppResumeRefreshHook patched for resume-time update polling")
+    except Exception as e:
+        _bootstrap_log(f"resume hook patch install failed: {e}")
+
+
+_patch_runtime_resume_update_check()
+
+
 # ---------------------------------------------------------------------------
 # Auto-update section: poll the GitHub manifest, present an MD3 BottomSheet
 # with change notes + a real progress bar, then restart the app.
@@ -1813,14 +1870,25 @@ def _check_for_update_interactive():
     threading.Thread(target=_worker, daemon=True).start()
 
 
-def _maybe_check_for_update(force=False):
-    """Background-poll the manifest. Show popup if a newer version is published."""
+def _maybe_check_for_update(force=False, reason="load"):
+    """Background-poll the manifest. Show popup if a newer version is published.
+
+    `reason` toggles the throttle: load-time uses the long 4-hour gate so we
+    don't hammer GitHub on every cold start; 'resume' uses a much shorter
+    gate so coming back from recent apps still picks up new releases without
+    a force-stop. Manual checks pass force=True to bypass both gates.
+    """
     if _LOAD_ERROR is not None:
         return
     try:
         last_ts = _read_last_check_ts()
         now = time.time()
-        if not force and last_ts and (now - last_ts) < _UPDATE_CHECK_INTERVAL_SEC:
+        threshold = (
+            _UPDATE_CHECK_RESUME_THROTTLE_SEC
+            if str(reason or "") == "resume"
+            else _UPDATE_CHECK_INTERVAL_SEC
+        )
+        if not force and last_ts and (now - last_ts) < threshold:
             return
     except Exception:
         pass

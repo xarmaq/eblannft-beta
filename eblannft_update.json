@@ -1,6 +1,6 @@
 {
-  "version": "1.0.13",
-  "notes": "Фикс пустого поля «Quantity» при открытии NFT-подарка из чата. Перед инжектом TL_messageActionStarGiftUnique теперь зовётся _ensure_unique_gift_availability(gift) — он подтягивает availability_total / limited_count из загруженного StarsController-каталога, и Telegram-UI снова рисует «X из Y issued».",
+  "version": "1.0.14",
+  "notes": "Авто-апдейт теперь срабатывает и при возврате из «недавних» приложений (а не только при холодном старте с force-stop). Wrapper подцепился к существующему хуку LaunchActivity.onResume, и при каждом resume дёргает проверку манифеста с лёгким 2-минутным троттлингом (вместо обычных 4-часовых для cold start). Если зашёл в приложение спустя пару минут — увидишь попап с новой версией.",
   "files": [
     "eblannft.plugin"
   ]
