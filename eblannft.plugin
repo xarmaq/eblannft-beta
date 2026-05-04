@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -63,7 +63,10 @@ def _bootstrap_log(msg):
 
 def _raw_url(rel_path):
     rel = str(rel_path or "").replace("\\", "/").lstrip("/")
-    return f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{rel}"
+    # Append a timestamp query so raw.githubusercontent.com's CDN always
+    # serves the freshest commit instead of a 5-10 min stale copy.
+    bust = int(time.time())
+    return f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{rel}?_={bust}"
 
 
 def _candidate_install_roots():
@@ -499,7 +502,14 @@ def _resolve_dest_for_manifest_entry(rel_path):
 
 
 def _fetch_manifest():
-    url = f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{_UPDATE_MANIFEST_PATH}"
+    # Bust raw.githubusercontent.com's CDN cache (~5-10 min TTL otherwise) by
+    # appending a unique query string. The CDN keys on the full URL, so each
+    # fetch returns whatever is currently committed instead of a stale copy.
+    bust = int(time.time())
+    url = (
+        f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/"
+        f"{_UPDATE_MANIFEST_PATH}?_={bust}"
+    )
     raw, _total = _http_get(url, timeout=12)
     text = raw.decode("utf-8", errors="replace")
     data = json.loads(text)
