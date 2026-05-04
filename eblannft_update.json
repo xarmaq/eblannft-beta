@@ -1,7 +1,9 @@
 {
   "version": "1.0.0",
-  "notes": "Rollback to v1.0.0 monolithic build. The 1.5.5 wrapper-loader caused an immediate ClassCastException (bool→void) on plugin enable, so the GitHub channel is reverted to the last known-good single-file build until the wrapper bug is found and fixed.",
+  "notes": "Wrapper-loader build on top of the proven v1.0.0 plugin body. eblannft.plugin is now a thin loader that delegates to eblannft_runtime/plugin.py — same NftClonerPlugin code that worked before, just split for future updates.",
   "files": [
-    "eblannft.plugin"
+    "eblannft.plugin",
+    "eblannft_runtime/__init__.py",
+    "eblannft_runtime/plugin.py"
   ]
 }
