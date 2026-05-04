@@ -6,8 +6,10 @@
 # // |  __/ |_) | | (_| | | | | |\  | |       | |
 # //  \___|_.__/|_|\__,_|_| |_|_| \_|_|       |_|
 # //
-# // Thin loader-wrapper. The actual plugin lives in eblannft_runtime/plugin.py
-# // and is downloaded/updated from https://github.com/xarmaq/eblannft.
+# // Self-bootstrapping loader-wrapper. The user installs THIS file only.
+# // On first plugin load it downloads eblannft_runtime/ from GitHub into
+# // Downloads/eblannft/ (or a fallback dir) and loads NftClonerPlugin
+# // from there. Subsequent loads reuse the on-disk copy.
 
 from base_plugin import BasePlugin
 import importlib
@@ -23,86 +25,217 @@ __version__ = "1.0.0"
 __icon__ = "HappyHappyPepe/31"
 
 
-_RUNTIME_PACKAGE_DIR_NAME = "eblannft_runtime"
+_RUNTIME_REPO = "xarmaq/eblannft"
+_RUNTIME_BRANCH = "main"
+_RUNTIME_DIR_NAME = "eblannft"
+_RUNTIME_PACKAGE_NAME = "eblannft_runtime"
 _RUNTIME_PACKAGE_ALIAS = "_eblannft_runtime_pkg"
 _IMPL_ATTR_CANDIDATES = ("EblanNftPlugin", "NftClonerPlugin")
+_RUNTIME_FILES = (
+    f"{_RUNTIME_PACKAGE_NAME}/__init__.py",
+    f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
+)
+_DOWNLOAD_TIMEOUT_SEC = 35
 
 
-def _try_attrs(module):
-    for attr in _IMPL_ATTR_CANDIDATES:
-        impl = getattr(module, attr, None)
-        if isinstance(impl, type):
-            return impl
+def _bootstrap_log(msg):
+    try:
+        from android_utils import log as _log
+        _log(f"[eblannft-bootstrap] {msg}")
+    except Exception:
+        pass
+
+
+def _raw_url(rel_path):
+    rel = str(rel_path or "").replace("\\", "/").lstrip("/")
+    return f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{rel}"
+
+
+def _candidate_install_roots():
+    """Ordered list of directories to consider for the runtime install."""
+    seen = set()
+    roots = []
+
+    def _push(path):
+        if not path:
+            return
+        try:
+            ap = os.path.abspath(str(path))
+        except Exception:
+            return
+        if ap and ap not in seen:
+            seen.add(ap)
+            roots.append(ap)
+
+    # 1. Public Downloads/eblannft — visible to the user via any file manager.
+    try:
+        from java import jclass
+        Environment = jclass("android.os.Environment")
+        downloads = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOWNLOADS
+        )
+        if downloads is not None:
+            _push(os.path.join(str(downloads.getAbsolutePath()), _RUNTIME_DIR_NAME))
+    except Exception as e:
+        _bootstrap_log(f"public Downloads lookup failed: {e}")
+
+    # 2. App-specific external files dir — always writable, also user-visible
+    #    under Android/data/com.exteragram.messenger/files/eblannft/.
+    try:
+        from org.telegram.messenger import ApplicationLoader
+        ctx = ApplicationLoader.applicationContext
+        if ctx is not None:
+            ext = ctx.getExternalFilesDir(None)
+            if ext is not None:
+                _push(os.path.join(str(ext.getAbsolutePath()), _RUNTIME_DIR_NAME))
+            files_dir = ctx.getFilesDir()
+            if files_dir is not None:
+                _push(os.path.join(str(files_dir.getAbsolutePath()), _RUNTIME_DIR_NAME))
+    except Exception as e:
+        _bootstrap_log(f"app dir lookup failed: {e}")
+
+    # 3. Same directory as this loader file — last-resort, also legacy layout.
+    try:
+        _push(os.path.dirname(os.path.abspath(__file__)))
+    except Exception:
+        pass
+
+    return roots
+
+
+def _runtime_present(root):
+    """Return True only if every runtime file exists at this root."""
+    for rel in _RUNTIME_FILES:
+        path = os.path.join(root, rel.replace("/", os.sep))
+        if not os.path.isfile(path):
+            return False
+        try:
+            # __init__.py is intentionally ~1 byte, plugin.py is ~1 MB; reject empty.
+            if os.path.getsize(path) <= 0:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def _existing_runtime_root():
+    for root in _candidate_install_roots():
+        if _runtime_present(root):
+            return root
     return None
 
 
-def _load_eblannft_impl():
-    direct_errors = []
-    # 1) Already-installed package on sys.path (e.g. when shipped via wheel).
-    for module_name in (f"{_RUNTIME_PACKAGE_DIR_NAME}.plugin",):
-        try:
-            plugin_mod = importlib.import_module(module_name)
-            impl = _try_attrs(plugin_mod)
-            if impl is not None:
-                return impl
-        except Exception as e:
-            direct_errors.append(f"{module_name}: {e}")
-
-    # 2) File-system fallback: load eblannft_runtime/ that sits next to this
-    #    loader (or anywhere on sys.path). Mirrors the nowfy_beta wrapper.
+def _is_dir_writable(path):
     try:
-        current_file = os.path.abspath(__file__)
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".eblannft_write_probe")
+        with open(probe, "wb") as f:
+            f.write(b"x")
+        os.remove(probe)
+        return True
     except Exception:
-        current_file = ""
-    current_dir = os.path.abspath(os.path.dirname(current_file)) if current_file else ""
+        return False
 
-    candidate_bases = []
-    if current_dir:
-        candidate_bases.append(current_dir)
-    for _base in list(sys.path):
-        if _base and _base not in candidate_bases:
-            candidate_bases.append(_base)
 
-    for base in candidate_bases:
-        try:
-            base_abs = os.path.abspath(base)
-            pkg_dir = os.path.join(base_abs, _RUNTIME_PACKAGE_DIR_NAME)
-            init_py = os.path.join(pkg_dir, "__init__.py")
-            plugin_py = os.path.join(pkg_dir, "plugin.py")
-            if not (os.path.isfile(init_py) and os.path.isfile(plugin_py)):
-                continue
+def _pick_writable_install_root():
+    for root in _candidate_install_roots():
+        if _is_dir_writable(root):
+            return root
+    raise RuntimeError("No writable directory available for eblannft runtime")
 
-            if _RUNTIME_PACKAGE_ALIAS not in sys.modules:
-                pkg_spec = importlib.util.spec_from_file_location(
-                    _RUNTIME_PACKAGE_ALIAS,
-                    init_py,
-                    submodule_search_locations=[pkg_dir],
-                )
-                if pkg_spec is None or pkg_spec.loader is None:
-                    continue
-                pkg_mod = importlib.util.module_from_spec(pkg_spec)
-                sys.modules[_RUNTIME_PACKAGE_ALIAS] = pkg_mod
-                pkg_spec.loader.exec_module(pkg_mod)
 
-            plugin_mod_name = f"{_RUNTIME_PACKAGE_ALIAS}.plugin"
-            plugin_mod = sys.modules.get(plugin_mod_name)
-            if plugin_mod is None:
-                plugin_spec = importlib.util.spec_from_file_location(plugin_mod_name, plugin_py)
-                if plugin_spec is None or plugin_spec.loader is None:
-                    continue
-                plugin_mod = importlib.util.module_from_spec(plugin_spec)
-                sys.modules[plugin_mod_name] = plugin_mod
-                plugin_spec.loader.exec_module(plugin_mod)
+def _download_to(path, url):
+    from urllib.request import Request, urlopen
+    req = Request(
+        url,
+        headers={
+            "User-Agent": f"eblannft-bootstrap/{__version__}",
+            "Accept": "*/*",
+            "Cache-Control": "no-cache",
+        },
+    )
+    with urlopen(req, timeout=_DOWNLOAD_TIMEOUT_SEC) as resp:
+        data = resp.read()
+    if not data:
+        raise RuntimeError(f"Empty response: {url}")
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
+    return len(data)
 
-            impl = _try_attrs(plugin_mod)
-            if impl is not None:
+
+def _bootstrap_runtime():
+    """Return (install_root, mode) where mode is 'reused' or 'downloaded'."""
+    existing = _existing_runtime_root()
+    if existing:
+        _bootstrap_log(f"runtime found at {existing}")
+        return existing, "reused"
+
+    target_root = _pick_writable_install_root()
+    _bootstrap_log(f"downloading runtime into {target_root}")
+    for rel in _RUNTIME_FILES:
+        dest = os.path.join(target_root, rel.replace("/", os.sep))
+        size = _download_to(dest, _raw_url(rel))
+        _bootstrap_log(f"  {rel} -> {size} bytes")
+    return target_root, "downloaded"
+
+
+def _import_runtime_from(install_root):
+    pkg_dir = os.path.join(install_root, _RUNTIME_PACKAGE_NAME)
+    init_py = os.path.join(pkg_dir, "__init__.py")
+    plugin_py = os.path.join(pkg_dir, "plugin.py")
+
+    if _RUNTIME_PACKAGE_ALIAS not in sys.modules:
+        pkg_spec = importlib.util.spec_from_file_location(
+            _RUNTIME_PACKAGE_ALIAS,
+            init_py,
+            submodule_search_locations=[pkg_dir],
+        )
+        if pkg_spec is None or pkg_spec.loader is None:
+            raise ImportError(f"Cannot build spec for runtime package at {pkg_dir}")
+        pkg_mod = importlib.util.module_from_spec(pkg_spec)
+        sys.modules[_RUNTIME_PACKAGE_ALIAS] = pkg_mod
+        pkg_spec.loader.exec_module(pkg_mod)
+
+    plugin_mod_name = f"{_RUNTIME_PACKAGE_ALIAS}.plugin"
+    plugin_mod = sys.modules.get(plugin_mod_name)
+    if plugin_mod is None:
+        plugin_spec = importlib.util.spec_from_file_location(plugin_mod_name, plugin_py)
+        if plugin_spec is None or plugin_spec.loader is None:
+            raise ImportError(f"Cannot build spec for runtime plugin at {plugin_py}")
+        plugin_mod = importlib.util.module_from_spec(plugin_spec)
+        sys.modules[plugin_mod_name] = plugin_mod
+        plugin_spec.loader.exec_module(plugin_mod)
+
+    for attr in _IMPL_ATTR_CANDIDATES:
+        impl = getattr(plugin_mod, attr, None)
+        if isinstance(impl, type):
+            return impl
+    raise ImportError(
+        f"Runtime module {plugin_py} has no class in {_IMPL_ATTR_CANDIDATES}"
+    )
+
+
+def _load_eblannft_impl():
+    # If something already exposed the runtime as a regular package on sys.path
+    # (e.g. legacy layout with eblannft_runtime/ next to the wrapper), prefer it.
+    try:
+        plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
+        for attr in _IMPL_ATTR_CANDIDATES:
+            impl = getattr(plugin_mod, attr, None)
+            if isinstance(impl, type):
+                _bootstrap_log("loaded runtime via existing sys.path import")
                 return impl
-        except Exception as e:
-            direct_errors.append(f"{base}: {e}")
-            continue
+    except Exception:
+        pass
 
-    extra = f" | {'; '.join(direct_errors)}" if direct_errors else ""
-    raise ModuleNotFoundError(f"eblannft_runtime not found on disk{extra}")
+    install_root, mode = _bootstrap_runtime()
+    _bootstrap_log(f"using runtime root ({mode}): {install_root}")
+    return _import_runtime_from(install_root)
 
 
 _LOAD_ERROR = None
@@ -111,6 +244,7 @@ try:
 except Exception as _e:
     _EblanNftImpl = BasePlugin
     _LOAD_ERROR = _e
+    _bootstrap_log(f"FATAL bootstrap failure: {_e}")
 
 
 if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
@@ -122,14 +256,9 @@ if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
             if callable(parent):
                 return parent()
 else:
-    class EblanNftPlugin(_EblanNftImpl, BasePlugin):
+    class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
-            if _LOAD_ERROR is not None:
-                raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
-            parent = getattr(super(), "on_plugin_load", None)
-            if callable(parent):
-                return parent()
+            raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
 
 
-# Aliases so external lookups (`getattr(mod, "...")`) keep working.
 NftClonerPlugin = EblanNftPlugin
