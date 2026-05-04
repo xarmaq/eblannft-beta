@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.17"
+__version__ = "1.0.18"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1551,6 +1551,151 @@ def _download_and_apply_update(manifest, progress_cb=None):
                 pass
 
 
+_eblannft_popup_sticker_doc_cache = None
+
+
+def _enable_sticker_animation(sticker_view):
+    """Tell BackupImageView's ImageReceiver to start + loop the TGS animation
+    (same dance _bind_welcome_pepe_sticker does in the runtime)."""
+    try:
+        receiver = (
+            sticker_view.getImageReceiver()
+            if sticker_view is not None and hasattr(sticker_view, "getImageReceiver")
+            else None
+        )
+    except Exception:
+        receiver = None
+    if receiver is None:
+        return
+    for setter, args in (
+        ("setAllowStartAnimation", (True,)),
+        ("setAutoRepeat", (1,)),
+        ("setAutoRepeatCount", (0,)),
+        ("setAutoRepeatTimeout", (0,)),
+        ("setAllowStartLottieAnimation", (True,)),
+    ):
+        try:
+            fn = getattr(receiver, setter, None)
+            if callable(fn):
+                fn(*args)
+        except Exception:
+            pass
+    try:
+        if hasattr(receiver, "startAnimation"):
+            receiver.startAnimation()
+    except Exception:
+        pass
+
+
+def _apply_sticker_document_to_view(sticker_view, document, image_filter="120_120"):
+    if sticker_view is None or document is None:
+        return False
+    try:
+        if not hasattr(sticker_view, "setImage"):
+            return False
+        from org.telegram.messenger import ImageLocation
+        loc = ImageLocation.getForDocument(document)
+        if loc is None:
+            return False
+        sticker_view.setImage(loc, str(image_filter or "120_120"), None, 0, document)
+        _enable_sticker_animation(sticker_view)
+        global _eblannft_popup_sticker_doc_cache
+        _eblannft_popup_sticker_doc_cache = document
+        return True
+    except Exception as e:
+        _bootstrap_log(f"apply sticker doc failed: {e}")
+        return False
+
+
+def _bind_eblannft_popup_sticker(sticker_view, set_name="HappyHappyPepe", indexes=(31, 0), image_filter="120_120"):
+    """Look up the requested sticker (by set short_name + preferred index list,
+    falling back to subsequent indexes if the chosen one is out of range) and
+    apply it to a BackupImageView. If the sticker set isn't loaded yet,
+    asynchronously fetch it via MediaDataController.getStickerSet and apply
+    on the UI thread when it arrives."""
+    if sticker_view is None:
+        return False
+
+    # Reuse the cached document if one's already been resolved during this
+    # session — saves a MediaDataController round-trip on subsequent popups.
+    cached = _eblannft_popup_sticker_doc_cache
+    if cached is not None and _apply_sticker_document_to_view(sticker_view, cached, image_filter):
+        return True
+
+    try:
+        from java import jclass, dynamic_proxy
+        from android_utils import run_on_ui_thread
+        from org.telegram.messenger import MediaDataController, UserConfig
+        from org.telegram.tgnet import TLRPC
+    except Exception as e:
+        _bootstrap_log(f"sticker imports failed: {e}")
+        return False
+
+    try:
+        account = int(UserConfig.selectedAccount)
+    except Exception:
+        account = 0
+
+    try:
+        media_controller = MediaDataController.getInstance(account)
+    except Exception:
+        media_controller = None
+    if media_controller is None:
+        return False
+
+    def _try_set(sset):
+        try:
+            docs = getattr(sset, "documents", None) if sset is not None else None
+            if docs is None:
+                return False
+            n = int(docs.size())
+            for idx in indexes:
+                try:
+                    i = int(idx)
+                except Exception:
+                    continue
+                if 0 <= i < n:
+                    doc = docs.get(i)
+                    if _apply_sticker_document_to_view(sticker_view, doc, image_filter):
+                        return True
+            return False
+        except Exception as e:
+            _bootstrap_log(f"sticker set scan failed: {e}")
+            return False
+
+    # Fast path: set already cached locally.
+    try:
+        sset = media_controller.getStickerSetByName(str(set_name))
+    except Exception:
+        sset = None
+    if _try_set(sset):
+        return True
+
+    # Slow path: ask MediaDataController to fetch / cache it.
+    try:
+        input_set = TLRPC.TL_inputStickerSetShortName()
+        input_set.short_name = str(set_name)
+        target_view = sticker_view
+
+        class _CB(dynamic_proxy(jclass("org.telegram.messenger.Utilities$Callback"))):
+            def run(self_obj, result):
+                try:
+                    def _apply():
+                        _try_set(result)
+                    run_on_ui_thread(_apply)
+                except Exception as e:
+                    try:
+                        _bootstrap_log(f"sticker set callback fail: {e}")
+                    except Exception:
+                        pass
+
+        media_controller.getStickerSet(input_set, None, False, _CB())
+    except Exception as e:
+        _bootstrap_log(f"sticker fetch failed: {e}")
+
+    return False
+
+
 def _show_update_popup(manifest):
     """Build and present an MD3 BottomSheet describing the available update.
 
@@ -1673,7 +1818,8 @@ def _show_update_popup(manifest):
                 pass
 
             sticker_bound = False
-            if BackupImageView is not None and _plugin_instance is not None:
+            sticker_view_ref = None
+            if BackupImageView is not None:
                 try:
                     sticker_view = BackupImageView(ctx)
                     try:
@@ -1688,18 +1834,18 @@ def _show_update_popup(manifest):
                             Gravity.CENTER,
                         ),
                     )
-                    # Plugin __icon__ is "HappyHappyPepe/31" — bind that sticker
-                    # via the runtime helper. The runtime caches the resolved
-                    # document so subsequent popups don't re-fetch.
+                    # __icon__ = HappyHappyPepe/31. Try 31 first, fall back to
+                    # earlier indexes if the set doesn't have it. Async fetch
+                    # via MediaDataController if not cached locally.
                     try:
-                        _plugin_instance._bind_sticker_from_set(
+                        _bind_eblannft_popup_sticker(
                             sticker_view,
-                            "HappyHappyPepe",
-                            [31, 0],  # 31 is the icon; fall back to 0 (welcome) if missing
-                            cache_attr="_eblannft_update_popup_sticker_cache",
+                            set_name="HappyHappyPepe",
+                            indexes=(31, 30, 0),
                             image_filter="120_120",
                         )
                         sticker_bound = True
+                        sticker_view_ref = sticker_view
                     except Exception as e:
                         _bootstrap_log(f"sticker bind failed: {e}")
                 except Exception as e:
@@ -2148,6 +2294,34 @@ def _show_update_popup(manifest):
                 sheet.show()
             except Exception:
                 run_on_ui_thread(sheet.show)
+
+            # Some Telegram builds attach the receiver lazily — re-kick the
+            # animation after show() so the TGS plays even if the document
+            # arrived after our first startAnimation() call.
+            if sticker_view_ref is not None:
+                try:
+                    from java import dynamic_proxy
+                    Runnable = jclass("java.lang.Runnable")
+
+                    def _make_rekick():
+                        sv = sticker_view_ref
+
+                        class _Tick(dynamic_proxy(Runnable)):
+                            def run(self_obj):
+                                try:
+                                    _enable_sticker_animation(sv)
+                                except Exception:
+                                    pass
+                                return None
+                        return _Tick()
+
+                    for delay_ms in (180, 600, 1500):
+                        try:
+                            sticker_view_ref.postDelayed(_make_rekick(), int(delay_ms))
+                        except Exception:
+                            pass
+                except Exception as e:
+                    _bootstrap_log(f"sticker re-kick scheduling failed: {e}")
         except Exception as e:
             _bootstrap_log(f"popup build failure: {e}")
 

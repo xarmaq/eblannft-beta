@@ -1,6 +1,6 @@
 {
-  "version": "1.0.17",
-  "notes": "Косметика и плавность апдейт-попапа:\n\n• В hero-шапке вместо нерендерящегося Unicode-глифа теперь живой стикер HappyHappyPepe #31 — та же лягушка, что используется как иконка плагина. Подгружается через _bind_sticker_from_set (с кэшем), fallback на «⬇» если runtime недоступен.\n• Прогресс-бар снова заполняется плавно. Раньше _http_get читал чанками по 64 КБ — wrapper всего 38 КБ влезал в один chunk, и progress-callback срабатывал один раз 0% → 100%. Уменьшил chunk до 4 КБ — теперь идёт ~10 апдейтов с плавной анимацией заливки.",
+  "version": "1.0.18",
+  "notes": "Стикер в попапе обновления теперь анимированный — лягушка двигается, как в стикерпаке. Раньше я звал runtime-метод _bind_sticker_from_set, которого в v1.0.0 нет (он был только в v1.5.5), и попап молча падал на fallback-стрелочку. В этой версии: 1) собственная привязка стикера прямо в wrapper'е через MediaDataController.getStickerSetByName(\"HappyHappyPepe\") с асинхронным fallback'ом на getStickerSet, если set не закэширован; 2) после setImage явно дёргается ImageReceiver.setAllowStartAnimation(true) + setAutoRepeat(1) + startAnimation() — то же, что делает welcome-сheet; 3) дополнительно re-kick анимации через 180/600/1500ms после показа sheet'а на случай, если ImageReceiver привязался позже документа.",
   "files": [
     "eblannft.plugin"
   ]
