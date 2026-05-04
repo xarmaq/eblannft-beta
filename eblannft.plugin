@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.9"
+__version__ = "1.0.10"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -847,6 +847,34 @@ def _patch_runtime_nft_to_chat():
                 self._apply_identity_config_to_objects(gift=gift, wrapper=wrapper, identity_config=cfg)
             except Exception as e:
                 _bootstrap_log(f"reassign: apply_identity_config failed: {e}")
+
+            # When the owner is no longer me, strip purchase-context fields so
+            # Telegram doesn't render the 'You bought this gift on ...' caption
+            # at the top of the StarGiftSheet.
+            try:
+                my_id_now = int(self._get_my_user_id() or 0)
+            except Exception:
+                my_id_now = 0
+            if my_id_now > 0 and int(target_user_id) != my_id_now:
+                for fld, zero in (
+                    ("msg_id", 0),
+                    ("msgId", 0),
+                    ("saved_id", 0),
+                    ("savedId", 0),
+                    ("savedID", 0),
+                    ("saved_gift_id", 0),
+                    ("savedGiftId", 0),
+                    ("unsaved", False),
+                    ("name_hidden", False),
+                    ("nameHidden", False),
+                    ("pinned_to_top", False),
+                    ("pinnedToTop", False),
+                ):
+                    try:
+                        self._set_field(wrapper, fld, zero)
+                    except Exception:
+                        pass
+
             # Re-serialize so the persisted b64 carries the new owner. Use the
             # module-level serializer that lives in the runtime namespace.
             try:
@@ -1095,6 +1123,85 @@ def _patch_runtime_nft_to_chat():
 
 
 _patch_runtime_nft_to_chat()
+
+
+def _patch_runtime_foreign_profile_gates():
+    """Suppress eblannft's owner-only sheet rows when the gift's library
+    entry is assigned to another user. Also strip saved_id / msg_id /
+    unsaved on wrappers reassigned to a foreign owner so Telegram drops
+    the 'You bought this gift' caption."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+
+    def _entry_owner_uid(plugin_self, entry):
+        try:
+            cfg = entry.get("identity_config") or {}
+        except Exception:
+            cfg = {}
+        try:
+            return int(cfg.get("owner_user_id", 0) or 0)
+        except Exception:
+            return 0
+
+    def _gate_methods():
+        gated = ("_inject_local_gift_value_row", "_inject_local_gift_release_badge",
+                 "_inject_local_gift_ton_owner_row", "_apply_local_ton_blockchain_line")
+        for name in gated:
+            try:
+                original = _EblanNftImpl.__dict__.get(name)
+            except Exception:
+                original = None
+            if original is None:
+                for base in getattr(_EblanNftImpl, "__mro__", ()):
+                    cand = base.__dict__.get(name) if hasattr(base, "__dict__") else None
+                    if cand is not None:
+                        original = cand
+                        break
+            if original is None:
+                continue
+            if getattr(original, "_eblannft_owner_gated", False):
+                continue
+
+            def _make(orig, mname):
+                def patched(self, sheet, gift=None, *a, **kw):
+                    key = None
+                    try:
+                        key = self._resolve_library_key_from_gift_sheet(sheet) if sheet is not None else None
+                    except Exception:
+                        key = None
+                    if not key and gift is not None:
+                        try:
+                            key = self._resolve_library_key_for_gift(gift)
+                        except Exception:
+                            key = None
+                    if key:
+                        try:
+                            entry = self._library_find_entry(key)
+                        except Exception:
+                            entry = None
+                        if entry is not None:
+                            owner = _entry_owner_uid(self, entry)
+                            try:
+                                my_id = int(self._get_my_user_id() or 0)
+                            except Exception:
+                                my_id = 0
+                            if owner > 0 and my_id > 0 and owner != my_id:
+                                return False
+                    return orig(self, sheet, gift, *a, **kw)
+                patched._eblannft_owner_gated = True
+                patched.__name__ = mname
+                return patched
+
+            try:
+                setattr(_EblanNftImpl, name, _make(original, name))
+                _bootstrap_log(f"foreign-profile gate installed on {name}")
+            except Exception as e:
+                _bootstrap_log(f"foreign-profile gate install failed for {name}: {e}")
+
+    _gate_methods()
+
+
+_patch_runtime_foreign_profile_gates()
 
 
 # ---------------------------------------------------------------------------
