@@ -1,9 +1,0 @@
-{
-  "version": "1.5.0",
-  "notes": "Add a larger animated startup popup with staged real progress, refreshed minimal UI, and the new animated sticker pack",
-  "files": [
-    "eblannft.plugin",
-    "eblannft_runtime/__init__.py",
-    "eblannft_runtime/plugin.py"
-  ]
-}
