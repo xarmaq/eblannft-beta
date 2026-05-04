@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.16"
+__version__ = "1.0.17"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -168,6 +168,10 @@ def _http_get(url, timeout=None, progress_cb=None):
         },
     )
     timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
+    # Keep chunk size small so the progress bar gets enough updates even on
+    # tiny files (the 38 KB wrapper used to fit in a single 64 KB chunk and
+    # the bar jumped 0% → 100% with no fill animation in between).
+    chunk_size = 4096
     with urlopen(req, timeout=timeout) as resp:
         try:
             total = int(resp.headers.get("Content-Length", "0") or 0)
@@ -176,7 +180,7 @@ def _http_get(url, timeout=None, progress_cb=None):
         chunks = []
         loaded = 0
         while True:
-            chunk = resp.read(65536)
+            chunk = resp.read(chunk_size)
             if not chunk:
                 break
             chunks.append(chunk)
@@ -331,6 +335,10 @@ def _load_eblannft_impl():
 
 _LOAD_ERROR = None
 _RUNTIME_INSTALL_ROOT = None
+# Captured at on_plugin_load so popup code can reach runtime instance helpers
+# (e.g. _bind_sticker_from_set) without having to thread `self` through every
+# call site.
+_plugin_instance = None
 try:
     _EblanNftImpl, _RUNTIME_INSTALL_ROOT = _load_eblannft_impl()
 except Exception as _e:
@@ -540,6 +548,13 @@ def _patch_runtime_nft_to_chat():
         return
 
     def patched_load(self, *a, **kw):
+        # Stash the live plugin instance so the update popup can reach
+        # _bind_sticker_from_set and other instance methods on the runtime.
+        try:
+            global _plugin_instance
+            _plugin_instance = self
+        except Exception:
+            pass
         try:
             result = original_load(self, *a, **kw)
         except Exception as e:
@@ -1562,6 +1577,10 @@ def _show_update_popup(manifest):
     except Exception as e:
         _bootstrap_log(f"update popup imports failed: {e}")
         return False
+    try:
+        from org.telegram.ui.Components import BackupImageView
+    except Exception:
+        BackupImageView = None
 
     try:
         frag = get_last_fragment()
@@ -1646,29 +1665,64 @@ def _show_update_popup(manifest):
             try:
                 ib = GradientDrawable()
                 ib.setCornerRadius(AndroidUtilities.dp(18))
-                ib.setColor(_blend(accent, bg_color, 0.30))
+                ib.setColor(_blend(accent, bg_color, 0.20))
                 icon_box.setBackground(ib)
                 icon_box.setClipToOutline(True)
                 icon_box.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
             except Exception:
                 pass
 
-            icon_glyph = TextView(ctx)
-            try:
-                icon_glyph.setText("⭳")  # downwards arrow with corner
-                icon_glyph.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 28)
-                icon_glyph.setTextColor(accent)
-                icon_glyph.setGravity(Gravity.CENTER)
+            sticker_bound = False
+            if BackupImageView is not None and _plugin_instance is not None:
                 try:
-                    icon_glyph.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    sticker_view = BackupImageView(ctx)
+                    try:
+                        sticker_view.setRoundRadius(AndroidUtilities.dp(14))
+                    except Exception:
+                        pass
+                    icon_box.addView(
+                        sticker_view,
+                        FrameLayout.LayoutParams(
+                            AndroidUtilities.dp(48),
+                            AndroidUtilities.dp(48),
+                            Gravity.CENTER,
+                        ),
+                    )
+                    # Plugin __icon__ is "HappyHappyPepe/31" — bind that sticker
+                    # via the runtime helper. The runtime caches the resolved
+                    # document so subsequent popups don't re-fetch.
+                    try:
+                        _plugin_instance._bind_sticker_from_set(
+                            sticker_view,
+                            "HappyHappyPepe",
+                            [31, 0],  # 31 is the icon; fall back to 0 (welcome) if missing
+                            cache_attr="_eblannft_update_popup_sticker_cache",
+                            image_filter="120_120",
+                        )
+                        sticker_bound = True
+                    except Exception as e:
+                        _bootstrap_log(f"sticker bind failed: {e}")
+                except Exception as e:
+                    _bootstrap_log(f"BackupImageView setup failed: {e}")
+
+            if not sticker_bound:
+                icon_glyph = TextView(ctx)
+                try:
+                    icon_glyph.setText("⬇")  # safer fallback glyph
+                    icon_glyph.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 26)
+                    icon_glyph.setTextColor(accent)
+                    icon_glyph.setGravity(Gravity.CENTER)
+                    try:
+                        icon_glyph.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    except Exception:
+                        pass
                 except Exception:
                     pass
-            except Exception:
-                pass
-            icon_box.addView(
-                icon_glyph,
-                FrameLayout.LayoutParams(-1, -1, Gravity.CENTER),
-            )
+                icon_box.addView(
+                    icon_glyph,
+                    FrameLayout.LayoutParams(-1, -1, Gravity.CENTER),
+                )
+
             hero.addView(
                 icon_box,
                 LinearLayout.LayoutParams(AndroidUtilities.dp(54), AndroidUtilities.dp(54)),
