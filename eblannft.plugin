@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.22"
+__version__ = "1.0.23"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1395,6 +1395,121 @@ def _patch_runtime_ui_text_rewrites():
 
 
 _patch_runtime_ui_text_rewrites()
+
+
+def _walk_view_tree_rewrite_texts(view, mapping):
+    """Depth-first walk a Java View tree; whenever a TextView's current
+    text matches a key in `mapping`, swap it for the mapped value. Used
+    to retarget hard-coded setText('...') strings that the runtime built
+    in via literal — bypasses the _ui_text patch route entirely."""
+    if view is None or not mapping:
+        return
+    try:
+        getter = getattr(view, "getText", None)
+        if callable(getter):
+            try:
+                cur = str(getter() or "")
+            except Exception:
+                cur = ""
+            if cur and cur in mapping:
+                try:
+                    view.setText(str(mapping[cur]))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        n = view.getChildCount() if hasattr(view, "getChildCount") else 0
+    except Exception:
+        n = 0
+    for i in range(int(n or 0)):
+        try:
+            child = view.getChildAt(i)
+        except Exception:
+            child = None
+        if child is not None:
+            _walk_view_tree_rewrite_texts(child, mapping)
+
+
+def _patch_runtime_welcome_text_walker():
+    """Wrap _show_install_welcome_sheet so that — once the sheet is
+    attached — we walk LaunchActivity.instance.getWindow().getDecorView()
+    looking for any TextView whose .getText() matches a key in
+    _EBLANNFT_TEXT_REWRITES, and call setText() with the rewrite. Three
+    delayed walks (50/250/700/1500 ms) cover the case where the sheet
+    animates in after our first attempt."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original = _EblanNftImpl.__dict__.get("_show_install_welcome_sheet")
+    except Exception:
+        original = None
+    if original is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("_show_install_welcome_sheet") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original = cand
+                break
+    if original is None:
+        _bootstrap_log("welcome walker: no _show_install_welcome_sheet found")
+        return
+    if getattr(original, "_eblannft_welcome_walked", False):
+        return
+
+    def patched(self, ctx_override=None, *a, **kw):
+        try:
+            result = original(self, ctx_override, *a, **kw)
+        except Exception as e:
+            _bootstrap_log(f"welcome original failed: {e}")
+            raise
+
+        def _do_walk():
+            try:
+                from java import jclass
+                LaunchActivity = jclass("org.telegram.ui.LaunchActivity")
+                act = getattr(LaunchActivity, "instance", None)
+                if act is None:
+                    return
+                window = act.getWindow() if hasattr(act, "getWindow") else None
+                root = window.getDecorView() if window is not None else None
+                if root is not None:
+                    _walk_view_tree_rewrite_texts(root, _EBLANNFT_TEXT_REWRITES)
+            except Exception as e:
+                _bootstrap_log(f"welcome text walk failed: {e}")
+
+        try:
+            from java import dynamic_proxy, jclass as _jclass
+            from org.telegram.messenger import AndroidUtilities
+            Runnable = _jclass("java.lang.Runnable")
+
+            def _make():
+                class _Tick(dynamic_proxy(Runnable)):
+                    def run(self_obj):
+                        try:
+                            _do_walk()
+                        except Exception:
+                            pass
+                        return None
+                return _Tick()
+
+            for delay_ms in (50, 250, 700, 1500):
+                try:
+                    AndroidUtilities.runOnUIThread(_make(), int(delay_ms))
+                except Exception:
+                    pass
+        except Exception as e:
+            _bootstrap_log(f"welcome walker scheduling failed: {e}")
+        return result
+
+    patched._eblannft_welcome_walked = True
+    try:
+        _EblanNftImpl._show_install_welcome_sheet = patched
+        _bootstrap_log("welcome sheet text walker installed")
+    except Exception as e:
+        _bootstrap_log(f"welcome walker install failed: {e}")
+
+
+_patch_runtime_welcome_text_walker()
 
 
 # ---------------------------------------------------------------------------
