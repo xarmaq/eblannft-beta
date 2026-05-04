@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.18"
+__version__ = "1.0.19"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1332,8 +1332,27 @@ def _version_tuple(version_str):
     return nums
 
 
-def _is_remote_newer(remote_version):
+def _is_remote_different(remote_version):
+    """Treat any non-empty manifest version that doesn't match local as an
+    actionable update — including rollbacks. Lets the maintainer ship a
+    lower version (e.g. yank v1.0.19 back to v1.0.18) and have every
+    install pick it up automatically."""
+    try:
+        rv = str(remote_version or "").strip()
+    except Exception:
+        rv = ""
+    if not rv:
+        return False
+    return _version_tuple(rv) != _version_tuple(__version__)
+
+
+def _is_remote_upgrade(remote_version):
     return _version_tuple(remote_version) > _version_tuple(__version__)
+
+
+# Back-compat alias — legacy callers may still reference this name.
+def _is_remote_newer(remote_version):
+    return _is_remote_different(remote_version)
 
 
 def _wrapper_file_path():
@@ -1883,8 +1902,15 @@ def _show_update_popup(manifest):
             except Exception:
                 hero.addView(hero_text, LinearLayout.LayoutParams(-1, -2))
 
+            # Adapt the hero copy to whether we're upgrading or rolling back.
+            try:
+                _is_upgrade = _is_remote_upgrade(manifest.get("version"))
+            except Exception:
+                _is_upgrade = True
             title = TextView(ctx)
-            title.setText("Обновление готово")
+            title.setText(
+                "Обновление готово" if _is_upgrade else f"Откат на v{manifest.get('version', '?')}"
+            )
             try:
                 title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
                 title.setTextColor(text_color)
@@ -2104,7 +2130,7 @@ def _show_update_popup(manifest):
             # ACTION BUTTONS — primary filled + secondary text
             # ============================================================
             action_btn = TextView(ctx)
-            action_btn.setText("Скачать обновление")
+            action_btn.setText("Скачать обновление" if _is_upgrade else "Установить эту версию")
             try:
                 action_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
                 action_btn.setGravity(Gravity.CENTER)
@@ -2368,8 +2394,8 @@ def _check_for_update_interactive():
             manifest = _fetch_manifest()
             _write_last_check_ts(time.time())
             remote_v = str(manifest.get("version", "?"))
-            if not _is_remote_newer(remote_v):
-                _toast("show_success", f"У тебя актуальная версия: v{__version__}")
+            if not _is_remote_different(remote_v):
+                _toast("show_success", f"В репо та же версия: v{__version__}")
                 return
             _bootstrap_log(f"manual update check: v{__version__} -> v{remote_v}")
             _show_update_popup(manifest)
@@ -2407,12 +2433,12 @@ def _maybe_check_for_update(force=False, reason="load"):
         try:
             manifest = _fetch_manifest()
             _write_last_check_ts(time.time())
-            if not _is_remote_newer(manifest.get("version")):
-                _bootstrap_log(f"up to date: local v{__version__} ≥ remote v{manifest.get('version')}")
+            remote_v = str(manifest.get("version", "?"))
+            if not _is_remote_different(remote_v):
+                _bootstrap_log(f"up to date: local v{__version__} == remote v{remote_v}")
                 return
-            _bootstrap_log(
-                f"update available: v{__version__} -> v{manifest.get('version')}"
-            )
+            kind = "upgrade" if _is_remote_upgrade(remote_v) else "rollback"
+            _bootstrap_log(f"manifest {kind} available: v{__version__} -> v{remote_v}")
             _show_update_popup(manifest)
         except Exception as e:
             _bootstrap_log(f"update check error: {e}")
