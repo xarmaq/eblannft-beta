@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.21"
+__version__ = "1.0.22"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1340,9 +1340,11 @@ _patch_runtime_library_label_for_sent()
 # via _ui_text — replaced here with friendlier copy. Keys MUST match the
 # runtime's literals exactly (Cyrillic + punctuation).
 _EBLANNFT_TEXT_REWRITES = {
-    # Welcome sheet description on first install
+    # Welcome sheet description on first install — drop the 'fast, smooth,
+    # signature green eblannft vibe' tail per user request, keep only the
+    # first sentence that actually tells the user what the plugin does.
     "Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля. Быстро, плавно и с фирменным зелёным eblannft вайбом.":
-        "Меняй визуал своего профиля одним тапом — коллекционные NFT-подарки, NFT-юзернейм и NFT-номер. Видно только тебе. Без покупок, без риска для аккаунта.",
+        "Локально настраивай NFT-подарки, NFT Username, NFT Number и визуал профиля.",
 }
 
 
