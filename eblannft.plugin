@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.14"
+__version__ = "1.0.15"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1428,7 +1428,15 @@ def _download_and_apply_update(manifest, progress_cb=None):
 
 
 def _show_update_popup(manifest):
-    """Build and present an MD3 BottomSheet describing the available update."""
+    """Build and present an MD3 BottomSheet describing the available update.
+
+    Layout (top → bottom):
+      1. Hero header — ⬇ icon glyph + 'Обновление' title + 'eblanNFT' subtitle
+         + version chip 'v X.Y.Z  →  vA.B.C'
+      2. Optional 'Что нового' card with scrollable change notes
+      3. Progress card — label / percent / 12dp gradient track / status line
+      4. Two-line button stack — filled primary 'Скачать' + text 'Позже'
+    """
     try:
         from android_utils import run_on_ui_thread, log as _log_ui
     except Exception:
@@ -1439,7 +1447,7 @@ def _show_update_popup(manifest):
         from org.telegram.ui.ActionBar import BottomSheet, Theme
         from org.telegram.messenger import AndroidUtilities, ApplicationLoader
         from android.view import View, Gravity, ViewOutlineProvider
-        from android.widget import LinearLayout, FrameLayout, TextView, ScrollView
+        from android.widget import LinearLayout, FrameLayout, TextView, ScrollView, ImageView
         from android.graphics.drawable import GradientDrawable
         from android.util import TypedValue
     except Exception as e:
@@ -1468,6 +1476,10 @@ def _show_update_popup(manifest):
             except Exception:
                 accent = 0xFF5B8CFF
             try:
+                accent_text = int(Theme.getColor(Theme.key_featuredStickers_buttonText))
+            except Exception:
+                accent_text = 0xFFFFFFFF
+            try:
                 bg_color = int(Theme.getColor(Theme.key_dialogBackground))
             except Exception:
                 bg_color = 0xFF14161B
@@ -1479,102 +1491,241 @@ def _show_update_popup(manifest):
                 muted_color = int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
             except Exception:
                 muted_color = 0xFF9AA3AE
-            try:
-                neutral_color = int(Theme.getColor(Theme.key_windowBackgroundGray))
-            except Exception:
-                neutral_color = 0x1AFFFFFF
+
+            # ---- Material 3 surface tones, derived from accent + background ----
+            def _blend(over_argb, base_argb, alpha_over):
+                a = max(0.0, min(1.0, float(alpha_over)))
+                inv = 1.0 - a
+                ro = (over_argb >> 16) & 0xFF
+                go = (over_argb >> 8) & 0xFF
+                bo = over_argb & 0xFF
+                rb = (base_argb >> 16) & 0xFF
+                gb = (base_argb >> 8) & 0xFF
+                bb = base_argb & 0xFF
+                r = int(round(ro * a + rb * inv))
+                g = int(round(go * a + gb * inv))
+                b = int(round(bo * a + bb * inv))
+                return (0xFF << 24) | (r << 16) | (g << 8) | b
+
+            surface_color = _blend(accent, bg_color, 0.06)        # subtle tint
+            container_color = _blend(accent, bg_color, 0.12)       # cards
+            container_color_2 = _blend(accent, bg_color, 0.18)     # raised
+            track_bg_color = _blend(accent, bg_color, 0.22)        # progress track
+            chip_color = _blend(accent, bg_color, 0.20)            # version chip
+            divider_color = _blend(accent, bg_color, 0.10)
 
             sheet = BottomSheet(ctx, True)
 
             outer = LinearLayout(ctx)
             outer.setOrientation(LinearLayout.VERTICAL)
             outer.setPadding(
-                AndroidUtilities.dp(18),
                 AndroidUtilities.dp(20),
-                AndroidUtilities.dp(18),
-                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(22),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(20),
             )
 
-            title = TextView(ctx)
-            title.setText(f"Доступно обновление eblanNFT")
-            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20)
+            # ============================================================
+            # HERO — icon glyph in tinted square + title + subtitle + chip
+            # ============================================================
+            hero = LinearLayout(ctx)
+            hero.setOrientation(LinearLayout.HORIZONTAL)
+            hero.setGravity(Gravity.CENTER_VERTICAL)
+            outer.addView(hero, LinearLayout.LayoutParams(-1, -2))
+
+            icon_box = FrameLayout(ctx)
             try:
+                ib = GradientDrawable()
+                ib.setCornerRadius(AndroidUtilities.dp(18))
+                ib.setColor(_blend(accent, bg_color, 0.30))
+                icon_box.setBackground(ib)
+                icon_box.setClipToOutline(True)
+                icon_box.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+            except Exception:
+                pass
+
+            icon_glyph = TextView(ctx)
+            try:
+                icon_glyph.setText("⭳")  # downwards arrow with corner
+                icon_glyph.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 28)
+                icon_glyph.setTextColor(accent)
+                icon_glyph.setGravity(Gravity.CENTER)
+                try:
+                    icon_glyph.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            icon_box.addView(
+                icon_glyph,
+                FrameLayout.LayoutParams(-1, -1, Gravity.CENTER),
+            )
+            hero.addView(
+                icon_box,
+                LinearLayout.LayoutParams(AndroidUtilities.dp(54), AndroidUtilities.dp(54)),
+            )
+
+            hero_text = LinearLayout(ctx)
+            hero_text.setOrientation(LinearLayout.VERTICAL)
+            try:
+                lp_ht = LinearLayout.LayoutParams(0, -2, 1.0)
+                lp_ht.leftMargin = AndroidUtilities.dp(14)
+                hero.addView(hero_text, lp_ht)
+            except Exception:
+                hero.addView(hero_text, LinearLayout.LayoutParams(-1, -2))
+
+            title = TextView(ctx)
+            title.setText("Обновление готово")
+            try:
+                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
                 title.setTextColor(text_color)
                 title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
             except Exception:
                 pass
-            outer.addView(title, LinearLayout.LayoutParams(-1, -2))
+            hero_text.addView(title, LinearLayout.LayoutParams(-1, -2))
 
-            ver_line = TextView(ctx)
+            subtitle = TextView(ctx)
+            subtitle.setText("eblanNFT")
             try:
-                ver_line.setText(
-                    f"v{manifest.get('version', '?')} • установлено: v{__version__}"
+                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                subtitle.setTextColor(muted_color)
+            except Exception:
+                pass
+            lp_sub = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_sub.topMargin = AndroidUtilities.dp(2)
+            except Exception:
+                pass
+            hero_text.addView(subtitle, lp_sub)
+
+            # Version chip on its own line, slightly indented under hero.
+            chip_row = LinearLayout(ctx)
+            chip_row.setOrientation(LinearLayout.HORIZONTAL)
+            chip_row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL)
+            lp_chip_row = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_chip_row.topMargin = AndroidUtilities.dp(14)
+            except Exception:
+                pass
+            outer.addView(chip_row, lp_chip_row)
+
+            chip = TextView(ctx)
+            try:
+                chip.setText(
+                    f"  v{__version__}   →   v{manifest.get('version', '?')}  "
                 )
-                ver_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
-                ver_line.setTextColor(muted_color)
+                chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
+                chip.setTextColor(accent)
+                chip.setGravity(Gravity.CENTER)
+                try:
+                    chip.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
+                chip.setPadding(
+                    AndroidUtilities.dp(10),
+                    AndroidUtilities.dp(6),
+                    AndroidUtilities.dp(10),
+                    AndroidUtilities.dp(6),
+                )
+                cb = GradientDrawable()
+                cb.setCornerRadius(AndroidUtilities.dp(999))
+                cb.setColor(chip_color)
+                chip.setBackground(cb)
             except Exception:
                 pass
-            lp_ver = LinearLayout.LayoutParams(-1, -2)
-            try:
-                lp_ver.topMargin = AndroidUtilities.dp(6)
-            except Exception:
-                pass
-            outer.addView(ver_line, lp_ver)
+            chip_row.addView(chip, LinearLayout.LayoutParams(-2, -2))
 
+            # ============================================================
+            # CHANGE NOTES card
+            # ============================================================
             notes_text = manifest.get("notes") or ""
             if notes_text:
+                notes_card = LinearLayout(ctx)
+                notes_card.setOrientation(LinearLayout.VERTICAL)
+                try:
+                    nc_bg = GradientDrawable()
+                    nc_bg.setCornerRadius(AndroidUtilities.dp(20))
+                    nc_bg.setColor(container_color)
+                    notes_card.setBackground(nc_bg)
+                    notes_card.setPadding(
+                        AndroidUtilities.dp(16),
+                        AndroidUtilities.dp(14),
+                        AndroidUtilities.dp(16),
+                        AndroidUtilities.dp(14),
+                    )
+                except Exception:
+                    pass
+                lp_nc = LinearLayout.LayoutParams(-1, -2)
+                try:
+                    lp_nc.topMargin = AndroidUtilities.dp(18)
+                except Exception:
+                    pass
+                outer.addView(notes_card, lp_nc)
+
+                notes_header = TextView(ctx)
+                try:
+                    notes_header.setText("Что нового")
+                    notes_header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                    notes_header.setTextColor(accent)
+                    notes_header.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    notes_header.setLetterSpacing(0.04)
+                    notes_header.setAllCaps(True)
+                except Exception:
+                    pass
+                notes_card.addView(notes_header, LinearLayout.LayoutParams(-1, -2))
+
                 notes_scroll = ScrollView(ctx)
+                try:
+                    notes_scroll.setVerticalScrollBarEnabled(False)
+                except Exception:
+                    pass
                 notes = TextView(ctx)
                 try:
                     notes.setText(notes_text)
-                    notes.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                    notes.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
                     notes.setTextColor(text_color)
-                    notes.setLineSpacing(0.0, 1.1)
-                    notes.setPadding(
-                        AndroidUtilities.dp(14),
-                        AndroidUtilities.dp(12),
-                        AndroidUtilities.dp(14),
-                        AndroidUtilities.dp(12),
-                    )
-                    notes_bg = GradientDrawable()
-                    notes_bg.setCornerRadius(AndroidUtilities.dp(16))
-                    notes_bg.setColor(0x10FFFFFF)
-                    notes.setBackground(notes_bg)
+                    notes.setLineSpacing(0.0, 1.18)
                 except Exception:
                     pass
                 notes_scroll.addView(notes, FrameLayout.LayoutParams(-1, -2))
                 lp_notes = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(160))
-                lp_notes.topMargin = AndroidUtilities.dp(14)
-                outer.addView(notes_scroll, lp_notes)
+                lp_notes.topMargin = AndroidUtilities.dp(8)
+                notes_card.addView(notes_scroll, lp_notes)
 
-            # MD3-style track + animated fill.
+            # ============================================================
+            # PROGRESS card
+            # ============================================================
             progress_card = LinearLayout(ctx)
             progress_card.setOrientation(LinearLayout.VERTICAL)
             try:
                 pc_bg = GradientDrawable()
                 pc_bg.setCornerRadius(AndroidUtilities.dp(20))
-                pc_bg.setColor(0x10FFFFFF)
+                pc_bg.setColor(container_color)
                 progress_card.setBackground(pc_bg)
                 progress_card.setPadding(
+                    AndroidUtilities.dp(16),
                     AndroidUtilities.dp(14),
-                    AndroidUtilities.dp(12),
-                    AndroidUtilities.dp(14),
-                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(16),
                 )
             except Exception:
                 pass
             lp_pc = LinearLayout.LayoutParams(-1, -2)
-            lp_pc.topMargin = AndroidUtilities.dp(14)
+            try:
+                lp_pc.topMargin = AndroidUtilities.dp(14)
+            except Exception:
+                pass
             outer.addView(progress_card, lp_pc)
 
             head = LinearLayout(ctx)
             head.setOrientation(LinearLayout.HORIZONTAL)
+            head.setGravity(Gravity.CENTER_VERTICAL)
             progress_card.addView(head, LinearLayout.LayoutParams(-1, -2))
 
             progress_label = TextView(ctx)
             try:
                 progress_label.setText("Готово к загрузке")
-                progress_label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                progress_label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
                 progress_label.setTextColor(text_color)
                 progress_label.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
             except Exception:
@@ -1587,8 +1738,8 @@ def _show_update_popup(manifest):
             percent = TextView(ctx)
             try:
                 percent.setText("0%")
-                percent.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-                percent.setTextColor(text_color)
+                percent.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
+                percent.setTextColor(accent)
                 percent.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
             except Exception:
                 pass
@@ -1600,11 +1751,17 @@ def _show_update_popup(manifest):
             try:
                 tb = GradientDrawable()
                 tb.setCornerRadius(AndroidUtilities.dp(999))
-                tb.setColor(0x12FFFFFF)
+                tb.setColor(track_bg_color)
                 track_bg.setBackground(tb)
-                tf = GradientDrawable()
+
+                # Gradient fill: accent → slightly lighter accent so it has
+                # depth instead of looking flat.
+                light_accent = _blend(0xFFFFFFFF, accent, 0.18)
+                tf = GradientDrawable(
+                    GradientDrawable.Orientation.LEFT_RIGHT,
+                    [accent, light_accent],
+                )
                 tf.setCornerRadius(AndroidUtilities.dp(999))
-                tf.setColor(accent)
                 track_fill.setBackground(tf)
                 track_fill.setPivotX(0.0)
                 track_fill.setScaleX(0.0)
@@ -1612,45 +1769,63 @@ def _show_update_popup(manifest):
                 pass
             track_wrap.addView(
                 track_bg,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL),
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(12), Gravity.CENTER_VERTICAL),
             )
             track_wrap.addView(
                 track_fill,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(10), Gravity.CENTER_VERTICAL),
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(12), Gravity.CENTER_VERTICAL),
             )
-            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(12))
-            lp_track.topMargin = AndroidUtilities.dp(12)
+            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(14))
+            lp_track.topMargin = AndroidUtilities.dp(14)
             progress_card.addView(track_wrap, lp_track)
 
             status = TextView(ctx)
             try:
-                status.setText("Нажми «Скачать», чтобы начать.")
+                status.setText("Скачивание не запущено")
                 status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
                 status.setTextColor(muted_color)
-                status.setLineSpacing(0.0, 1.05)
+                status.setLineSpacing(0.0, 1.12)
             except Exception:
                 pass
             lp_status = LinearLayout.LayoutParams(-1, -2)
-            lp_status.topMargin = AndroidUtilities.dp(10)
+            lp_status.topMargin = AndroidUtilities.dp(12)
             progress_card.addView(status, lp_status)
 
-            # Action buttons.
-            btn_row = LinearLayout(ctx)
-            btn_row.setOrientation(LinearLayout.HORIZONTAL)
-            lp_btn_row = LinearLayout.LayoutParams(-1, -2)
-            lp_btn_row.topMargin = AndroidUtilities.dp(16)
-            outer.addView(btn_row, lp_btn_row)
+            # ============================================================
+            # ACTION BUTTONS — primary filled + secondary text
+            # ============================================================
+            action_btn = TextView(ctx)
+            action_btn.setText("Скачать обновление")
+            try:
+                action_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
+                action_btn.setGravity(Gravity.CENTER)
+                ab = GradientDrawable()
+                ab.setCornerRadius(AndroidUtilities.dp(24))
+                ab.setColor(accent)
+                action_btn.setBackground(ab)
+                action_btn.setTextColor(accent_text)
+                try:
+                    action_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
+                action_btn.setPadding(
+                    AndroidUtilities.dp(20),
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(20),
+                    AndroidUtilities.dp(14),
+                )
+            except Exception:
+                pass
+            lp_action = LinearLayout.LayoutParams(-1, -2)
+            lp_action.topMargin = AndroidUtilities.dp(20)
+            outer.addView(action_btn, lp_action)
 
             close_btn = TextView(ctx)
             close_btn.setText("Позже")
-            close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
-            close_btn.setGravity(Gravity.CENTER)
             try:
-                close_bg = GradientDrawable()
-                close_bg.setCornerRadius(AndroidUtilities.dp(18))
-                close_bg.setColor(neutral_color)
-                close_btn.setBackground(close_bg)
-                close_btn.setTextColor(text_color)
+                close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                close_btn.setGravity(Gravity.CENTER)
+                close_btn.setTextColor(muted_color)
                 close_btn.setPadding(
                     AndroidUtilities.dp(16),
                     AndroidUtilities.dp(12),
@@ -1659,37 +1834,9 @@ def _show_update_popup(manifest):
                 )
             except Exception:
                 pass
-
-            action_btn = TextView(ctx)
-            action_btn.setText("Скачать")
-            action_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
-            action_btn.setGravity(Gravity.CENTER)
-            try:
-                ab = GradientDrawable()
-                ab.setCornerRadius(AndroidUtilities.dp(22))
-                ab.setColor(accent)
-                action_btn.setBackground(ab)
-                try:
-                    action_btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
-                except Exception:
-                    action_btn.setTextColor(0xFFFFFFFF)
-                action_btn.setPadding(
-                    AndroidUtilities.dp(16),
-                    AndroidUtilities.dp(12),
-                    AndroidUtilities.dp(16),
-                    AndroidUtilities.dp(12),
-                )
-            except Exception:
-                pass
-
-            try:
-                lp_close = LinearLayout.LayoutParams(0, -2, 1.0)
-                lp_close.rightMargin = AndroidUtilities.dp(8)
-                btn_row.addView(close_btn, lp_close)
-                btn_row.addView(action_btn, LinearLayout.LayoutParams(0, -2, 1.4))
-            except Exception:
-                btn_row.addView(close_btn, LinearLayout.LayoutParams(-1, -2))
-                btn_row.addView(action_btn, LinearLayout.LayoutParams(-1, -2))
+            lp_close = LinearLayout.LayoutParams(-1, -2)
+            lp_close.topMargin = AndroidUtilities.dp(4)
+            outer.addView(close_btn, lp_close)
 
             def _set_ratio(ratio):
                 try:
@@ -1808,6 +1955,32 @@ def _show_update_popup(manifest):
                     pass
 
             sheet.setCustomView(outer)
+
+            # Subtle entry animation: hero slides up, content fades in.
+            try:
+                outer.setAlpha(0.0)
+                outer.animate().alpha(1.0).setDuration(220).start()
+            except Exception:
+                pass
+            try:
+                hero.setTranslationY(float(AndroidUtilities.dp(8)))
+                hero.animate().translationY(0.0).setDuration(260).start()
+            except Exception:
+                pass
+            try:
+                if 'progress_card' in dir():
+                    progress_card.setAlpha(0.0)
+                    progress_card.setTranslationY(float(AndroidUtilities.dp(8)))
+                    progress_card.animate().alpha(1.0).translationY(0.0).setStartDelay(70).setDuration(260).start()
+            except Exception:
+                pass
+            try:
+                action_btn.setAlpha(0.0)
+                action_btn.setTranslationY(float(AndroidUtilities.dp(10)))
+                action_btn.animate().alpha(1.0).translationY(0.0).setStartDelay(120).setDuration(240).start()
+            except Exception:
+                pass
+
             try:
                 sheet.show()
             except Exception:
