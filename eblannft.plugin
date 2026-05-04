@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.10"
+__version__ = "1.0.11"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -254,6 +254,36 @@ def _import_runtime_from(install_root):
     )
 
 
+def _force_redownload_runtime(target_root):
+    """Wipe the runtime files at target_root and pull fresh copies from
+    GitHub. Used when an existing on-disk runtime fails to expose the
+    expected class (e.g. half-written download or accidental overwrite)."""
+    _bootstrap_log(f"force re-download into {target_root}")
+    for rel in _RUNTIME_FILES:
+        dest = os.path.join(target_root, rel.replace("/", os.sep))
+        try:
+            if os.path.isfile(dest):
+                os.remove(dest)
+        except Exception as e:
+            _bootstrap_log(f"  remove {rel} failed: {e}")
+        # Drop any cached module bytecode so the re-imported file is fresh.
+        for cache_rel in (
+            os.path.join(os.path.dirname(rel), "__pycache__"),
+        ):
+            try:
+                cache_dir = os.path.join(target_root, cache_rel.replace("/", os.sep))
+                if os.path.isdir(cache_dir):
+                    for fn in os.listdir(cache_dir):
+                        try:
+                            os.remove(os.path.join(cache_dir, fn))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        size = _download_to(dest, _raw_url(rel))
+        _bootstrap_log(f"  {rel} -> {size} bytes (re-download)")
+
+
 def _load_eblannft_impl():
     try:
         plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
@@ -267,7 +297,34 @@ def _load_eblannft_impl():
 
     install_root, mode = _bootstrap_runtime()
     _bootstrap_log(f"using runtime root ({mode}): {install_root}")
+    try:
+        impl = _import_runtime_from(install_root)
+        return impl, install_root
+    except Exception as e:
+        _bootstrap_log(f"first import attempt failed: {e}")
+
+    # Self-heal: the runtime files exist but either don't expose the impl
+    # class or fail to import. Most likely an aborted earlier download or a
+    # file overwritten by hand. Drop them, evict from sys.modules, refetch.
+    for cached in (
+        f"{_RUNTIME_PACKAGE_ALIAS}.plugin",
+        _RUNTIME_PACKAGE_ALIAS,
+        f"{_RUNTIME_PACKAGE_NAME}.plugin",
+        _RUNTIME_PACKAGE_NAME,
+    ):
+        try:
+            sys.modules.pop(cached, None)
+        except Exception:
+            pass
+
+    try:
+        _force_redownload_runtime(install_root)
+    except Exception as e:
+        _bootstrap_log(f"force re-download failed: {e}")
+        raise
+
     impl = _import_runtime_from(install_root)
+    _bootstrap_log("self-heal succeeded — runtime re-downloaded and imported")
     return impl, install_root
 
 
@@ -579,170 +636,38 @@ def _patch_runtime_nft_to_chat():
                 BulletinHelper.show_error(f"Не удалось открыть пикер: {e}")
 
     def _nft_chat_open_constructor(self, account, dialog_id):
-        """Show the NFT catalog first so the user can pick the base gift to
-        edit, then open the existing constructor pre-loaded with that base.
-        The post-save chooser is wired up by the _library_upsert_wrapper hook
-        via the _eblannft_chat_send_pending flag."""
+        """Open the existing eblannft constructor and let the
+        _library_upsert_wrapper hook (set up below) take over after save.
+
+        v1.0.9 added a custom catalog picker before the constructor, which
+        appears to corrupt the parent fragment's view tree on some builds
+        (the user reported a 'ContentView contains null child' frame crash
+        right after enabling the plugin). Reverted to the v1.0.7-style flow:
+        we just hand control to _open_constructor and let it pick its base
+        from the existing library entry / gift-library menu the same way the
+        in-profile constructor does."""
         try:
             from ui.bulletin import BulletinHelper
         except Exception:
             BulletinHelper = None
 
-        catalog = []
-        try:
-            catalog = list(self._get_catalog_nft_gifts() or [])
-        except Exception as e:
-            _bootstrap_log(f"catalog read failed: {e}")
-            catalog = []
-
-        if not catalog:
-            # Caller may not have triggered the load yet — kick StarsController
-            # and ask the user to retry once it lands.
-            try:
-                self._force_load_catalog()
-            except Exception:
-                pass
-            if BulletinHelper:
-                BulletinHelper.show_info(
-                    "Каталог ещё не подгружен — подожди пару секунд и нажми «Конструктор» снова."
-                )
-            return
-
-        actions = []
-        for g in catalog:
-            if g is None:
-                continue
-            try:
-                gid = 0
-                for name in ("id", "gift_id", "giftId"):
-                    try:
-                        gid = int(get_val(g, name, 0) or 0) if "get_val" in globals() else 0
-                    except Exception:
-                        gid = 0
-                    if gid:
-                        break
-                # get_val lives in the runtime module; pull it through sys.modules
-                if not gid:
-                    try:
-                        runtime_mod = sys.modules.get(f"{_RUNTIME_PACKAGE_ALIAS}.plugin") or sys.modules.get(
-                            f"{_RUNTIME_PACKAGE_NAME}.plugin"
-                        )
-                        rt_get_val = getattr(runtime_mod, "get_val", None) if runtime_mod else None
-                        if callable(rt_get_val):
-                            for name in ("id", "gift_id", "giftId"):
-                                try:
-                                    gid = int(rt_get_val(g, name, 0) or 0)
-                                except Exception:
-                                    gid = 0
-                                if gid:
-                                    break
-                    except Exception:
-                        gid = 0
-            except Exception:
-                gid = 0
-            if not gid:
-                continue
-            try:
-                title = ""
-                runtime_mod = sys.modules.get(f"{_RUNTIME_PACKAGE_ALIAS}.plugin") or sys.modules.get(
-                    f"{_RUNTIME_PACKAGE_NAME}.plugin"
-                )
-                rt_get_val = getattr(runtime_mod, "get_val", None) if runtime_mod else None
-                if callable(rt_get_val):
-                    title = str(rt_get_val(g, "title", "") or "")
-                    if not title:
-                        title = str(rt_get_val(g, "slug", "") or "")
-                if not title:
-                    title = f"NFT #{gid}"
-            except Exception:
-                title = f"NFT #{gid}"
-
-            stars_text = ""
-            try:
-                floor = int(self._get_gift_floor_stars(g) or 0)
-                if floor > 0:
-                    stars_text = f"  •  ⭐ {floor}"
-            except Exception:
-                pass
-
-            label = f"{title}{stars_text}"
-            actions.append(
-                (
-                    label,
-                    lambda gid=gid, g=g: self._nft_chat_constructor_for_base(
-                        account, dialog_id, gid, g
-                    ),
-                )
-            )
-
-        if not actions:
-            if BulletinHelper:
-                BulletinHelper.show_error("Каталог пуст — попробуй обновить и повтори")
-            return
-
-        try:
-            self._show_action_menu(
-                "Выбери базу NFT для конструктора", actions, negative_text="Отмена"
-            )
-        except Exception as e:
-            _bootstrap_log(f"catalog picker failed: {e}")
-            if BulletinHelper:
-                BulletinHelper.show_error(f"Не удалось открыть пикер каталога: {e}")
-
-    def _nft_chat_constructor_for_base(self, account, dialog_id, gift_id, base_gift):
-        """Stash the chat-flow flag, prime the constructor with the chosen
-        catalog base, and trigger AttrLoader so NftBuilderSheet opens for it."""
-        try:
-            from ui.bulletin import BulletinHelper
-        except Exception:
-            BulletinHelper = None
-
+        # One-shot flag — _library_upsert_wrapper hook reads this to know
+        # the next save came from this chat-action menu and should be
+        # followed by the sender chooser instead of just landing in the library.
         self._eblannft_chat_send_pending = {
             "account": int(account or 0),
             "dialog_id": int(dialog_id or 0),
             "ts": time.time(),
         }
-        try:
-            self.stolen_gift_inner = base_gift
-            self.stolen_gift_wrapper = None
-            self.cached_gift_id = int(gift_id or 0)
-            self.editing_gift_key = None
-        except Exception as e:
-            _bootstrap_log(f"prime constructor state failed: {e}")
-        try:
-            self.identity_config = self._default_identity_config()
-        except Exception:
-            pass
-        try:
-            self._ensure_gift_classes()
-        except Exception:
-            pass
-
-        # AttrLoader lives in the runtime module — fish it out and start it.
-        AttrLoader = None
-        try:
-            runtime_mod = sys.modules.get(f"{_RUNTIME_PACKAGE_ALIAS}.plugin") or sys.modules.get(
-                f"{_RUNTIME_PACKAGE_NAME}.plugin"
-            )
-            AttrLoader = getattr(runtime_mod, "AttrLoader", None) if runtime_mod else None
-        except Exception as e:
-            _bootstrap_log(f"AttrLoader lookup failed: {e}")
-
-        if AttrLoader is None:
-            self._eblannft_chat_send_pending = None
-            if BulletinHelper:
-                BulletinHelper.show_error("AttrLoader не найден в runtime — обнови плагин")
-            return
-
         if BulletinHelper:
             BulletinHelper.show_info(
-                "Открываю конструктор. Сохрани результат — после этого спрошу, от кого отправить."
+                "Собери NFT в конструкторе и сохрани — после этого спрошу, от кого отправить."
             )
         try:
-            AttrLoader(self, int(gift_id or 0)).start()
+            self._open_constructor(None)
         except Exception as e:
             self._eblannft_chat_send_pending = None
-            _bootstrap_log(f"AttrLoader start failed: {e}")
+            _bootstrap_log(f"NFT-to-chat constructor open failed: {e}")
             if BulletinHelper:
                 BulletinHelper.show_error(f"Не удалось открыть конструктор: {e}")
 
@@ -1111,7 +1036,6 @@ def _patch_runtime_nft_to_chat():
         _EblanNftImpl._open_nft_to_chat_menu = _open_nft_to_chat_menu
         _EblanNftImpl._nft_chat_pick_from_library = _nft_chat_pick_from_library
         _EblanNftImpl._nft_chat_open_constructor = _nft_chat_open_constructor
-        _EblanNftImpl._nft_chat_constructor_for_base = _nft_chat_constructor_for_base
         _EblanNftImpl._choose_nft_chat_sender = _choose_nft_chat_sender
         _EblanNftImpl._send_nft_to_chat_with_assignment = _send_nft_to_chat_with_assignment
         _EblanNftImpl._reassign_library_entry_owner = _reassign_library_entry_owner

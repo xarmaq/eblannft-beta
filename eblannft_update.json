@@ -1,6 +1,6 @@
 {
-  "version": "1.0.10",
-  "notes": "Фикс: при просмотре NFT в чужом профиле больше не показываются собственные строки eblanNFT («Ценность», TON-owner-row, release-badge) — они инжектятся только если entry в библиотеке привязан к тебе. Плюс: при «От меня» в обёртке очищаются msg_id/saved_id/unsaved/pinned_to_top/name_hidden, чтобы Telegram не рисовал «You bought this gift on …» поверх sheet'а.",
+  "version": "1.0.11",
+  "notes": "Срочный фикс. (1) Self-heal битого runtime: если файл eblannft_runtime/plugin.py на диске сломан или подменён (как раз случай «Runtime module … has no class in (EblanNftPlugin, NftClonerPlugin)»), wrapper теперь автоматически удаляет его, чистит кэш модулей и заново качает с GitHub — плагин включается без ручного удаления папки. (2) Откатил v1.0.9 пикер каталога: «NFT в чат → Конструктор» снова открывает конструктор напрямую, без промежуточного выбора базы. На некоторых сборках пикер ронял ContentView в дереф вью с ошибкой «contains null child». Каталог-пикер вернётся в v1.0.13 в более безопасном виде после диагностики.",
   "files": [
     "eblannft.plugin"
   ]
