@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.11"
+__version__ = "1.0.12"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -636,24 +636,22 @@ def _patch_runtime_nft_to_chat():
                 BulletinHelper.show_error(f"Не удалось открыть пикер: {e}")
 
     def _nft_chat_open_constructor(self, account, dialog_id):
-        """Open the existing eblannft constructor and let the
-        _library_upsert_wrapper hook (set up below) take over after save.
+        """Open the same NFT catalog sheet that the in-profile constructor
+        uses (ResaleGridController via _open_catalog_nft_sheet), then let
+        the existing CatalogGrid click handler do the heavy lifting:
+            click → finishFragment() → AttrLoader.start() → NftBuilderSheet
+        After the user saves the result, the _library_upsert_wrapper hook
+        reads _eblannft_chat_send_pending and fires the sender chooser.
 
-        v1.0.9 added a custom catalog picker before the constructor, which
-        appears to corrupt the parent fragment's view tree on some builds
-        (the user reported a 'ContentView contains null child' frame crash
-        right after enabling the plugin). Reverted to the v1.0.7-style flow:
-        we just hand control to _open_constructor and let it pick its base
-        from the existing library entry / gift-library menu the same way the
-        in-profile constructor does."""
+        This replaces the v1.0.9 ad-hoc action-menu picker that was priming
+        stolen_gift_inner with a TL_starGift base without finishing the
+        host fragment first — the source of the 'ContentView contains null
+        child' frame crash."""
         try:
             from ui.bulletin import BulletinHelper
         except Exception:
             BulletinHelper = None
 
-        # One-shot flag — _library_upsert_wrapper hook reads this to know
-        # the next save came from this chat-action menu and should be
-        # followed by the sender chooser instead of just landing in the library.
         self._eblannft_chat_send_pending = {
             "account": int(account or 0),
             "dialog_id": int(dialog_id or 0),
@@ -661,15 +659,15 @@ def _patch_runtime_nft_to_chat():
         }
         if BulletinHelper:
             BulletinHelper.show_info(
-                "Собери NFT в конструкторе и сохрани — после этого спрошу, от кого отправить."
+                "Выбери NFT в каталоге и собери в конструкторе — после сохранения спрошу, от кого отправить."
             )
         try:
-            self._open_constructor(None)
+            self._open_catalog_nft_sheet()
         except Exception as e:
             self._eblannft_chat_send_pending = None
-            _bootstrap_log(f"NFT-to-chat constructor open failed: {e}")
+            _bootstrap_log(f"NFT-to-chat catalog open failed: {e}")
             if BulletinHelper:
-                BulletinHelper.show_error(f"Не удалось открыть конструктор: {e}")
+                BulletinHelper.show_error(f"Не удалось открыть каталог: {e}")
 
     def _choose_nft_chat_sender(self, account, dialog_id, key):
         actions = [
