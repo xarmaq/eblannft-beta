@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2121,6 +2121,763 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
+    # ---------------------------------------------------------------
+    # eblanNFT 1.0.3 — VPS sync integration (ported from beta 1.0.14)
+    # Same VPS endpoint and plugin_key as beta, so prod and beta clients
+    # share the same record namespace (keyed by tg:<user_id>) and see each
+    # other's NFTs / wear / NFT username / NFT number.
+    # ---------------------------------------------------------------
+    def _sync_get_settings(self):
+        cfg = {
+            "enabled": True,
+            "server_url": "http://35.242.218.223:8787",
+            "plugin_key": "6ef78976213eb13982ee124c373b74411dd5cbf35e7250ab",
+        }
+        try:
+            stored = getattr(self, "_eblannft_sync_cfg", None)
+            if isinstance(stored, dict):
+                cfg.update({k: stored.get(k, cfg[k]) for k in cfg.keys()})
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_save_settings(self, **patch):
+        cfg = self._sync_get_settings()
+        cfg.update({k: v for k, v in patch.items() if k in cfg})
+        self._eblannft_sync_cfg = cfg
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is not None:
+                client.update_endpoint(server_url=cfg.get("server_url"),
+                                       plugin_key=cfg.get("plugin_key"))
+                client.set_enabled(bool(cfg.get("enabled", True)))
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_my_user_id(self):
+        try:
+            uc = get_user_config()
+            return int(uc.getCurrentUser().id)
+        except Exception:
+            try:
+                return int(get_user_config().clientUserId)
+            except Exception:
+                return 0
+
+    def _sync_collect_local_state(self):
+        snapshot = {
+            "plugin_id": "eblannft",
+            "updated_at": int(time.time()),
+            "gifts": [],
+            "wear_active": False,
+            "wear_collectible_id": 0,
+            "wear_status_data": {},
+            "username_state": {
+                "enabled": bool(self._is_nft_username_active()) if hasattr(self, "_is_nft_username_active") else False,
+                "tokens": list(self._get_nft_username_tokens() or []) if hasattr(self, "_get_nft_username_tokens") else [],
+                "price_ton": str(getattr(self, "nft_username_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_username_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_username_purchase_date", "") or ""),
+            },
+            "number_state": {
+                "enabled": bool(self._is_nft_number_active()) if hasattr(self, "_is_nft_number_active") else False,
+                "tokens": list(self._get_nft_number_tokens() or []) if hasattr(self, "_get_nft_number_tokens") else [],
+                "price_ton": str(getattr(self, "nft_number_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_number_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_number_purchase_date", "") or ""),
+            },
+        }
+        try:
+            if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                snapshot["wear_active"] = True
+                snapshot["wear_collectible_id"] = int(self.wear_collectible_id)
+                wsd = getattr(self, "wear_status_data", None)
+                if isinstance(wsd, dict):
+                    snapshot["wear_status_data"] = {
+                        k: v for k, v in wsd.items()
+                        if isinstance(v, (str, int, float, bool)) or v is None
+                    }
+        except Exception:
+            pass
+        try:
+            library = (
+                getattr(self, "gift_library", None)
+                or getattr(self, "stolen_cache", None)
+                or getattr(self, "_stolen_cache", None)
+                or []
+            )
+            if isinstance(library, dict):
+                items = list(library.values())
+            elif isinstance(library, list):
+                items = list(library)
+            else:
+                items = []
+            try:
+                my_id_for_filter = int(self._sync_my_user_id() or 0)
+            except Exception:
+                my_id_for_filter = 0
+            count = 0
+            for entry in items:
+                if not isinstance(entry, dict):
+                    continue
+                b64 = entry.get("b64") or entry.get("payload_b64")
+                if not isinstance(b64, str) or len(b64) < 16:
+                    continue
+                # Skip entries that the user "gifted" to someone else
+                # (identity_config.to_user_id != my_id) — sending these in our
+                # snapshot would make other clients show them as still ours.
+                try:
+                    entry_owner = int(entry.get("owner_user_id", 0) or 0)
+                except Exception:
+                    entry_owner = 0
+                if my_id_for_filter > 0 and entry_owner > 0 and entry_owner != my_id_for_filter:
+                    continue
+                try:
+                    ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
+                    to_uid = int(ic.get("to_user_id", 0) or 0)
+                except Exception:
+                    to_uid = 0
+                if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
+                    continue
+                gift = {"b64": b64}
+                for key in ("title", "slug", "key", "gift_kind"):
+                    val = entry.get(key)
+                    if isinstance(val, str) and val:
+                        gift[key] = val
+                for key in ("num", "base_gift_id", "unique_id", "saved_id",
+                            "standard_price_stars", "avail_total", "avail_issued",
+                            "limit_total", "order_hint", "updated_at", "created_at"):
+                    val = entry.get(key)
+                    if isinstance(val, (int, float)):
+                        gift[key] = int(val)
+                for key in ("inject", "limited_flag", "pinned_override", "hidden_override"):
+                    if key in entry:
+                        gift[key] = bool(entry.get(key))
+                for key in ("wear_status_data", "build_config", "identity_config"):
+                    val = entry.get(key)
+                    if isinstance(val, dict):
+                        gift[key] = {
+                            kk: vv for kk, vv in val.items()
+                            if isinstance(vv, (str, int, float, bool)) or vv is None
+                        }
+                snapshot["gifts"].append(gift)
+                count += 1
+                if count >= 64:
+                    break
+        except Exception as e:
+            _log(f"sync collect gifts error: {e}")
+        return snapshot
+
+    def _sync_on_remote_state(self, user_key, record):
+        try:
+            lock = getattr(self, "_eblannft_sync_lock", None)
+            if lock is None:
+                return
+            with lock:
+                cache = getattr(self, "_eblannft_sync_remote_cache", None)
+                if cache is None:
+                    cache = {}
+                    self._eblannft_sync_remote_cache = cache
+                cache[user_key] = record
+        except Exception:
+            pass
+
+    def request_remote_profile(self, user_id):
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is None:
+                return None
+            return client.request_remote_state(user_id)
+        except Exception:
+            return None
+
+    def _sync_get_remote_record(self, user_id):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return None
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return None
+        record = None
+        try:
+            record = client.get_cached_fresh(uid)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
+            except Exception:
+                record = None
+            if not isinstance(record, dict):
+                try:
+                    record = client.get_cached(uid)
+                except Exception:
+                    record = None
+        return record if isinstance(record, dict) else None
+
+    def _build_collectible_status_from_wsd(self, collectible_id, wsd):
+        try:
+            cid = int(collectible_id or 0)
+        except Exception:
+            cid = 0
+        if cid <= 0:
+            return None
+        try:
+            Cls = jclass("org.telegram.tgnet.TLRPC$TL_emojiStatusCollectible")
+            st = Cls()
+            self._set_field(st, "collectible_id", cid)
+            try:
+                self._set_field(st, "until", 0)
+            except Exception:
+                pass
+            if isinstance(wsd, dict):
+                for color_field in ["center_color", "edge_color", "pattern_color", "text_color"]:
+                    val = wsd.get(color_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, color_field, int(val))
+                        except Exception:
+                            pass
+                for long_field in ["document_id", "pattern_document_id"]:
+                    val = wsd.get(long_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, long_field, int(val))
+                        except Exception:
+                            pass
+                for str_field in ["title", "slug"]:
+                    val = wsd.get(str_field, "")
+                    if val:
+                        try:
+                            self._set_field(st, str_field, str(val))
+                        except Exception:
+                            pass
+            return st
+        except Exception:
+            return None
+
+    def _apply_remote_nft_username_to_user(self, user_obj, tokens):
+        if user_obj is None or not tokens:
+            return False
+        changed = False
+        try:
+            usernames = get_val(user_obj, "usernames", None)
+            if usernames is None:
+                try:
+                    tmp = ArrayList()
+                    if self._set_field(user_obj, "usernames", tmp):
+                        usernames = tmp
+                        changed = True
+                except Exception:
+                    usernames = None
+            if usernames is not None:
+                for t in tokens:
+                    try:
+                        if self._ensure_username_in_list(usernames, t):
+                            changed = True
+                    except Exception:
+                        pass
+            for list_name in ["active_usernames", "editable_usernames"]:
+                try:
+                    lst = get_val(user_obj, list_name, None)
+                except Exception:
+                    lst = None
+                if lst is None:
+                    continue
+                for t in tokens:
+                    try:
+                        if self._ensure_string_in_list(lst, t):
+                            changed = True
+                    except Exception:
+                        pass
+            primary = tokens[0] if tokens else ""
+            if primary:
+                try:
+                    if self._set_field(user_obj, "username", primary):
+                        changed = True
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"_apply_remote_nft_username_to_user error: {e}")
+            except Exception:
+                pass
+        return changed
+
+    def _apply_remote_nft_number_to_user(self, user_obj, token):
+        if user_obj is None or not token:
+            return False
+        changed = False
+        try:
+            if self._set_field(user_obj, "phone", token):
+                changed = True
+        except Exception:
+            pass
+        try:
+            for f in user_obj.getClass().getFields():
+                try:
+                    field_name = str(f.getName() or "")
+                    low = field_name.lower()
+                    typ = f.getType().getName()
+                except Exception:
+                    continue
+                if typ != "java.lang.String":
+                    continue
+                if ("phone" in low) or (low in ["number", "phone_number", "phoneNumber"]):
+                    try:
+                        if self._set_field(user_obj, field_name, token):
+                            changed = True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return changed
+
+    def _sync_apply_remote_user_overrides(self, response, target_user_id):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if response is None or tuid <= 0:
+            return 0
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return 0
+        wear_active = bool(record.get("wear_active"))
+        cid = 0
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        wsd = record.get("wear_status_data") or {}
+        wear_status = None
+        if wear_active and cid > 0:
+            wear_status = self._build_collectible_status_from_wsd(cid, wsd)
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            remote_unames = []
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            remote_numbers = []
+        if wear_status is None and not remote_unames and not remote_numbers:
+            return 0
+        patched = [0]
+        visited = set()
+
+        def walk(obj, depth):
+            if obj is None or depth > 3:
+                return
+            try:
+                oid = int(obj.hashCode())
+            except Exception:
+                oid = id(obj)
+            if oid in visited:
+                return
+            visited.add(oid)
+            try:
+                obj_uid = int(get_val(obj, "id", 0) or 0)
+            except Exception:
+                obj_uid = 0
+            if obj_uid == tuid:
+                if wear_status is not None:
+                    try:
+                        if self._set_field(obj, "emoji_status", wear_status):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_unames:
+                    try:
+                        if self._apply_remote_nft_username_to_user(obj, remote_unames):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_numbers:
+                    try:
+                        if self._apply_remote_nft_number_to_user(obj, remote_numbers[0]):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+            try:
+                if self._is_java_list_like(obj):
+                    try:
+                        size = min(int(obj.size() or 0), 32)
+                    except Exception:
+                        size = 0
+                    for i in range(size):
+                        try:
+                            walk(obj.get(i), depth + 1)
+                        except Exception:
+                            continue
+                    return
+            except Exception:
+                pass
+            try:
+                for f in self._iter_object_fields(obj):
+                    try:
+                        val = f.get(obj)
+                    except Exception:
+                        continue
+                    if val is None:
+                        continue
+                    try:
+                        typ = str(f.getType().getName() or "")
+                    except Exception:
+                        typ = ""
+                    if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
+                        continue
+                    try:
+                        walk(val, depth + 1)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        walk(response, 0)
+        return int(patched[0] or 0)
+
+    def _sync_patch_remote_cached_user(self, target_user_id):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return False
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return False
+        st = None
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        if record.get("wear_active") and cid > 0:
+            wsd = record.get("wear_status_data") or {}
+            st = self._build_collectible_status_from_wsd(cid, wsd)
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            pass
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            pass
+        if st is None and not remote_unames and not remote_numbers:
+            return False
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+            user_obj = ctrl.getUser(tuid)
+            if user_obj is None:
+                return False
+            any_set = False
+            if st is not None:
+                try:
+                    if self._set_field(user_obj, "emoji_status", st):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_unames:
+                try:
+                    if self._apply_remote_nft_username_to_user(user_obj, remote_unames):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_numbers:
+                try:
+                    if self._apply_remote_nft_number_to_user(user_obj, remote_numbers[0]):
+                        any_set = True
+                except Exception:
+                    pass
+            if not any_set:
+                return False
+            try:
+                ctrl.putUser(user_obj, False, True)
+            except Exception:
+                try:
+                    ctrl.putUser(user_obj, False)
+                except Exception:
+                    pass
+            try:
+                self._post_remote_profile_notifications(tuid, user_obj, reason="remote_wear_patch")
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            _log(f"sync remote cached user patch error uid={tuid}: {e}")
+            return False
+
+    def _sync_schedule_remote_user_patch(self, target_user_id, delays=None):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return None
+        if delays is None:
+            delays = [0, 80, 220, 520, 1100]
+
+        def _cb():
+            try:
+                self._sync_patch_remote_cached_user(tuid)
+            except Exception:
+                pass
+
+        return self._schedule_ui_batch(f"sync_remote_user_patch:{tuid}", _cb, delays)
+
+    def _post_remote_profile_notifications(self, user_id, user_obj=None, reason="remote_profile_patch"):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        try:
+            if bool(getattr(self, "_plugin_unloading", False)) or bool(getattr(self, "_patching_nc", False)):
+                return 0
+        except Exception:
+            pass
+        try:
+            notify_map = getattr(self, "_remote_profile_notify_ts", None)
+            if not isinstance(notify_map, dict):
+                notify_map = {}
+                self._remote_profile_notify_ts = notify_map
+            key = f"{reason}:{uid}"
+            now = time.time()
+            last = float(notify_map.get(key, 0.0) or 0.0)
+            if (now - last) < 0.18:
+                return 0
+            notify_map[key] = now
+        except Exception:
+            pass
+
+        captured_user = user_obj
+
+        def _emit():
+            try:
+                self._patching_nc = True
+            except Exception:
+                pass
+            try:
+                try:
+                    account = int(get_user_config().selectedAccount or 0)
+                except Exception:
+                    account = 0
+                try:
+                    NC = jclass("org.telegram.messenger.NotificationCenter")
+                    nc = NC.getInstance(to_java_int(account))
+                    gnc = NC.getGlobalInstance()
+                except Exception:
+                    return
+                if nc is None:
+                    return
+
+                def _eid(name):
+                    try:
+                        return int(self._get_notification_center_event_id(NC, name) or 0)
+                    except Exception:
+                        return 0
+
+                try:
+                    MC = jclass("org.telegram.messenger.MessagesController")
+                    try:
+                        mask_emoji = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                    except Exception:
+                        mask_emoji = 524288
+                    try:
+                        mask_name = int(MC.UPDATE_MASK_NAME)
+                    except Exception:
+                        mask_name = 2
+                    eid = _eid("updateInterfaces")
+                    if eid > 0:
+                        nc.postNotificationName(to_java_int(eid), to_java_Integer(mask_emoji | mask_name))
+                except Exception:
+                    pass
+
+                try:
+                    target_user = captured_user
+                    if target_user is None:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            target_user = ctrl.getUser(uid)
+                        except Exception:
+                            target_user = None
+                    eid = _eid("userEmojiStatusUpdated")
+                    if eid > 0 and target_user is not None:
+                        nc.postNotificationName(to_java_int(eid), target_user)
+                except Exception:
+                    pass
+
+                try:
+                    eid = _eid("emojiLoaded")
+                    if eid > 0 and gnc is not None:
+                        gnc.postNotificationName(to_java_int(eid))
+                except Exception:
+                    pass
+            finally:
+                try:
+                    self._patching_nc = False
+                except Exception:
+                    pass
+
+        try:
+            run_on_ui_thread(_emit)
+            return 1
+        except Exception:
+            try:
+                _emit()
+                return 1
+            except Exception:
+                return 0
+
+    def _sync_inject_remote_gifts(self, gifts_list, user_id):
+        if gifts_list is None or int(user_id or 0) <= 0:
+            return 0
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return 0
+        record = None
+        try:
+            record = client.get_cached(user_id)
+        except Exception:
+            record = None
+        if not isinstance(record, dict) or not record.get("gifts"):
+            try:
+                fetched = client.fetch_remote_state_blocking(user_id, max_timeout=2.0)
+                if isinstance(fetched, dict):
+                    record = fetched
+            except Exception as _fe:
+                _log(f"sync remote blocking fetch error: {_fe}")
+        try:
+            client.request_remote_state(user_id)
+        except Exception:
+            pass
+        if not isinstance(record, dict):
+            return 0
+        gifts_raw = record.get("gifts") or []
+        if not isinstance(gifts_raw, list) or not gifts_raw:
+            return 0
+        try:
+            existing_ids = set()
+            for i in range(int(gifts_list.size() or 0)):
+                try:
+                    it = gifts_list.get(i)
+                    g = get_val(it, "gift", None)
+                    gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+                    if gid > 0:
+                        existing_ids.add(gid)
+                except Exception:
+                    continue
+        except Exception:
+            existing_ids = set()
+        inserted = 0
+        for entry in gifts_raw:
+            if not isinstance(entry, dict):
+                continue
+            b64 = entry.get("b64") or entry.get("payload_b64")
+            if not isinstance(b64, str) or len(b64) < 16:
+                continue
+            try:
+                wrapper = deserialize_tl_saved_gift(b64)
+            except Exception as e:
+                _log(f"sync remote deserialize fail: {e}")
+                continue
+            if wrapper is None:
+                continue
+            try:
+                g = get_val(wrapper, "gift", None)
+                gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+                if gid > 0 and gid in existing_ids:
+                    continue
+                if gid > 0:
+                    existing_ids.add(gid)
+            except Exception:
+                pass
+            try:
+                gifts_list.add(wrapper)
+                inserted += 1
+            except Exception:
+                pass
+            if inserted >= 32:
+                break
+        return inserted
+
+    def _sync_bootstrap(self):
+        if not hasattr(self, "_eblannft_sync_lock"):
+            self._eblannft_sync_lock = threading.Lock()
+        if getattr(self, "_eblannft_sync_client", None) is not None:
+            return
+        try:
+            from . import sync_client as _sync_module
+        except Exception:
+            try:
+                import eblannft_runtime.sync_client as _sync_module  # type: ignore
+            except Exception as e:
+                _log(f"sync module import failed: {e}")
+                return
+        cfg = self._sync_get_settings()
+        if not cfg.get("enabled", True):
+            _log("sync disabled by config")
+            return
+        try:
+            client = _sync_module.SyncClient(
+                server_url=cfg.get("server_url"),
+                plugin_key=cfg.get("plugin_key"),
+                collect_local_state=self._sync_collect_local_state,
+                on_remote_state=self._sync_on_remote_state,
+                get_my_user_id=self._sync_my_user_id,
+            )
+            client.start()
+            self._eblannft_sync_client = client
+            try:
+                def _initial_push():
+                    try:
+                        time.sleep(2.0)
+                        client.push_my_state_now(force=True)
+                    except Exception:
+                        pass
+                threading.Thread(target=_initial_push, daemon=True).start()
+            except Exception:
+                pass
+        except Exception as e:
+            _log(f"sync bootstrap failed: {e}")
+
+    def _sync_shutdown(self):
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return
+        try:
+            client.stop()
+        except Exception:
+            pass
+        self._eblannft_sync_client = None
+
     def _hook_native_catalog_ui(self):
         try:
             JavaClass = jclass("java.lang.Class")
@@ -2248,6 +3005,11 @@ class NftClonerPlugin(BasePlugin):
             except Exception as inner_e:
                 _log(f"Welcome bootstrap error: {inner_e}")
 
+            try:
+                self._sync_bootstrap()
+            except Exception as inner_e:
+                _log(f"Sync bootstrap error: {inner_e}")
+
             _log(f"Plugin loaded v{__version__}")
         except Exception as e:
             _log(f"Load Error: {e}")
@@ -2285,6 +3047,10 @@ class NftClonerPlugin(BasePlugin):
             self._gift_menu_injected_once = False
             self._main_menu_sheet = None
         except:
+            pass
+        try:
+            self._sync_shutdown()
+        except Exception:
             pass
         self._shutdown_bg_executor()
 
@@ -20975,6 +21741,24 @@ class NftClonerPlugin(BasePlugin):
                     target_user_id = 0
                 manage_self = bool(self._should_manage_self_saved_gifts(req_user_id=req_user_id, owner_user_id=owner_user_id, target_user_id=target_user_id))
                 if not manage_self:
+                    # Foreign profile + sync: inject the remote user's gifts
+                    # from the VPS cache and schedule wear-status patches so
+                    # other beta/prod clients see each other's NFTs.
+                    try:
+                        remote_uid = int(target_user_id or owner_user_id or req_user_id or 0)
+                    except Exception:
+                        remote_uid = 0
+                    if remote_uid > 0 and remote_uid != my_id:
+                        try:
+                            inj = self._sync_inject_remote_gifts(gifts_list, remote_uid)
+                            if inj > 0:
+                                _log(f"  Remote sync inject for uid={remote_uid}: +{inj}")
+                        except Exception as _re:
+                            _log(f"  Remote sync inject error: {_re}")
+                        try:
+                            self._sync_schedule_remote_user_patch(remote_uid)
+                        except Exception as _re2:
+                            _log(f"  Remote sync schedule error: {_re2}")
                     _log(f"  Skip saved gifts patch: req_uid={req_user_id}, owner_uid={owner_user_id}, target_uid={target_user_id}, my_id={my_id}")
                     return
 
@@ -21580,16 +22364,22 @@ class NetworkHook(MethodHook):
             req_name = req.getClass().getSimpleName()
             req_name_l = str(req_name).lower()
 
-            if "gift" in req_name_l and "get" in req_name_l and self.plugin._has_local_gifts_overrides():
+            if "gift" in req_name_l and "get" in req_name_l:
                 req_user_id = self.plugin._extract_request_user_id(req)
-                if self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
+                is_self = bool(self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id))
+                has_local_overrides = bool(self.plugin._has_local_gifts_overrides())
+                sync_enabled = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+                # Self profile + own NFTs → original behaviour. Any saved-gifts
+                # response → also wrap so we can inject remote NFTs of *other*
+                # users when the sync client is alive.
+                if (is_self and has_local_overrides) or (sync_enabled and "saved" in req_name_l):
                     allow_inject = True
                     try:
                         if self.plugin._is_non_first_saved_gifts_page(req):
                             allow_inject = False
                     except:
                         allow_inject = True
-                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}")
+                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}, is_self={is_self}, has_local={has_local_overrides}, sync={sync_enabled}")
                     param.args[1] = WrapperDelegate(self.plugin, param.args[1], req_user_id, req_name, allow_inject)
 
             # Channel gifts injection: getSavedStarGifts for a channel peer
@@ -21653,7 +22443,8 @@ class NetworkHook(MethodHook):
                 _log(f">>> Hooking STATUS: {req_name}, collectible_id={cid}")
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active()) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            sync_active = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
@@ -21661,6 +22452,10 @@ class NetworkHook(MethodHook):
                 elif self.plugin._should_apply_local_rating_for_target(req_user_id):
                     should_hook_user = True
                 elif self.plugin._is_local_rating_active() and ("getfulluser" in req_name_l) and int(req_user_id or -1) <= 0:
+                    should_hook_user = True
+                elif sync_active and int(req_user_id or 0) > 0:
+                    # Foreign profile + sync: wrap so we can patch wear status,
+                    # NFT username and number using the remote record from VPS.
                     should_hook_user = True
                 if should_hook_user:
                     _log(f">>> Hooking USER: {req_name}")
@@ -21857,6 +22652,26 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                     _log(f"USER response patched ({self.req_name}): {patched}")
             except Exception as e:
                 _log(f"UserWrapperDelegate patch error: {e}")
+            # Sync: apply remote-cached overrides for a *foreign* uid.
+            try:
+                tuid = int(self.target_user_id or 0)
+            except Exception:
+                tuid = 0
+            try:
+                my_id = int(self.plugin._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if tuid > 0 and tuid != my_id:
+                try:
+                    rpatched = int(self.plugin._sync_apply_remote_user_overrides(response, tuid) or 0)
+                    if rpatched:
+                        _log(f"USER remote sync patched ({self.req_name}) uid={tuid}: {rpatched}")
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote patch error: {e}")
+                try:
+                    self.plugin._sync_schedule_remote_user_patch(tuid)
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote schedule error: {e}")
         if self.original:
             self.original.run(response, error)
 
@@ -21868,15 +22683,6 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
 
         if (self.plugin.wear_active and self.plugin.wear_collectible_id > 0) or self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active():
             try:
-                # Always re-schedule, including in early-profile mode: the
-                # loadFullUser response delivered above is itself the trigger
-                # that overwrites our cached User in MessagesController, so
-                # skipping the patch here is what was leaving wear-or-identity
-                # in a half-patched state on the next render.
-                # Use a delegate-specific batch key so this schedule does NOT
-                # share a token with the on_plugin_load primer (which used the
-                # default key) — otherwise each delegate run would cancel that
-                # primer (or vice versa) instead of running additively.
                 self.plugin._schedule_cached_user_patch(
                     [80, 220, 520],
                     patch_userconfig=True,
