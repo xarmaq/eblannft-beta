@@ -28,9 +28,10 @@ from urllib.request import Request, urlopen
 
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8787"
-DEFAULT_PUSH_INTERVAL_SEC = 60
-DEFAULT_PULL_INTERVAL_SEC = 90
+DEFAULT_PUSH_INTERVAL_SEC = 30
+DEFAULT_PULL_INTERVAL_SEC = 25
 DEFAULT_TIMEOUT_SEC = 6
+STALE_CACHE_SEC = 15
 USER_KEY_PREFIX = "tg:"
 
 
@@ -183,17 +184,11 @@ class SyncClient(object):
         payload = self._build_my_payload()
         if payload is None:
             return False
-        try:
-            payload_hash = hash(json.dumps(payload, sort_keys=True, default=str))
-        except Exception:
-            payload_hash = None
-        if not force and payload_hash is not None and payload_hash == self._last_push_payload_hash:
-            return True
+        # Always push the current snapshot — skipping by hash makes the server
+        # diverge whenever a delete-then-add yields the same hash, or when the
+        # server got rolled back / wiped while we still hold a stale hash.
         result = self._do_http("PUT", f"/api/v1/users/{user_key}/state", body=payload)
-        if isinstance(result, dict) and result.get("ok"):
-            self._last_push_payload_hash = payload_hash
-            return True
-        return False
+        return isinstance(result, dict) and bool(result.get("ok"))
 
     def _push_loop(self):
         # initial delay so plugin has time to fully boot
@@ -261,6 +256,17 @@ class SyncClient(object):
             return None
         with self._lock:
             return self._cache.get(user_key)
+
+    def get_cached_fresh(self, user_id, max_age_sec=STALE_CACHE_SEC):
+        """Returns cached record only if it is younger than max_age_sec, else None."""
+        user_key = make_user_key(user_id)
+        if not user_key:
+            return None
+        with self._lock:
+            ts = self._cache_ts.get(user_key, 0)
+            if (time.time() - ts) <= max_age_sec:
+                return self._cache.get(user_key)
+        return None
 
     def fetch_remote_state_blocking(self, user_id, max_timeout=1.5):
         """Blocking GET with a short timeout. Returns record or None."""

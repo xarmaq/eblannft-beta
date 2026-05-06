@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2434,6 +2434,72 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             return None
 
+    def _sync_patch_remote_cached_user(self, target_user_id):
+        """Apply remote wear status to a foreign user already cached in MessagesController."""
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return False
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return False
+        if not record.get("wear_active"):
+            return False
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        if cid <= 0:
+            return False
+        wsd = record.get("wear_status_data") or {}
+        st = self._build_collectible_status_from_wsd(cid, wsd)
+        if st is None:
+            return False
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+            user_obj = ctrl.getUser(tuid)
+            if user_obj is None:
+                return False
+            try:
+                if not self._set_field(user_obj, "emoji_status", st):
+                    return False
+            except Exception:
+                return False
+            try:
+                ctrl.putUser(user_obj, False)
+            except Exception:
+                pass
+            try:
+                self._post_local_profile_notifications(reason="remote_wear_patch", cooldown=0.2)
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            _log(f"sync remote cached user patch error uid={tuid}: {e}")
+            return False
+
+    def _sync_schedule_remote_user_patch(self, target_user_id, delays=None):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return None
+        if delays is None:
+            delays = [0, 80, 220, 520, 1100]
+
+        def _cb():
+            try:
+                self._sync_patch_remote_cached_user(tuid)
+            except Exception:
+                pass
+
+        return self._schedule_ui_batch(f"sync_remote_user_patch:{tuid}", _cb, delays)
+
     def _build_collectible_status_from_wsd(self, collectible_id, wsd):
         try:
             cid = int(collectible_id or 0)
@@ -2487,7 +2553,7 @@ class NftClonerPlugin(BasePlugin):
             return None
         record = None
         try:
-            record = client.get_cached(uid)
+            record = client.get_cached_fresh(uid)
         except Exception:
             record = None
         if not isinstance(record, dict):
@@ -2495,6 +2561,11 @@ class NftClonerPlugin(BasePlugin):
                 record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
             except Exception:
                 record = None
+            if not isinstance(record, dict):
+                try:
+                    record = client.get_cached(uid)
+                except Exception:
+                    record = None
         return record if isinstance(record, dict) else None
 
     def _sync_apply_remote_user_overrides(self, response, target_user_id):
@@ -2688,6 +2759,16 @@ class NftClonerPlugin(BasePlugin):
             )
             client.start()
             self._eblannft_sync_client = client
+            try:
+                def _initial_push():
+                    try:
+                        time.sleep(2.0)
+                        client.push_my_state_now(force=True)
+                    except Exception:
+                        pass
+                threading.Thread(target=_initial_push, daemon=True).start()
+            except Exception:
+                pass
         except Exception as e:
             _log(f"sync bootstrap failed: {e}")
 
@@ -21263,6 +21344,10 @@ class NftClonerPlugin(BasePlugin):
                                 _log(f"  Remote sync inject for uid={remote_uid}: +{inj}")
                         except Exception as _re:
                             _log(f"  Remote sync inject error: {_re}")
+                        try:
+                            self._sync_schedule_remote_user_patch(remote_uid)
+                        except Exception as _re2:
+                            _log(f"  Remote sync schedule error: {_re2}")
                     _log(f"  Skip saved gifts patch: req_uid={req_user_id}, owner_uid={owner_user_id}, target_uid={target_user_id}, my_id={my_id}")
                     return
 
@@ -22171,6 +22256,10 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                         _log(f"USER remote sync patched ({self.req_name}) uid={tuid}: {rpatched}")
                 except Exception as e:
                     _log(f"UserWrapperDelegate remote patch error: {e}")
+                try:
+                    self.plugin._sync_schedule_remote_user_patch(tuid)
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote schedule error: {e}")
         if self.original:
             self.original.run(response, error)
 
