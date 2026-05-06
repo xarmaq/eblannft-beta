@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2447,15 +2447,22 @@ class NftClonerPlugin(BasePlugin):
         client = getattr(self, "_eblannft_sync_client", None)
         if client is None:
             return 0
-        try:
-            client.request_remote_state(user_id)
-        except Exception:
-            pass
         record = None
         try:
             record = client.get_cached(user_id)
         except Exception:
             record = None
+        if not isinstance(record, dict) or not record.get("gifts"):
+            try:
+                fetched = client.fetch_remote_state_blocking(user_id, max_timeout=2.0)
+                if isinstance(fetched, dict):
+                    record = fetched
+            except Exception as _fe:
+                _log(f"sync remote blocking fetch error: {_fe}")
+        try:
+            client.request_remote_state(user_id)
+        except Exception:
+            pass
         if not isinstance(record, dict):
             return 0
         gifts_raw = record.get("gifts") or []
@@ -21713,16 +21720,22 @@ class NetworkHook(MethodHook):
             req_name = req.getClass().getSimpleName()
             req_name_l = str(req_name).lower()
 
-            if "gift" in req_name_l and "get" in req_name_l and self.plugin._has_local_gifts_overrides():
+            if "gift" in req_name_l and "get" in req_name_l:
                 req_user_id = self.plugin._extract_request_user_id(req)
-                if self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
+                is_self = bool(self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id))
+                has_local_overrides = bool(self.plugin._has_local_gifts_overrides())
+                sync_enabled = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+                # Self profile + own NFTs → original behaviour.
+                # Any saved-gifts response → also wrap so we can inject remote
+                # NFTs of *other* users when the sync client is alive.
+                if (is_self and has_local_overrides) or (sync_enabled and "saved" in req_name_l):
                     allow_inject = True
                     try:
                         if self.plugin._is_non_first_saved_gifts_page(req):
                             allow_inject = False
                     except:
                         allow_inject = True
-                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}")
+                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}, is_self={is_self}, has_local={has_local_overrides}, sync={sync_enabled}")
                     param.args[1] = WrapperDelegate(self.plugin, param.args[1], req_user_id, req_name, allow_inject)
 
             # Channel gifts injection: getSavedStarGifts for a channel peer

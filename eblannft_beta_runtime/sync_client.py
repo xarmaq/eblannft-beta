@@ -261,3 +261,29 @@ class SyncClient(object):
             return None
         with self._lock:
             return self._cache.get(user_key)
+
+    def fetch_remote_state_blocking(self, user_id, max_timeout=1.5):
+        """Blocking GET with a short timeout. Returns record or None."""
+        user_key = make_user_key(user_id)
+        if not user_key:
+            return None
+        prev_timeout = self.timeout
+        try:
+            self.timeout = max(1, min(int(prev_timeout or max_timeout), int(max_timeout)))
+            record = self._do_http("GET", f"/api/v1/users/{user_key}/state")
+        except Exception:
+            record = None
+        finally:
+            self.timeout = prev_timeout
+        if isinstance(record, dict):
+            with self._lock:
+                self._cache[user_key] = record
+                self._cache_ts[user_key] = time.time()
+            if self.on_remote_state is not None:
+                try:
+                    self.on_remote_state(user_key, record)
+                except Exception:
+                    pass
+            return record
+        with self._lock:
+            return self._cache.get(user_key)
