@@ -2293,7 +2293,7 @@ class NftClonerPlugin(BasePlugin):
         cfg = {
             "enabled": True,
             "server_url": "http://35.242.218.223:8787",
-            "plugin_key": "",
+            "plugin_key": "6ef78976213eb13982ee124c373b74411dd5cbf35e7250ab",
         }
         try:
             stored = getattr(self, "_eblannft_sync_cfg", None)
