@@ -2292,7 +2292,7 @@ class NftClonerPlugin(BasePlugin):
     def _sync_get_settings(self):
         cfg = {
             "enabled": True,
-            "server_url": "http://127.0.0.1:8787",
+            "server_url": "http://35.242.218.223:8787",
             "plugin_key": "",
         }
         try:
