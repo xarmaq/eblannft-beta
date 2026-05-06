@@ -1,10 +1,10 @@
 {
-  "version": "1.0.3",
-  "notes": "Beta 1.0.3 — синк теперь действительно работает: при заходе в чужой профиль фейковые NFT-подарки человека с этим же плагином десериализуются и добавляются в Gifts. Также пофикшен сбор локальной коллекции — теперь читается gift_library, а не пустой stolen_cache, и payload реально уходит на сервер.",
+  "version": "1.0.4",
+  "notes": "Beta 1.0.4 — изолировали кеш runtime от основного плагина. Раньше бутстрап беты подхватывал старые файлы из Downloads/eblannft/, оставшиеся от стабильного плагина 1.0.1, и поэтому показывал 1.0.1. Теперь бета хранит свои файлы в Downloads/eblannft_beta/ и грузит пакет eblannft_beta_runtime — конфликта не будет.",
   "files": [
     "eblannft.plugin",
-    "eblannft_runtime/__init__.py",
-    "eblannft_runtime/plugin.py",
-    "eblannft_runtime/sync_client.py"
+    "eblannft_beta_runtime/__init__.py",
+    "eblannft_beta_runtime/plugin.py",
+    "eblannft_beta_runtime/sync_client.py"
   ]
 }

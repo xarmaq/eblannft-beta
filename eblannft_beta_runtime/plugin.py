@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2515,7 +2515,7 @@ class NftClonerPlugin(BasePlugin):
             from . import sync_client as _sync_module
         except Exception:
             try:
-                import eblannft_runtime.sync_client as _sync_module  # type: ignore
+                import eblannft_beta_runtime.sync_client as _sync_module  # type: ignore
             except Exception as e:
                 _log(f"sync module import failed: {e}")
                 return
