@@ -65,11 +65,11 @@ def _gen(java_class, method_name):
 
 JRunnable = _gen(jclass("java.lang.Runnable"), "run")
 
-__id__ = "eblannft"
-__name__ = "eblanNFT"
-__description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
+__id__ = "eblannft_beta"
+__name__ = "eblanNFT Beta"
+__description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2237,6 +2237,11 @@ class NftClonerPlugin(BasePlugin):
             except Exception as inner_e:
                 _log(f"Welcome bootstrap error: {inner_e}")
 
+            try:
+                self._sync_bootstrap()
+            except Exception as inner_e:
+                _log(f"Sync bootstrap error: {inner_e}")
+
             _log(f"Plugin loaded v{__version__}")
         except Exception as e:
             _log(f"Load Error: {e}")
@@ -2275,7 +2280,194 @@ class NftClonerPlugin(BasePlugin):
             self._main_menu_sheet = None
         except:
             pass
+        try:
+            self._sync_shutdown()
+        except Exception:
+            pass
         self._shutdown_bg_executor()
+
+    # ---------------------------------------------------------------
+    # eblanNFT Beta 1.0.2 — VPS sync integration
+    # ---------------------------------------------------------------
+    def _sync_get_settings(self):
+        cfg = {
+            "enabled": True,
+            "server_url": "http://127.0.0.1:8787",
+            "plugin_key": "",
+        }
+        try:
+            stored = getattr(self, "_eblannft_sync_cfg", None)
+            if isinstance(stored, dict):
+                cfg.update({k: stored.get(k, cfg[k]) for k in cfg.keys()})
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_save_settings(self, **patch):
+        cfg = self._sync_get_settings()
+        cfg.update({k: v for k, v in patch.items() if k in cfg})
+        self._eblannft_sync_cfg = cfg
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is not None:
+                client.update_endpoint(server_url=cfg.get("server_url"),
+                                       plugin_key=cfg.get("plugin_key"))
+                client.set_enabled(bool(cfg.get("enabled", True)))
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_my_user_id(self):
+        try:
+            uc = get_user_config()
+            return int(uc.getCurrentUser().id)
+        except Exception:
+            try:
+                return int(get_user_config().clientUserId)
+            except Exception:
+                return 0
+
+    def _sync_collect_local_state(self):
+        snapshot = {
+            "plugin_id": "eblannft_beta",
+            "updated_at": int(time.time()),
+            "gifts": [],
+            "wear_active": False,
+            "wear_collectible_id": 0,
+            "wear_status_data": {},
+            "username_state": {
+                "enabled": bool(self._is_nft_username_active()) if hasattr(self, "_is_nft_username_active") else False,
+                "tokens": list(getattr(self, "_nft_username_tokens", []) or []),
+                "price_ton": str(getattr(self, "_nft_username_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "_nft_username_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "_nft_username_purchase_date", "") or ""),
+            },
+            "number_state": {
+                "enabled": bool(self._is_nft_number_active()) if hasattr(self, "_is_nft_number_active") else False,
+                "tokens": list(getattr(self, "_nft_number_tokens", []) or []),
+                "price_ton": str(getattr(self, "_nft_number_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "_nft_number_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "_nft_number_purchase_date", "") or ""),
+            },
+        }
+        try:
+            if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                snapshot["wear_active"] = True
+                snapshot["wear_collectible_id"] = int(self.wear_collectible_id)
+                wsd = getattr(self, "wear_status_data", None)
+                if isinstance(wsd, dict):
+                    snapshot["wear_status_data"] = {
+                        k: v for k, v in wsd.items()
+                        if isinstance(v, (str, int, float, bool)) or v is None
+                    }
+        except Exception:
+            pass
+        try:
+            library = getattr(self, "stolen_cache", None) or getattr(self, "_stolen_cache", None) or {}
+            if isinstance(library, dict):
+                items = library.values()
+            elif isinstance(library, list):
+                items = library
+            else:
+                items = []
+            count = 0
+            for entry in items:
+                if not isinstance(entry, dict):
+                    continue
+                b64 = entry.get("b64") or entry.get("payload_b64")
+                if not isinstance(b64, str) or len(b64) < 16:
+                    continue
+                gift = {"b64": b64}
+                for key in ("title", "slug", "key", "gift_kind"):
+                    val = entry.get(key)
+                    if isinstance(val, str) and val:
+                        gift[key] = val
+                for key in ("num", "base_gift_id", "unique_id", "saved_id",
+                            "standard_price_stars", "avail_total", "avail_issued",
+                            "limit_total", "order_hint", "updated_at", "created_at"):
+                    val = entry.get(key)
+                    if isinstance(val, (int, float)):
+                        gift[key] = int(val)
+                for key in ("inject", "limited_flag", "pinned_override", "hidden_override"):
+                    if key in entry:
+                        gift[key] = bool(entry.get(key))
+                for key in ("wear_status_data", "build_config", "identity_config"):
+                    val = entry.get(key)
+                    if isinstance(val, dict):
+                        gift[key] = {
+                            kk: vv for kk, vv in val.items()
+                            if isinstance(vv, (str, int, float, bool)) or vv is None
+                        }
+                snapshot["gifts"].append(gift)
+                count += 1
+                if count >= 64:
+                    break
+        except Exception as e:
+            _log(f"sync collect gifts error: {e}")
+        return snapshot
+
+    def _sync_on_remote_state(self, user_key, record):
+        try:
+            lock = getattr(self, "_eblannft_sync_lock", None)
+            if lock is None:
+                return
+            with lock:
+                cache = getattr(self, "_eblannft_sync_remote_cache", None)
+                if cache is None:
+                    cache = {}
+                    self._eblannft_sync_remote_cache = cache
+                cache[user_key] = record
+        except Exception:
+            pass
+
+    def request_remote_profile(self, user_id):
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is None:
+                return None
+            return client.request_remote_state(user_id)
+        except Exception:
+            return None
+
+    def _sync_bootstrap(self):
+        if not hasattr(self, "_eblannft_sync_lock"):
+            self._eblannft_sync_lock = threading.Lock()
+        if getattr(self, "_eblannft_sync_client", None) is not None:
+            return
+        try:
+            from . import sync_client as _sync_module
+        except Exception:
+            try:
+                import eblannft_runtime.sync_client as _sync_module  # type: ignore
+            except Exception as e:
+                _log(f"sync module import failed: {e}")
+                return
+        cfg = self._sync_get_settings()
+        if not cfg.get("enabled", True):
+            _log("sync disabled by config")
+            return
+        try:
+            client = _sync_module.SyncClient(
+                server_url=cfg.get("server_url"),
+                plugin_key=cfg.get("plugin_key"),
+                collect_local_state=self._sync_collect_local_state,
+                on_remote_state=self._sync_on_remote_state,
+                get_my_user_id=self._sync_my_user_id,
+            )
+            client.start()
+            self._eblannft_sync_client = client
+        except Exception as e:
+            _log(f"sync bootstrap failed: {e}")
+
+    def _sync_shutdown(self):
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return
+        try:
+            client.stop()
+        except Exception:
+            pass
+        self._eblannft_sync_client = None
 
     def create_settings(self):
         username_status = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"

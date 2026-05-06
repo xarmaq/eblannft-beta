@@ -1,0 +1,17 @@
+[Unit]
+Description=eblanNFT Beta sync server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/eblannft-beta/vps-server
+Environment=EBLANNFT_HOST=0.0.0.0
+Environment=EBLANNFT_PORT=8787
+Environment=EBLANNFT_DATA_DIR=/var/lib/eblannft-beta
+Environment=EBLANNFT_PLUGIN_KEY=changeme
+ExecStart=/usr/bin/python3 server.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

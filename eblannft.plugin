@@ -22,11 +22,11 @@ import sys
 import threading
 import time
 
-__id__ = "eblannft"
-__name__ = "eblanNFT"
-__description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
+__id__ = "eblannft_beta"
+__name__ = "eblanNFT Beta"
+__description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -35,7 +35,7 @@ __icon__ = "HappyHappyPepe/31"
 # import its NftClonerPlugin class. Mirrors the previously-shipped wrapper.
 # ---------------------------------------------------------------------------
 
-_RUNTIME_REPO = "xarmaq/eblannft"
+_RUNTIME_REPO = "xarmaq/eblannft-beta"
 _RUNTIME_BRANCH = "main"
 _RUNTIME_DIR_NAME = "eblannft"
 _RUNTIME_PACKAGE_NAME = "eblannft_runtime"
@@ -44,6 +44,7 @@ _IMPL_ATTR_CANDIDATES = ("EblanNftPlugin", "NftClonerPlugin")
 _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/__init__.py",
     f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
+    f"{_RUNTIME_PACKAGE_NAME}/sync_client.py",
 )
 _DOWNLOAD_TIMEOUT_SEC = 35
 
