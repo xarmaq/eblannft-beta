@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2433,6 +2433,154 @@ class NftClonerPlugin(BasePlugin):
             return client.request_remote_state(user_id)
         except Exception:
             return None
+
+    def _build_collectible_status_from_wsd(self, collectible_id, wsd):
+        try:
+            cid = int(collectible_id or 0)
+        except Exception:
+            cid = 0
+        if cid <= 0:
+            return None
+        try:
+            Cls = jclass("org.telegram.tgnet.TLRPC$TL_emojiStatusCollectible")
+            st = Cls()
+            self._set_field(st, "collectible_id", cid)
+            try:
+                self._set_field(st, "until", 0)
+            except Exception:
+                pass
+            if isinstance(wsd, dict):
+                for color_field in ["center_color", "edge_color", "pattern_color", "text_color"]:
+                    val = wsd.get(color_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, color_field, int(val))
+                        except Exception:
+                            pass
+                for long_field in ["document_id", "pattern_document_id"]:
+                    val = wsd.get(long_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, long_field, int(val))
+                        except Exception:
+                            pass
+                for str_field in ["title", "slug"]:
+                    val = wsd.get(str_field, "")
+                    if val:
+                        try:
+                            self._set_field(st, str_field, str(val))
+                        except Exception:
+                            pass
+            return st
+        except Exception:
+            return None
+
+    def _sync_get_remote_record(self, user_id):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return None
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return None
+        record = None
+        try:
+            record = client.get_cached(uid)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
+            except Exception:
+                record = None
+        return record if isinstance(record, dict) else None
+
+    def _sync_apply_remote_user_overrides(self, response, target_user_id):
+        """Patch User objects in a TL response with remote-cached wear/username/number."""
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if response is None or tuid <= 0:
+            return 0
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return 0
+        wear_active = bool(record.get("wear_active"))
+        cid = 0
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        wsd = record.get("wear_status_data") or {}
+        wear_status = None
+        if wear_active and cid > 0:
+            wear_status = self._build_collectible_status_from_wsd(cid, wsd)
+        if wear_status is None:
+            return 0
+
+        patched = [0]
+        visited = set()
+
+        def walk(obj, depth):
+            if obj is None or depth > 3:
+                return
+            try:
+                oid = int(obj.hashCode())
+            except Exception:
+                oid = id(obj)
+            if oid in visited:
+                return
+            visited.add(oid)
+            try:
+                obj_uid = int(get_val(obj, "id", 0) or 0)
+            except Exception:
+                obj_uid = 0
+            if obj_uid == tuid:
+                try:
+                    if self._set_field(obj, "emoji_status", wear_status):
+                        patched[0] += 1
+                except Exception:
+                    pass
+            try:
+                if self._is_java_list_like(obj):
+                    try:
+                        size = min(int(obj.size() or 0), 32)
+                    except Exception:
+                        size = 0
+                    for i in range(size):
+                        try:
+                            walk(obj.get(i), depth + 1)
+                        except Exception:
+                            continue
+                    return
+            except Exception:
+                pass
+            try:
+                for f in self._iter_object_fields(obj):
+                    try:
+                        val = f.get(obj)
+                    except Exception:
+                        continue
+                    if val is None:
+                        continue
+                    try:
+                        typ = str(f.getType().getName() or "")
+                    except Exception:
+                        typ = ""
+                    if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
+                        continue
+                    try:
+                        walk(val, depth + 1)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        walk(response, 0)
+        return int(patched[0] or 0)
 
     def _sync_inject_remote_gifts(self, gifts_list, user_id):
         """Inject remote-cached gifts (b64) into the saved-gifts ArrayList.
@@ -21799,7 +21947,8 @@ class NetworkHook(MethodHook):
                 _log(f">>> Hooking STATUS: {req_name}, collectible_id={cid}")
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active()) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            sync_active = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
@@ -21807,6 +21956,10 @@ class NetworkHook(MethodHook):
                 elif self.plugin._should_apply_local_rating_for_target(req_user_id):
                     should_hook_user = True
                 elif self.plugin._is_local_rating_active() and ("getfulluser" in req_name_l) and int(req_user_id or -1) <= 0:
+                    should_hook_user = True
+                elif sync_active and int(req_user_id or 0) > 0:
+                    # Foreign profile + sync: wrap so we can patch wear status
+                    # using the remote record fetched from the VPS.
                     should_hook_user = True
                 if should_hook_user:
                     _log(f">>> Hooking USER: {req_name}")
@@ -22003,6 +22156,21 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                     _log(f"USER response patched ({self.req_name}): {patched}")
             except Exception as e:
                 _log(f"UserWrapperDelegate patch error: {e}")
+            try:
+                tuid = int(self.target_user_id or 0)
+            except Exception:
+                tuid = 0
+            try:
+                my_id = int(self.plugin._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if tuid > 0 and tuid != my_id:
+                try:
+                    rpatched = int(self.plugin._sync_apply_remote_user_overrides(response, tuid) or 0)
+                    if rpatched:
+                        _log(f"USER remote sync patched ({self.req_name}) uid={tuid}: {rpatched}")
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote patch error: {e}")
         if self.original:
             self.original.run(response, error)
 
