@@ -1,6 +1,6 @@
 {
-  "version": "1.0.11",
-  "notes": "Beta 1.0.11 — повторный фикс 3-колонок: теперь дублируем в two-pronged: (1) перед fillItems инфлируем list.totalCount до 3, чтобы Math.min(3, totalCount) == 3; (2) после fillItems напрямую зовём listView.setSpanCount(3) как страховку. Также добавлены подробные логи NFT_ARCH про установку хука и список методов класса Page — если 3-колонок всё ещё не будет, в logcat будет видно, какой именно класс/метод не нашёлся.",
+  "version": "1.0.12",
+  "notes": "Beta 1.0.12 — три фикса: (1) 3-колонки в подарках теперь действительно работают: добавлен belt-and-suspenders хук UniversalRecyclerView.setSpanCount, который перехватывает отложенный runOnUIThread-вызов из Page.fillItems (раньше он затирал наш setSpanCount(3) обратно на 1/2 после нашего after-хука). (2) Wear-статус (emoji_status) у других пользователей: patch теперь идёт через putUser(user, false, true) с force=true (без force MessagesController early-return'ил, потому что oldUser==user при in-place патче), плюс шлём updateInterfaces(UPDATE_MASK_EMOJI_STATUS|UPDATE_MASK_NAME), userEmojiStatusUpdated(user) и emojiLoaded — ProfileActivity подхватывает мгновенно. (3) Свой wear: тот же force=true в _patch_my_cached_user + расширенный набор NC-нотификаций в _post_local_profile_notifications, чтобы статус не мигал при открытии профиля.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

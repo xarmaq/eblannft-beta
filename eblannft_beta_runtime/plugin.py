@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.11"
+__version__ = "1.0.12"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2482,18 +2482,148 @@ class NftClonerPlugin(BasePlugin):
                     return False
             except Exception:
                 return False
+            # MessagesController.putUser(user, fromCache) early-returns when
+            # oldUser == user (in-place patch), so the cache is never refreshed
+            # and ProfileActivity never re-renders. Force=true bypasses that.
             try:
-                ctrl.putUser(user_obj, False)
+                ctrl.putUser(user_obj, False, True)
             except Exception:
-                pass
+                try:
+                    ctrl.putUser(user_obj, False)
+                except Exception:
+                    pass
             try:
-                self._post_local_profile_notifications(reason="remote_wear_patch", cooldown=0.2)
+                self._post_remote_profile_notifications(tuid, user_obj, reason="remote_wear_patch")
             except Exception:
                 pass
             return True
         except Exception as e:
             _log(f"sync remote cached user patch error uid={tuid}: {e}")
             return False
+
+    def _post_remote_profile_notifications(self, user_id, user_obj=None, reason="remote_profile_patch"):
+        """Force ProfileActivity refresh for a foreign uid.
+
+        ProfileActivity listens to NotificationCenter.updateInterfaces with
+        UPDATE_MASK_EMOJI_STATUS (=524288) — see ProfileActivity.didReceivedNotification
+        circa line 8922. Posting that flag (plus userEmojiStatusUpdated for the
+        per-user fast-path and the global emojiLoaded for orbit drawables) is
+        what actually makes the wear status appear on a non-self profile.
+        """
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        try:
+            if bool(getattr(self, "_plugin_unloading", False)) or bool(getattr(self, "_patching_nc", False)):
+                return 0
+        except Exception:
+            pass
+        try:
+            notify_map = getattr(self, "_remote_profile_notify_ts", None)
+            if not isinstance(notify_map, dict):
+                notify_map = {}
+                self._remote_profile_notify_ts = notify_map
+            key = f"{reason}:{uid}"
+            now = time.time()
+            last = float(notify_map.get(key, 0.0) or 0.0)
+            if (now - last) < 0.18:
+                return 0
+            notify_map[key] = now
+        except Exception:
+            pass
+
+        captured_user = user_obj
+
+        def _emit():
+            try:
+                self._patching_nc = True
+            except Exception:
+                pass
+            try:
+                try:
+                    account = int(get_user_config().selectedAccount or 0)
+                except Exception:
+                    account = 0
+                try:
+                    NC = jclass("org.telegram.messenger.NotificationCenter")
+                    nc = NC.getInstance(to_java_int(account))
+                    gnc = NC.getGlobalInstance()
+                except Exception:
+                    return
+                if nc is None:
+                    return
+
+                def _eid(name):
+                    try:
+                        return int(self._get_notification_center_event_id(NC, name) or 0)
+                    except Exception:
+                        return 0
+
+                # 1) updateInterfaces(UPDATE_MASK_EMOJI_STATUS | UPDATE_MASK_NAME)
+                try:
+                    MC = jclass("org.telegram.messenger.MessagesController")
+                    try:
+                        mask_emoji = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                    except Exception:
+                        mask_emoji = 524288
+                    try:
+                        mask_name = int(MC.UPDATE_MASK_NAME)
+                    except Exception:
+                        mask_name = 2
+                    eid = _eid("updateInterfaces")
+                    if eid > 0:
+                        nc.postNotificationName(to_java_int(eid), to_java_int(mask_emoji | mask_name))
+                except Exception:
+                    pass
+
+                # 2) userEmojiStatusUpdated(user) — the per-user fast path
+                try:
+                    target_user = captured_user
+                    if target_user is None:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            target_user = ctrl.getUser(uid)
+                        except Exception:
+                            target_user = None
+                    eid = _eid("userEmojiStatusUpdated")
+                    if eid > 0 and target_user is not None:
+                        nc.postNotificationName(to_java_int(eid), target_user)
+                except Exception:
+                    pass
+
+                # 3) global emojiLoaded — kicks animated emoji drawables to redraw
+                try:
+                    eid = _eid("emojiLoaded")
+                    if eid > 0 and gnc is not None:
+                        gnc.postNotificationName(to_java_int(eid))
+                except Exception:
+                    pass
+
+                # 4) reloadDialogPhotos — repaints the avatar orbital ring/header
+                try:
+                    eid = _eid("reloadDialogPhotos")
+                    if eid > 0:
+                        nc.postNotificationName(to_java_int(eid))
+                except Exception:
+                    pass
+            finally:
+                try:
+                    self._patching_nc = False
+                except Exception:
+                    pass
+
+        try:
+            run_on_ui_thread(_emit)
+            return 1
+        except Exception:
+            try:
+                _emit()
+                return 1
+            except Exception:
+                return 0
 
     def _sync_schedule_remote_user_patch(self, target_user_id, delays=None):
         try:
@@ -7502,6 +7632,51 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     _post_global("emojiLoaded")
                 except:
+                    pass
+                # Force ProfileActivity to re-render the wear status orbit and
+                # name-row drawable: it listens to updateInterfaces with
+                # UPDATE_MASK_EMOJI_STATUS|UPDATE_MASK_NAME (mask=524290).
+                try:
+                    if (getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0) \
+                            or self._is_nft_username_active() or self._is_nft_number_active():
+                        try:
+                            MC = jclass("org.telegram.messenger.MessagesController")
+                            try:
+                                me = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                            except Exception:
+                                me = 524288
+                            try:
+                                mn = int(MC.UPDATE_MASK_NAME)
+                            except Exception:
+                                mn = 2
+                            mask = me | mn
+                        except Exception:
+                            mask = 524290
+                        eid = _event_id("updateInterfaces")
+                        if eid > 0:
+                            try:
+                                nc.postNotificationName(to_java_int(eid), to_java_int(mask))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                # Per-user fast path so the avatar/name drawable picks up the
+                # new emoji_status without waiting for the next interface sweep.
+                try:
+                    if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            u = ctrl.getUser(int(my_id))
+                        except Exception:
+                            u = None
+                        if u is not None:
+                            eid = _event_id("userEmojiStatusUpdated")
+                            if eid > 0:
+                                try:
+                                    nc.postNotificationName(to_java_int(eid), u)
+                                except Exception:
+                                    pass
+                except Exception:
                     pass
             finally:
                 try:
@@ -16852,8 +17027,15 @@ class NftClonerPlugin(BasePlugin):
                     has_changes = True
 
                 if has_changes:
+                    # putUser(user, fromCache=False) early-returns when oldUser==user
+                    # (in-place patch is the same object). force=true bypasses that
+                    # so the cache actually re-broadcasts. Fallback to 2-arg overload
+                    # for safety on older Telegram builds without the 3-arg form.
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                         _log(f"UI Forced Update for {my_id}")
                     except:
                         pass
@@ -16867,7 +17049,10 @@ class NftClonerPlugin(BasePlugin):
                 if (self._is_nft_username_active() or self._is_nft_number_active()):
                     if not has_changes:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
                         try:
@@ -17999,6 +18184,42 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"Page.fillItems NOT FOUND. Methods on Page: {','.join(seen_methods[:30])}")
         except Exception as e:
             _log(f"ProfileGiftsContainer$Page hook skipped: {e}")
+
+        # Belt-and-suspenders: hook UniversalRecyclerView.setSpanCount so any
+        # queued runnable inside Page.fillItems that would lower the span count
+        # gets transparently rewritten to 3 (only on listViews we tagged as
+        # belonging to a ProfileGiftsContainer$Page — other recycler views are
+        # untouched).
+        try:
+            URV = jclass("org.telegram.ui.Components.UniversalRecyclerView")
+            int_cls = jclass("java.lang.Integer").TYPE
+            setSpanCount_m = None
+            try:
+                setSpanCount_m = URV.getDeclaredMethod("setSpanCount", int_cls)
+            except Exception:
+                # fall back to scanning declared methods
+                for m in URV.getDeclaredMethods():
+                    try:
+                        if m.getName() == "setSpanCount":
+                            setSpanCount_m = m
+                            break
+                    except Exception:
+                        continue
+            if setSpanCount_m is not None:
+                try:
+                    setSpanCount_m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(setSpanCount_m, UniversalRecyclerSpanForceHook(self, columns=3)))
+                    _log("UniversalRecyclerView.setSpanCount hook installed (forces 3 on tagged listViews)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"UniversalRecyclerView.setSpanCount hook fail: {e}")
+            else:
+                _log("UniversalRecyclerView.setSpanCount method NOT found")
+        except Exception as e:
+            _log(f"UniversalRecyclerView hook skipped: {e}")
 
         if hooked:
             _log(f"ProfileGiftsContainer guard hooks installed: {hooked}")
@@ -22496,6 +22717,13 @@ class ProfileGiftsColumnsHook(MethodHook):
     reflection on totalCount fails or some other branch resets the span.
     """
 
+    # class-level shared registry of listView identityHashCodes that the
+    # UniversalRecyclerSpanForceHook (below) will force back to N columns
+    # whenever the post-fillItems queued setSpanCount tries to lower them.
+    _tracked_listview_ids = set()
+    # thread-affinity guard so our forced setSpanCount(3) call doesn't recurse
+    _force_in_progress = False
+
     def __init__(self, plugin, columns=3):
         super().__init__()
         self.plugin = plugin
@@ -22576,12 +22804,41 @@ class ProfileGiftsColumnsHook(MethodHook):
         except Exception:
             return False
 
+    def _track_listview(self, page):
+        try:
+            lv_field = self._find_field(page, "listView")
+            if lv_field is None:
+                return
+            try:
+                listView = lv_field.get(page)
+            except Exception:
+                return
+            if listView is None:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(listView))
+            except Exception:
+                lvid = id(listView)
+            ProfileGiftsColumnsHook._tracked_listview_ids.add(lvid)
+            # cap registry size to avoid leaks across many container instances
+            if len(ProfileGiftsColumnsHook._tracked_listview_ids) > 64:
+                try:
+                    extra = len(ProfileGiftsColumnsHook._tracked_listview_ids) - 64
+                    for k in list(ProfileGiftsColumnsHook._tracked_listview_ids)[:extra]:
+                        ProfileGiftsColumnsHook._tracked_listview_ids.discard(k)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def before_hooked_method(self, param):
         try:
             page = getattr(param, "thisObject", None)
             if page is None:
                 return
             self._bump_total_count(page)
+            self._track_listview(page)
         except Exception as e:
             try:
                 _log(f"ProfileGiftsColumnsHook before error: {e}")
@@ -22593,12 +22850,70 @@ class ProfileGiftsColumnsHook(MethodHook):
             page = getattr(param, "thisObject", None)
             if page is None:
                 return
+            self._track_listview(page)
             forced = self._force_span_count(page)
             if forced:
                 _log(f"ProfileGiftsColumnsHook setSpanCount={self.columns} forced")
         except Exception as e:
             try:
                 _log(f"ProfileGiftsColumnsHook after error: {e}")
+            except Exception:
+                pass
+
+
+class UniversalRecyclerSpanForceHook(MethodHook):
+    """Force setSpanCount(3) on any UniversalRecyclerView that we have tagged
+    as belonging to a ProfileGiftsContainer$Page. This catches the queued
+    `runOnUIThread(() -> listView.setSpanCount(spanCount))` inside fillItems
+    that would otherwise reset our 3-column override back to the small value
+    that Telegram computed locally before we bumped totalCount.
+    """
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+
+    def before_hooked_method(self, param):
+        try:
+            this = getattr(param, "thisObject", None)
+            args = getattr(param, "args", None)
+            if this is None or args is None or len(args) < 1:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(this))
+            except Exception:
+                lvid = id(this)
+            if lvid not in ProfileGiftsColumnsHook._tracked_listview_ids:
+                return
+            try:
+                req = int(args[0] or 0)
+            except Exception:
+                req = 0
+            if req == self.columns:
+                return
+            try:
+                args[0] = int(self.columns)
+            except Exception:
+                # primitive arg overrides via Chaquopy can fail on some builds;
+                # fall back to skipping the original and re-invoking with our value
+                try:
+                    param.setResult(None)
+                    if not ProfileGiftsColumnsHook._force_in_progress:
+                        ProfileGiftsColumnsHook._force_in_progress = True
+                        try:
+                            this.setSpanCount(int(self.columns))
+                        finally:
+                            ProfileGiftsColumnsHook._force_in_progress = False
+                except Exception:
+                    pass
+            try:
+                _log(f"UniversalRecyclerSpanForceHook overrode setSpanCount({req}) -> {self.columns}")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                _log(f"UniversalRecyclerSpanForceHook error: {e}")
             except Exception:
                 pass
 
