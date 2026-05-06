@@ -1,6 +1,6 @@
 {
-  "version": "1.0.1",
-  "notes": "Сброс нумерации. Это та же сборка, что лежала в репо как v1.0.23 — со всеми накопленными фичами и фиксами (авто-апдейт с MD3-попапом, анимированный стикер, прогресс-бар, NFT в чат с конструктором/библиотекой и привязкой к профилю получателя, выбираемый интервал проверки, понятные подписи в welcome и Сервис-меню). Просто визуально откатил версию назад, чтобы дальше отсчитывать с чистого листа.",
+  "version": "1.0.2",
+  "notes": "v1.0.2 — четыре фикса портированы из беты: (1) 3-колоночная сетка подарков теперь действительно работает: добавлены ProfileGiftsColumnsHook (бамп list.totalCount + setSpanCount(3) после fillItems) и UniversalRecyclerSpanForceHook, который перехватывает отложенный runOnUIThread-вызов из Page.fillItems (раньше этот queued setSpanCount затирал нашу страховку обратно на 1/2). (2) Wear-статус и NFT username/number перестали мигать через раз: putUser теперь зовётся через 3-арг overload с force=true (без force MessagesController early-return'ил при oldUser==user, потому что наш патч in-place). (3) Добавлены NC-нотификации updateInterfaces(UPDATE_MASK_EMOJI_STATUS|UPDATE_MASK_NAME) и userEmojiStatusUpdated(user) — ProfileActivity мгновенно перерисовывает шапку и orbital ring. Используется новый to_java_Integer() для корректного боксинга (Chaquopy дефолтно боксит Python int как Long, что роняло DialogsActivity при касте к Integer). (4) NFT, которые ты «подарил» другим (identity_config.to_user_id != my_id), больше не отображаются у тебя в профиле — добавлен фильтр в _rebuild_injection_payloads.",
   "files": [
     "eblannft.plugin"
   ]
