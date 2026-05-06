@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.10"
+__version__ = "1.0.11"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -17973,11 +17973,15 @@ class NftClonerPlugin(BasePlugin):
 
         try:
             Page = jclass("org.telegram.ui.Gifts.ProfileGiftsContainer$Page")
+            _log("ProfileGiftsContainer$Page resolved")
+            fillitems_hooked = 0
+            seen_methods = []
             for m in Page.getDeclaredMethods():
                 try:
                     n = m.getName()
                 except Exception:
                     continue
+                seen_methods.append(n)
                 if n != "fillItems":
                     continue
                 try:
@@ -17987,9 +17991,12 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
                     _log("ProfileGiftsContainer$Page.fillItems hook installed (force 3 columns)")
+                    fillitems_hooked += 1
                     hooked += 1
                 except Exception as e:
                     _log(f"Page.fillItems hook fail: {e}")
+            if fillitems_hooked == 0:
+                _log(f"Page.fillItems NOT FOUND. Methods on Page: {','.join(seen_methods[:30])}")
         except Exception as e:
             _log(f"ProfileGiftsContainer$Page hook skipped: {e}")
 
@@ -22481,60 +22488,100 @@ class GiftLookupDelegate(dynamic_proxy(RequestDelegate)):
             self.original.run(response, error)
 
 class ProfileGiftsColumnsHook(MethodHook):
-    """Force gift grid to N columns by inflating list.totalCount during fillItems.
+    """Force gift grid to N columns.
 
-    Telegram's ProfileGiftsContainer$Page.fillItems computes spanCount as
-    Math.min(N, list.totalCount), so a profile with totalCount<N gets a
-    sparse 1- or 2-column grid. We temporarily bump totalCount to N before
-    the original method runs and restore it after, so:
-      - the spanCount math evaluates to N → grid renders dense,
-      - any external readers of totalCount (counter labels etc.) see the real value.
+    Two-pronged: (1) before fillItems we bump list.totalCount so Telegram's
+    Math.min(N, totalCount) evaluates to N. (2) after fillItems we directly
+    call listView.setSpanCount(N) as a belt-and-suspenders fallback in case
+    reflection on totalCount fails or some other branch resets the span.
     """
 
     def __init__(self, plugin, columns=3):
         super().__init__()
         self.plugin = plugin
         self.columns = int(columns or 3)
+        self._field_cache = {}
 
-    def _get_list(self, page):
+    def _find_field(self, obj, name):
         try:
-            f = page.getClass().getDeclaredField("list")
-            f.setAccessible(True)
-            return f.get(page)
+            cls = obj.getClass()
+            cache_key = (cls.getName(), name)
+            f = self._field_cache.get(cache_key)
+            if f is not None:
+                return f
         except Exception:
-            return None
+            cls = None
+            cache_key = None
+        # walk class hierarchy
+        c = cls
+        while c is not None:
+            try:
+                f = c.getDeclaredField(name)
+                f.setAccessible(True)
+                if cache_key is not None:
+                    self._field_cache[cache_key] = f
+                return f
+            except Exception:
+                pass
+            try:
+                c = c.getSuperclass()
+            except Exception:
+                c = None
+        return None
+
+    def _bump_total_count(self, page):
+        list_field = self._find_field(page, "list")
+        if list_field is None:
+            return False
+        try:
+            lst = list_field.get(page)
+        except Exception:
+            return False
+        if lst is None:
+            return False
+        tc_field = self._find_field(lst, "totalCount")
+        if tc_field is None:
+            return False
+        try:
+            current = int(tc_field.getInt(lst) or 0)
+        except Exception:
+            current = 0
+        if current >= self.columns:
+            return False
+        try:
+            tc_field.setInt(lst, int(self.columns))
+            return True
+        except Exception:
+            return False
+
+    def _force_span_count(self, page):
+        lv_field = self._find_field(page, "listView")
+        if lv_field is None:
+            return False
+        try:
+            listView = lv_field.get(page)
+        except Exception:
+            return False
+        if listView is None:
+            return False
+        try:
+            cur = int(listView.getSpanCount() or 0)
+        except Exception:
+            cur = 0
+        if cur == self.columns:
+            return False
+        try:
+            listView.setSpanCount(int(self.columns))
+            return True
+        except Exception:
+            return False
 
     def before_hooked_method(self, param):
         try:
             page = getattr(param, "thisObject", None)
             if page is None:
                 return
-            lst = self._get_list(page)
-            if lst is None:
-                return
-            cls = lst.getClass()
-            try:
-                fld = cls.getField("totalCount")
-            except Exception:
-                try:
-                    fld = cls.getDeclaredField("totalCount")
-                    fld.setAccessible(True)
-                except Exception:
-                    fld = None
-            if fld is None:
-                return
-            try:
-                current = int(fld.getInt(lst) or 0)
-            except Exception:
-                current = 0
-            if current >= self.columns:
-                param.eblannft_restore = None
-                return
-            try:
-                fld.setInt(lst, int(self.columns))
-                param.eblannft_restore = (lst, fld, current)
-            except Exception:
-                param.eblannft_restore = None
+            self._bump_total_count(page)
         except Exception as e:
             try:
                 _log(f"ProfileGiftsColumnsHook before error: {e}")
@@ -22543,16 +22590,17 @@ class ProfileGiftsColumnsHook(MethodHook):
 
     def after_hooked_method(self, param):
         try:
-            restore = getattr(param, "eblannft_restore", None)
-            if restore is None:
+            page = getattr(param, "thisObject", None)
+            if page is None:
                 return
-            lst, fld, original = restore
+            forced = self._force_span_count(page)
+            if forced:
+                _log(f"ProfileGiftsColumnsHook setSpanCount={self.columns} forced")
+        except Exception as e:
             try:
-                fld.setInt(lst, int(original))
+                _log(f"ProfileGiftsColumnsHook after error: {e}")
             except Exception:
                 pass
-        except Exception:
-            pass
 
 
 class ProfileGiftsHashGuardHook(MethodHook):

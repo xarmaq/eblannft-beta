@@ -1,6 +1,6 @@
 {
-  "version": "1.0.10",
-  "notes": "Beta 1.0.10 — реальный фикс 3-колонок. Telegram внутри ProfileGiftsContainer$Page.fillItems считает spanCount = min(3, list.totalCount), поэтому профили с 1-2 реальными подарками рендерятся в 1-2 колонки. Хук перед вызовом fillItems поднимает list.totalCount до 3, оригинальный метод считает 3 колонки и выставляет setSpanCount(3); сразу после метод-хука totalCount возвращается на исходное значение, чтобы счётчик подарков не врал.",
+  "version": "1.0.11",
+  "notes": "Beta 1.0.11 — повторный фикс 3-колонок: теперь дублируем в two-pronged: (1) перед fillItems инфлируем list.totalCount до 3, чтобы Math.min(3, totalCount) == 3; (2) после fillItems напрямую зовём listView.setSpanCount(3) как страховку. Также добавлены подробные логи NFT_ARCH про установку хука и список методов класса Page — если 3-колонок всё ещё не будет, в logcat будет видно, какой именно класс/метод не нашёлся.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
