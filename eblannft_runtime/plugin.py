@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -166,6 +166,17 @@ def to_java_int(val):
     if val > 0x7FFFFFFF:
         val -= 0x100000000
     return val
+
+def to_java_Integer(val):
+    """Box a Python int as java.lang.Integer (NOT Long) for postNotificationName
+    Object... varargs. Chaquopy autoboxes Python int -> java.lang.Long in
+    Object[] context, which crashes recipients that cast args[0] to Integer
+    (e.g. DialogsActivity for updateInterfaces masks).
+    """
+    try:
+        return jclass("java.lang.Integer")(int(to_java_int(val)))
+    except Exception:
+        return int(to_java_int(val))
 
 def get_val(obj, name, default=None):
     if obj is None:
@@ -5984,7 +5995,10 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         pass
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                     except:
                         pass
                 try:
@@ -6984,6 +6998,51 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     _post_global("emojiLoaded")
                 except:
+                    pass
+                # Force ProfileActivity to re-render the wear status orbit and
+                # name-row drawable: it listens to updateInterfaces with mask
+                # UPDATE_MASK_EMOJI_STATUS|UPDATE_MASK_NAME (=524290).
+                try:
+                    if (getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0) \
+                            or self._is_nft_username_active() or self._is_nft_number_active():
+                        try:
+                            MC = jclass("org.telegram.messenger.MessagesController")
+                            try:
+                                me = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                            except Exception:
+                                me = 524288
+                            try:
+                                mn = int(MC.UPDATE_MASK_NAME)
+                            except Exception:
+                                mn = 2
+                            mask = me | mn
+                        except Exception:
+                            mask = 524290
+                        eid = _event_id("updateInterfaces")
+                        if eid > 0:
+                            try:
+                                nc.postNotificationName(to_java_int(eid), to_java_Integer(mask))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                # Per-user fast path so the avatar/name drawable picks up the
+                # new emoji_status without waiting for the next interface sweep.
+                try:
+                    if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            u = ctrl.getUser(int(my_id))
+                        except Exception:
+                            u = None
+                        if u is not None:
+                            eid = _event_id("userEmojiStatusUpdated")
+                            if eid > 0:
+                                try:
+                                    nc.postNotificationName(to_java_int(eid), u)
+                                except Exception:
+                                    pass
+                except Exception:
                     pass
             finally:
                 try:
@@ -8867,9 +8926,27 @@ class NftClonerPlugin(BasePlugin):
             self._recompute_gift_objects_limit()
         except:
             pass
+        try:
+            my_id_for_filter = int(self._get_my_user_id() or 0)
+        except Exception:
+            my_id_for_filter = 0
         payloads = []
+        skipped_gifted = 0
         for e in (self.gift_library or []):
             if not e.get("inject", False):
+                continue
+            # Skip entries marked as "gifted to someone else" — i.e. their
+            # identity_config.to_user_id is set to a uid that is not us.
+            # Without this gate the gift still appears in our own profile
+            # injection even though the user explicitly routed it to a
+            # different recipient.
+            try:
+                ic = e.get("identity_config") if isinstance(e.get("identity_config"), dict) else {}
+                to_uid = int(ic.get("to_user_id", 0) or 0)
+            except Exception:
+                to_uid = 0
+            if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
+                skipped_gifted += 1
                 continue
             w = self._library_get_wrapper(e.get("key"))
             if w and self._repair_saved_gift_wrapper(w):
@@ -8877,6 +8954,11 @@ class NftClonerPlugin(BasePlugin):
         self.injection_payloads = payloads
         self.inject_active = bool(payloads)
         self.injection_payload = payloads[0] if payloads else None
+        if skipped_gifted:
+            try:
+                _log(f"_rebuild_injection_payloads: skipped {skipped_gifted} gifted-out entries")
+            except Exception:
+                pass
         try:
             self._debug_state_snapshot("rebuild_payloads", f"rebuilt={len(payloads or [])}")
         except:
@@ -16334,8 +16416,14 @@ class NftClonerPlugin(BasePlugin):
                     has_changes = True
 
                 if has_changes:
+                    # putUser(user, fromCache=False) early-returns when oldUser==user
+                    # (in-place patch). force=true bypasses that so the cache actually
+                    # re-broadcasts. Fallback for older builds without 3-arg overload.
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                         _log(f"UI Forced Update for {my_id}")
                     except:
                         pass
@@ -16349,7 +16437,10 @@ class NftClonerPlugin(BasePlugin):
                 if (self._is_nft_username_active() or self._is_nft_number_active()):
                     if not has_changes:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
                         try:
@@ -17452,7 +17543,63 @@ class NftClonerPlugin(BasePlugin):
                 hooked += 1
         except Exception as e:
             _log(f"ProfileGiftsContainer hook scan failed: {e}")
-            return
+            # Do NOT return: even if the hash-guard scan fails, the column
+            # hooks below should still attempt to install.
+
+        # Force 3-column gift grid: bump totalCount before fillItems and force
+        # setSpanCount(3) after, plus a setSpanCount interceptor below to catch
+        # the queued runOnUIThread call inside fillItems.
+        try:
+            Page = jclass("org.telegram.ui.Gifts.ProfileGiftsContainer$Page")
+            for m in Page.getDeclaredMethods():
+                try:
+                    n = m.getName()
+                except Exception:
+                    continue
+                if n != "fillItems":
+                    continue
+                try:
+                    m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
+                    _log("ProfileGiftsContainer$Page.fillItems hook installed (force 3 columns)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"Page.fillItems hook fail: {e}")
+        except Exception as e:
+            _log(f"ProfileGiftsContainer$Page hook skipped: {e}")
+
+        try:
+            URV = jclass("org.telegram.ui.Components.UniversalRecyclerView")
+            int_cls = jclass("java.lang.Integer").TYPE
+            setSpanCount_m = None
+            try:
+                setSpanCount_m = URV.getDeclaredMethod("setSpanCount", int_cls)
+            except Exception:
+                for m in URV.getDeclaredMethods():
+                    try:
+                        if m.getName() == "setSpanCount":
+                            setSpanCount_m = m
+                            break
+                    except Exception:
+                        continue
+            if setSpanCount_m is not None:
+                try:
+                    setSpanCount_m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(setSpanCount_m, UniversalRecyclerSpanForceHook(self, columns=3)))
+                    _log("UniversalRecyclerView.setSpanCount hook installed (forces 3 on tagged listViews)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"UniversalRecyclerView.setSpanCount hook fail: {e}")
+            else:
+                _log("UniversalRecyclerView.setSpanCount method NOT found")
+        except Exception as e:
+            _log(f"UniversalRecyclerView hook skipped: {e}")
 
         if hooked:
             _log(f"ProfileGiftsContainer guard hooks installed: {hooked}")
@@ -21896,6 +22043,205 @@ class GiftLookupDelegate(dynamic_proxy(RequestDelegate)):
         if self.original:
             self.original.run(response, error)
 
+class ProfileGiftsColumnsHook(MethodHook):
+    """Force gift grid to N columns.
+
+    Two-pronged: (1) before fillItems we bump list.totalCount so Telegram's
+    Math.min(N, totalCount) evaluates to N. (2) after fillItems we directly
+    call listView.setSpanCount(N) as a belt-and-suspenders fallback.
+    """
+
+    _tracked_listview_ids = set()
+    _force_in_progress = False
+
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+        self._field_cache = {}
+
+    def _find_field(self, obj, name):
+        try:
+            cls = obj.getClass()
+            cache_key = (cls.getName(), name)
+            f = self._field_cache.get(cache_key)
+            if f is not None:
+                return f
+        except Exception:
+            cls = None
+            cache_key = None
+        c = cls
+        while c is not None:
+            try:
+                f = c.getDeclaredField(name)
+                f.setAccessible(True)
+                if cache_key is not None:
+                    self._field_cache[cache_key] = f
+                return f
+            except Exception:
+                pass
+            try:
+                c = c.getSuperclass()
+            except Exception:
+                c = None
+        return None
+
+    def _bump_total_count(self, page):
+        list_field = self._find_field(page, "list")
+        if list_field is None:
+            return False
+        try:
+            lst = list_field.get(page)
+        except Exception:
+            return False
+        if lst is None:
+            return False
+        tc_field = self._find_field(lst, "totalCount")
+        if tc_field is None:
+            return False
+        try:
+            current = int(tc_field.getInt(lst) or 0)
+        except Exception:
+            current = 0
+        if current >= self.columns:
+            return False
+        try:
+            tc_field.setInt(lst, int(self.columns))
+            return True
+        except Exception:
+            return False
+
+    def _force_span_count(self, page):
+        lv_field = self._find_field(page, "listView")
+        if lv_field is None:
+            return False
+        try:
+            listView = lv_field.get(page)
+        except Exception:
+            return False
+        if listView is None:
+            return False
+        try:
+            cur = int(listView.getSpanCount() or 0)
+        except Exception:
+            cur = 0
+        if cur == self.columns:
+            return False
+        try:
+            listView.setSpanCount(int(self.columns))
+            return True
+        except Exception:
+            return False
+
+    def _track_listview(self, page):
+        try:
+            lv_field = self._find_field(page, "listView")
+            if lv_field is None:
+                return
+            try:
+                listView = lv_field.get(page)
+            except Exception:
+                return
+            if listView is None:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(listView))
+            except Exception:
+                lvid = id(listView)
+            ProfileGiftsColumnsHook._tracked_listview_ids.add(lvid)
+            if len(ProfileGiftsColumnsHook._tracked_listview_ids) > 64:
+                try:
+                    extra = len(ProfileGiftsColumnsHook._tracked_listview_ids) - 64
+                    for k in list(ProfileGiftsColumnsHook._tracked_listview_ids)[:extra]:
+                        ProfileGiftsColumnsHook._tracked_listview_ids.discard(k)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def before_hooked_method(self, param):
+        try:
+            page = getattr(param, "thisObject", None)
+            if page is None:
+                return
+            self._bump_total_count(page)
+            self._track_listview(page)
+        except Exception as e:
+            try:
+                _log(f"ProfileGiftsColumnsHook before error: {e}")
+            except Exception:
+                pass
+
+    def after_hooked_method(self, param):
+        try:
+            page = getattr(param, "thisObject", None)
+            if page is None:
+                return
+            self._track_listview(page)
+            forced = self._force_span_count(page)
+            if forced:
+                _log(f"ProfileGiftsColumnsHook setSpanCount={self.columns} forced")
+        except Exception as e:
+            try:
+                _log(f"ProfileGiftsColumnsHook after error: {e}")
+            except Exception:
+                pass
+
+
+class UniversalRecyclerSpanForceHook(MethodHook):
+    """Force setSpanCount(3) on any UniversalRecyclerView tagged as belonging
+    to a ProfileGiftsContainer$Page. Catches the queued runOnUIThread call
+    inside Page.fillItems that would otherwise reset our 3-column override.
+    """
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+
+    def before_hooked_method(self, param):
+        try:
+            this = getattr(param, "thisObject", None)
+            args = getattr(param, "args", None)
+            if this is None or args is None or len(args) < 1:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(this))
+            except Exception:
+                lvid = id(this)
+            if lvid not in ProfileGiftsColumnsHook._tracked_listview_ids:
+                return
+            try:
+                req = int(args[0] or 0)
+            except Exception:
+                req = 0
+            if req == self.columns:
+                return
+            try:
+                args[0] = int(self.columns)
+            except Exception:
+                try:
+                    param.setResult(None)
+                    if not ProfileGiftsColumnsHook._force_in_progress:
+                        ProfileGiftsColumnsHook._force_in_progress = True
+                        try:
+                            this.setSpanCount(int(self.columns))
+                        finally:
+                            ProfileGiftsColumnsHook._force_in_progress = False
+                except Exception:
+                    pass
+            try:
+                _log(f"UniversalRecyclerSpanForceHook overrode setSpanCount({req}) -> {self.columns}")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                _log(f"UniversalRecyclerSpanForceHook error: {e}")
+            except Exception:
+                pass
+
+
 class ProfileGiftsHashGuardHook(MethodHook):
     """Sanitize broken saved gift wrappers before Telegram recomputes emoji hash/tabs."""
     def __init__(self, plugin):
@@ -22340,7 +22686,10 @@ class LoadFullUserWearHook(MethodHook):
                     pass
             try:
                 if user_obj is not None:
-                    ctrl.putUser(user_obj, False)
+                    try:
+                        ctrl.putUser(user_obj, False, True)
+                    except Exception:
+                        ctrl.putUser(user_obj, False)
             except:
                 pass
             try:
@@ -22687,7 +23036,10 @@ class ProcessUserInfoCacheHook(MethodHook):
                     self.plugin._apply_profile_overrides_to_obj(user_obj)
                     if ctrl is not None:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
             except:
