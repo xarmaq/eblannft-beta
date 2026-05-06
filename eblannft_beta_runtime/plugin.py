@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -166,6 +166,17 @@ def to_java_int(val):
     if val > 0x7FFFFFFF:
         val -= 0x100000000
     return val
+
+def to_java_Integer(val):
+    """Box a Python int as java.lang.Integer (NOT Long) for postNotificationName
+    Object... varargs. Chaquopy by default autoboxes Python int -> java.lang.Long
+    in Object[] context, which crashes recipients that cast args[0] to Integer
+    (e.g. DialogsActivity.didReceivedNotification for updateInterfaces masks).
+    """
+    try:
+        return jclass("java.lang.Integer")(int(to_java_int(val)))
+    except Exception:
+        return int(to_java_int(val))
 
 def get_val(obj, name, default=None):
     if obj is None:
@@ -2575,7 +2586,7 @@ class NftClonerPlugin(BasePlugin):
                         mask_name = 2
                     eid = _eid("updateInterfaces")
                     if eid > 0:
-                        nc.postNotificationName(to_java_int(eid), to_java_int(mask_emoji | mask_name))
+                        nc.postNotificationName(to_java_int(eid), to_java_Integer(mask_emoji | mask_name))
                 except Exception:
                     pass
 
@@ -2602,13 +2613,10 @@ class NftClonerPlugin(BasePlugin):
                 except Exception:
                     pass
 
-                # 4) reloadDialogPhotos — repaints the avatar orbital ring/header
-                try:
-                    eid = _eid("reloadDialogPhotos")
-                    if eid > 0:
-                        nc.postNotificationName(to_java_int(eid))
-                except Exception:
-                    pass
+                # NOTE: reloadDialogPhotos requires a Long dialog_id arg —
+                # posting it bare (or even with our uid) is not worth the risk
+                # of breaking other listeners; updateInterfaces above already
+                # repaints the profile header and orbital ring.
             finally:
                 try:
                     self._patching_nc = False
@@ -7655,7 +7663,7 @@ class NftClonerPlugin(BasePlugin):
                         eid = _event_id("updateInterfaces")
                         if eid > 0:
                             try:
-                                nc.postNotificationName(to_java_int(eid), to_java_int(mask))
+                                nc.postNotificationName(to_java_int(eid), to_java_Integer(mask))
                             except Exception:
                                 pass
                 except Exception:
