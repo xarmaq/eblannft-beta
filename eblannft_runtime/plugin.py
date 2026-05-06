@@ -2363,11 +2363,16 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             pass
         try:
-            library = getattr(self, "stolen_cache", None) or getattr(self, "_stolen_cache", None) or {}
+            library = (
+                getattr(self, "gift_library", None)
+                or getattr(self, "stolen_cache", None)
+                or getattr(self, "_stolen_cache", None)
+                or []
+            )
             if isinstance(library, dict):
-                items = library.values()
+                items = list(library.values())
             elif isinstance(library, list):
-                items = library
+                items = list(library)
             else:
                 items = []
             count = 0
@@ -2428,6 +2433,78 @@ class NftClonerPlugin(BasePlugin):
             return client.request_remote_state(user_id)
         except Exception:
             return None
+
+    def _sync_inject_remote_gifts(self, gifts_list, user_id):
+        """Inject remote-cached gifts (b64) into the saved-gifts ArrayList.
+
+        - Triggers a fresh fetch (will land in cache for the next view).
+        - If we already have a cached record with gifts — deserialize their
+          b64 payloads and add to the list right now, so the user sees them.
+        Returns number of inserted items.
+        """
+        if gifts_list is None or int(user_id or 0) <= 0:
+            return 0
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return 0
+        try:
+            client.request_remote_state(user_id)
+        except Exception:
+            pass
+        record = None
+        try:
+            record = client.get_cached(user_id)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            return 0
+        gifts_raw = record.get("gifts") or []
+        if not isinstance(gifts_raw, list) or not gifts_raw:
+            return 0
+        try:
+            existing_ids = set()
+            for i in range(int(gifts_list.size() or 0)):
+                try:
+                    it = gifts_list.get(i)
+                    g = get_val(it, "gift", None)
+                    gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+                    if gid > 0:
+                        existing_ids.add(gid)
+                except Exception:
+                    continue
+        except Exception:
+            existing_ids = set()
+        inserted = 0
+        for entry in gifts_raw:
+            if not isinstance(entry, dict):
+                continue
+            b64 = entry.get("b64") or entry.get("payload_b64")
+            if not isinstance(b64, str) or len(b64) < 16:
+                continue
+            try:
+                wrapper = deserialize_tl_saved_gift(b64)
+            except Exception as e:
+                _log(f"sync remote deserialize fail: {e}")
+                continue
+            if wrapper is None:
+                continue
+            try:
+                g = get_val(wrapper, "gift", None)
+                gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+                if gid > 0 and gid in existing_ids:
+                    continue
+                if gid > 0:
+                    existing_ids.add(gid)
+            except Exception:
+                pass
+            try:
+                gifts_list.add(wrapper)
+                inserted += 1
+            except Exception:
+                pass
+            if inserted >= 32:
+                break
+        return inserted
 
     def _sync_bootstrap(self):
         if not hasattr(self, "_eblannft_sync_lock"):
@@ -21020,6 +21097,17 @@ class NftClonerPlugin(BasePlugin):
                     target_user_id = 0
                 manage_self = bool(self._should_manage_self_saved_gifts(req_user_id=req_user_id, owner_user_id=owner_user_id, target_user_id=target_user_id))
                 if not manage_self:
+                    try:
+                        remote_uid = int(target_user_id or owner_user_id or req_user_id or 0)
+                    except:
+                        remote_uid = 0
+                    if remote_uid > 0 and remote_uid != my_id:
+                        try:
+                            inj = self._sync_inject_remote_gifts(gifts_list, remote_uid)
+                            if inj > 0:
+                                _log(f"  Remote sync inject for uid={remote_uid}: +{inj}")
+                        except Exception as _re:
+                            _log(f"  Remote sync inject error: {_re}")
                     _log(f"  Skip saved gifts patch: req_uid={req_user_id}, owner_uid={owner_user_id}, target_uid={target_user_id}, my_id={my_id}")
                     return
 
