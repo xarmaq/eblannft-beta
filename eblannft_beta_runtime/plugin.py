@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2375,12 +2375,25 @@ class NftClonerPlugin(BasePlugin):
                 items = list(library)
             else:
                 items = []
+            try:
+                my_id_for_filter = int(self._sync_my_user_id() or 0)
+            except Exception:
+                my_id_for_filter = 0
             count = 0
             for entry in items:
                 if not isinstance(entry, dict):
                     continue
                 b64 = entry.get("b64") or entry.get("payload_b64")
                 if not isinstance(b64, str) or len(b64) < 16:
+                    continue
+                # Skip entries that the user "gifted" to someone else: their
+                # owner_user_id is set to a different uid, so the entry must
+                # not appear in the giver's own profile snapshot.
+                try:
+                    entry_owner = int(entry.get("owner_user_id", 0) or 0)
+                except Exception:
+                    entry_owner = 0
+                if my_id_for_filter > 0 and entry_owner > 0 and entry_owner != my_id_for_filter:
                     continue
                 gift = {"b64": b64}
                 for key in ("title", "slug", "key", "gift_kind"):
