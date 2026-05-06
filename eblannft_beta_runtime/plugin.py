@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -17954,20 +17954,45 @@ class NftClonerPlugin(BasePlugin):
             return
 
         hooked = 0
+        column_method_names = {"getColumnsCount", "getColumnCount", "getSpanCount", "getColumns"}
         try:
             for m in PGC.getDeclaredMethods():
                 try:
                     n = m.getName()
                 except:
                     continue
-                if n != "getLastEmojisHash":
+                if n == "getLastEmojisHash":
+                    try:
+                        m.setAccessible(True)
+                    except:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, ProfileGiftsHashGuardHook(self)))
+                    hooked += 1
                     continue
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                self.hooks_refs.append(self.hook_method(m, ProfileGiftsHashGuardHook(self)))
-                hooked += 1
+                if n in column_method_names:
+                    try:
+                        ret_name = str(m.getReturnType().getName() or "")
+                    except Exception:
+                        ret_name = ""
+                    if ret_name not in ("int", "long", "short"):
+                        continue
+                    try:
+                        params = list(m.getParameterTypes() or [])
+                    except Exception:
+                        params = []
+                    if params:
+                        # methods like getColumnsCount(int orientation) — leave alone
+                        continue
+                    try:
+                        m.setAccessible(True)
+                    except:
+                        pass
+                    try:
+                        self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
+                        _log(f"ProfileGiftsContainer columns hook installed on {n}")
+                        hooked += 1
+                    except Exception as e:
+                        _log(f"ProfileGiftsContainer columns hook fail on {n}: {e}")
         except Exception as e:
             _log(f"ProfileGiftsContainer hook scan failed: {e}")
             return
@@ -22458,6 +22483,24 @@ class GiftLookupDelegate(dynamic_proxy(RequestDelegate)):
 
         if self.original:
             self.original.run(response, error)
+
+class ProfileGiftsColumnsHook(MethodHook):
+    """Force gift grid to 3 columns regardless of profile type / count."""
+
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+
+    def before_hooked_method(self, param):
+        try:
+            param.setResult(int(self.columns))
+        except Exception as e:
+            try:
+                _log(f"ProfileGiftsColumnsHook setResult error: {e}")
+            except Exception:
+                pass
+
 
 class ProfileGiftsHashGuardHook(MethodHook):
     """Sanitize broken saved gift wrappers before Telegram recomputes emoji hash/tabs."""
