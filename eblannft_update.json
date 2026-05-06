@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
-  "notes": "Beta 1.0.9 — принудительная 3-колоночная сетка подарков в профиле. Хук на ProfileGiftsContainer.getColumnsCount/getColumnCount/getSpanCount/getColumns (без аргументов, int-возврат) форсит результат = 3. Срабатывает для всех профилей независимо от типа аккаунта и количества подарков.",
+  "version": "1.0.10",
+  "notes": "Beta 1.0.10 — реальный фикс 3-колонок. Telegram внутри ProfileGiftsContainer$Page.fillItems считает spanCount = min(3, list.totalCount), поэтому профили с 1-2 реальными подарками рендерятся в 1-2 колонки. Хук перед вызовом fillItems поднимает list.totalCount до 3, оригинальный метод считает 3 колонки и выставляет setSpanCount(3); сразу после метод-хука totalCount возвращается на исходное значение, чтобы счётчик подарков не врал.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

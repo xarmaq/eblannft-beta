@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.9"
+__version__ = "1.0.10"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -17954,48 +17954,44 @@ class NftClonerPlugin(BasePlugin):
             return
 
         hooked = 0
-        column_method_names = {"getColumnsCount", "getColumnCount", "getSpanCount", "getColumns"}
         try:
             for m in PGC.getDeclaredMethods():
                 try:
                     n = m.getName()
                 except:
                     continue
-                if n == "getLastEmojisHash":
-                    try:
-                        m.setAccessible(True)
-                    except:
-                        pass
-                    self.hooks_refs.append(self.hook_method(m, ProfileGiftsHashGuardHook(self)))
-                    hooked += 1
+                if n != "getLastEmojisHash":
                     continue
-                if n in column_method_names:
-                    try:
-                        ret_name = str(m.getReturnType().getName() or "")
-                    except Exception:
-                        ret_name = ""
-                    if ret_name not in ("int", "long", "short"):
-                        continue
-                    try:
-                        params = list(m.getParameterTypes() or [])
-                    except Exception:
-                        params = []
-                    if params:
-                        # methods like getColumnsCount(int orientation) — leave alone
-                        continue
-                    try:
-                        m.setAccessible(True)
-                    except:
-                        pass
-                    try:
-                        self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
-                        _log(f"ProfileGiftsContainer columns hook installed on {n}")
-                        hooked += 1
-                    except Exception as e:
-                        _log(f"ProfileGiftsContainer columns hook fail on {n}: {e}")
+                try:
+                    m.setAccessible(True)
+                except:
+                    pass
+                self.hooks_refs.append(self.hook_method(m, ProfileGiftsHashGuardHook(self)))
+                hooked += 1
         except Exception as e:
             _log(f"ProfileGiftsContainer hook scan failed: {e}")
-            return
+
+        try:
+            Page = jclass("org.telegram.ui.Gifts.ProfileGiftsContainer$Page")
+            for m in Page.getDeclaredMethods():
+                try:
+                    n = m.getName()
+                except Exception:
+                    continue
+                if n != "fillItems":
+                    continue
+                try:
+                    m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
+                    _log("ProfileGiftsContainer$Page.fillItems hook installed (force 3 columns)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"Page.fillItems hook fail: {e}")
+        except Exception as e:
+            _log(f"ProfileGiftsContainer$Page hook skipped: {e}")
 
         if hooked:
             _log(f"ProfileGiftsContainer guard hooks installed: {hooked}")
@@ -22485,21 +22481,78 @@ class GiftLookupDelegate(dynamic_proxy(RequestDelegate)):
             self.original.run(response, error)
 
 class ProfileGiftsColumnsHook(MethodHook):
-    """Force gift grid to 3 columns regardless of profile type / count."""
+    """Force gift grid to N columns by inflating list.totalCount during fillItems.
+
+    Telegram's ProfileGiftsContainer$Page.fillItems computes spanCount as
+    Math.min(N, list.totalCount), so a profile with totalCount<N gets a
+    sparse 1- or 2-column grid. We temporarily bump totalCount to N before
+    the original method runs and restore it after, so:
+      - the spanCount math evaluates to N → grid renders dense,
+      - any external readers of totalCount (counter labels etc.) see the real value.
+    """
 
     def __init__(self, plugin, columns=3):
         super().__init__()
         self.plugin = plugin
         self.columns = int(columns or 3)
 
+    def _get_list(self, page):
+        try:
+            f = page.getClass().getDeclaredField("list")
+            f.setAccessible(True)
+            return f.get(page)
+        except Exception:
+            return None
+
     def before_hooked_method(self, param):
         try:
-            param.setResult(int(self.columns))
+            page = getattr(param, "thisObject", None)
+            if page is None:
+                return
+            lst = self._get_list(page)
+            if lst is None:
+                return
+            cls = lst.getClass()
+            try:
+                fld = cls.getField("totalCount")
+            except Exception:
+                try:
+                    fld = cls.getDeclaredField("totalCount")
+                    fld.setAccessible(True)
+                except Exception:
+                    fld = None
+            if fld is None:
+                return
+            try:
+                current = int(fld.getInt(lst) or 0)
+            except Exception:
+                current = 0
+            if current >= self.columns:
+                param.eblannft_restore = None
+                return
+            try:
+                fld.setInt(lst, int(self.columns))
+                param.eblannft_restore = (lst, fld, current)
+            except Exception:
+                param.eblannft_restore = None
         except Exception as e:
             try:
-                _log(f"ProfileGiftsColumnsHook setResult error: {e}")
+                _log(f"ProfileGiftsColumnsHook before error: {e}")
             except Exception:
                 pass
+
+    def after_hooked_method(self, param):
+        try:
+            restore = getattr(param, "eblannft_restore", None)
+            if restore is None:
+                return
+            lst, fld, original = restore
+            try:
+                fld.setInt(lst, int(original))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
 
 class ProfileGiftsHashGuardHook(MethodHook):
