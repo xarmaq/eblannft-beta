@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.13"
+__version__ = "1.0.14"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2346,19 +2346,24 @@ class NftClonerPlugin(BasePlugin):
             "wear_active": False,
             "wear_collectible_id": 0,
             "wear_status_data": {},
+            # Tokens were previously read from non-existent attributes
+            # `_nft_username_tokens` / `_nft_number_tokens`, so the snapshot
+            # always uploaded an empty list and remote clients had nothing to
+            # patch with. Real storage lives in self.nft_usernames / nft_numbers
+            # behind the _get_*_tokens() accessors.
             "username_state": {
                 "enabled": bool(self._is_nft_username_active()) if hasattr(self, "_is_nft_username_active") else False,
-                "tokens": list(getattr(self, "_nft_username_tokens", []) or []),
-                "price_ton": str(getattr(self, "_nft_username_price_ton", "0") or "0"),
-                "price_usd": str(getattr(self, "_nft_username_price_usd", "0") or "0"),
-                "purchase_date": str(getattr(self, "_nft_username_purchase_date", "") or ""),
+                "tokens": list(self._get_nft_username_tokens() or []) if hasattr(self, "_get_nft_username_tokens") else [],
+                "price_ton": str(getattr(self, "nft_username_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_username_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_username_purchase_date", "") or ""),
             },
             "number_state": {
                 "enabled": bool(self._is_nft_number_active()) if hasattr(self, "_is_nft_number_active") else False,
-                "tokens": list(getattr(self, "_nft_number_tokens", []) or []),
-                "price_ton": str(getattr(self, "_nft_number_price_ton", "0") or "0"),
-                "price_usd": str(getattr(self, "_nft_number_price_usd", "0") or "0"),
-                "purchase_date": str(getattr(self, "_nft_number_purchase_date", "") or ""),
+                "tokens": list(self._get_nft_number_tokens() or []) if hasattr(self, "_get_nft_number_tokens") else [],
+                "price_ton": str(getattr(self, "nft_number_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_number_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_number_purchase_date", "") or ""),
             },
         }
         try:
@@ -2397,14 +2402,24 @@ class NftClonerPlugin(BasePlugin):
                 b64 = entry.get("b64") or entry.get("payload_b64")
                 if not isinstance(b64, str) or len(b64) < 16:
                     continue
-                # Skip entries that the user "gifted" to someone else: their
-                # owner_user_id is set to a different uid, so the entry must
-                # not appear in the giver's own profile snapshot.
+                # Skip entries that the user "gifted" to someone else.
+                # The gift-recipient is stored on identity_config.to_user_id
+                # (entry.owner_user_id stays as my_id since that field tracks
+                # the original creator/owner inside the library, not the gift
+                # target). Sending a gifted-out NFT in my snapshot would make
+                # other clients show it as still mine.
                 try:
                     entry_owner = int(entry.get("owner_user_id", 0) or 0)
                 except Exception:
                     entry_owner = 0
                 if my_id_for_filter > 0 and entry_owner > 0 and entry_owner != my_id_for_filter:
+                    continue
+                try:
+                    ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
+                    to_uid = int(ic.get("to_user_id", 0) or 0)
+                except Exception:
+                    to_uid = 0
+                if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
                     continue
                 gift = {"b64": b64}
                 for key in ("title", "slug", "key", "gift_kind"):
@@ -2469,17 +2484,37 @@ class NftClonerPlugin(BasePlugin):
         record = self._sync_get_remote_record(tuid)
         if not isinstance(record, dict):
             return False
-        if not record.get("wear_active"):
-            return False
+        # Build wear status (optional)
+        st = None
         try:
             cid = int(record.get("wear_collectible_id") or 0)
         except Exception:
             cid = 0
-        if cid <= 0:
-            return False
-        wsd = record.get("wear_status_data") or {}
-        st = self._build_collectible_status_from_wsd(cid, wsd)
-        if st is None:
+        if record.get("wear_active") and cid > 0:
+            wsd = record.get("wear_status_data") or {}
+            st = self._build_collectible_status_from_wsd(cid, wsd)
+
+        # Collect remote NFT username/number tokens
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            pass
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            pass
+
+        if st is None and not remote_unames and not remote_numbers:
             return False
         try:
             account = get_user_config().selectedAccount
@@ -2488,10 +2523,26 @@ class NftClonerPlugin(BasePlugin):
             user_obj = ctrl.getUser(tuid)
             if user_obj is None:
                 return False
-            try:
-                if not self._set_field(user_obj, "emoji_status", st):
-                    return False
-            except Exception:
+            any_set = False
+            if st is not None:
+                try:
+                    if self._set_field(user_obj, "emoji_status", st):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_unames:
+                try:
+                    if self._apply_remote_nft_username_to_user(user_obj, remote_unames):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_numbers:
+                try:
+                    if self._apply_remote_nft_number_to_user(user_obj, remote_numbers[0]):
+                        any_set = True
+                except Exception:
+                    pass
+            if not any_set:
                 return False
             # MessagesController.putUser(user, fromCache) early-returns when
             # oldUser == user (in-place patch), so the cache is never refreshed
@@ -2692,6 +2743,89 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             return None
 
+    def _apply_remote_nft_username_to_user(self, user_obj, tokens):
+        """Patch a foreign User object with NFT usernames from a sync record.
+        Cannot reuse _apply_nft_username_to_user (it gates on self-only).
+        """
+        if user_obj is None or not tokens:
+            return False
+        changed = False
+        try:
+            usernames = get_val(user_obj, "usernames", None)
+            if usernames is None:
+                try:
+                    tmp = ArrayList()
+                    if self._set_field(user_obj, "usernames", tmp):
+                        usernames = tmp
+                        changed = True
+                except Exception:
+                    usernames = None
+            if usernames is not None:
+                for t in tokens:
+                    try:
+                        if self._ensure_username_in_list(usernames, t):
+                            changed = True
+                    except Exception:
+                        pass
+            for list_name in ["active_usernames", "editable_usernames"]:
+                try:
+                    lst = get_val(user_obj, list_name, None)
+                except Exception:
+                    lst = None
+                if lst is None:
+                    continue
+                for t in tokens:
+                    try:
+                        if self._ensure_string_in_list(lst, t):
+                            changed = True
+                    except Exception:
+                        pass
+            primary = tokens[0] if tokens else ""
+            if primary:
+                try:
+                    if self._set_field(user_obj, "username", primary):
+                        changed = True
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"_apply_remote_nft_username_to_user error: {e}")
+            except Exception:
+                pass
+        return changed
+
+    def _apply_remote_nft_number_to_user(self, user_obj, token):
+        """Patch a foreign User object's phone with a sync-supplied NFT number.
+        Mirrors _apply_nft_number_to_user but without the self-only gate.
+        """
+        if user_obj is None or not token:
+            return False
+        changed = False
+        try:
+            if self._set_field(user_obj, "phone", token):
+                changed = True
+        except Exception:
+            pass
+        try:
+            for f in user_obj.getClass().getFields():
+                try:
+                    field_name = str(f.getName() or "")
+                    low = field_name.lower()
+                    typ = f.getType().getName()
+                except Exception:
+                    continue
+                if typ != "java.lang.String":
+                    continue
+                if ("phone" in low) or (low in ["number", "phone_number", "phoneNumber"]):
+                    try:
+                        if self._set_field(user_obj, field_name, token):
+                            changed = True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return changed
+
     def _sync_get_remote_record(self, user_id):
         try:
             uid = int(user_id or 0)
@@ -2740,7 +2874,32 @@ class NftClonerPlugin(BasePlugin):
         wear_status = None
         if wear_active and cid > 0:
             wear_status = self._build_collectible_status_from_wsd(cid, wsd)
-        if wear_status is None:
+
+        # Remote NFT username/number — patch directly on the User object so
+        # ProfileActivity reads the spoofed identity from MessagesController
+        # cache. The local _apply_nft_username_to_user / *_to_user gate on
+        # _should_apply_self_profile_override (i.e. only-self), so we cannot
+        # reuse them — handle remote tokens here.
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            remote_unames = []
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            remote_numbers = []
+
+        if wear_status is None and not remote_unames and not remote_numbers:
             return 0
 
         patched = [0]
@@ -2761,11 +2920,24 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 obj_uid = 0
             if obj_uid == tuid:
-                try:
-                    if self._set_field(obj, "emoji_status", wear_status):
-                        patched[0] += 1
-                except Exception:
-                    pass
+                if wear_status is not None:
+                    try:
+                        if self._set_field(obj, "emoji_status", wear_status):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_unames:
+                    try:
+                        if self._apply_remote_nft_username_to_user(obj, remote_unames):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_numbers:
+                    try:
+                        if self._apply_remote_nft_number_to_user(obj, remote_numbers[0]):
+                            patched[0] += 1
+                    except Exception:
+                        pass
             try:
                 if self._is_java_list_like(obj):
                     try:
@@ -6640,7 +6812,10 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         pass
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                     except:
                         pass
                 try:
@@ -9568,9 +9743,27 @@ class NftClonerPlugin(BasePlugin):
             self._recompute_gift_objects_limit()
         except:
             pass
+        try:
+            my_id_for_filter = int(self._get_my_user_id() or 0)
+        except Exception:
+            my_id_for_filter = 0
         payloads = []
+        skipped_gifted = 0
         for e in (self.gift_library or []):
             if not e.get("inject", False):
+                continue
+            # Skip entries marked as "gifted to someone else" — i.e. their
+            # identity_config.to_user_id is set to a uid that is not us.
+            # Without this gate the gift still appears in our own profile
+            # snapshot (and local injection) even though the user explicitly
+            # routed it to a different recipient.
+            try:
+                ic = e.get("identity_config") if isinstance(e.get("identity_config"), dict) else {}
+                to_uid = int(ic.get("to_user_id", 0) or 0)
+            except Exception:
+                to_uid = 0
+            if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
+                skipped_gifted += 1
                 continue
             w = self._library_get_wrapper(e.get("key"))
             if w and self._repair_saved_gift_wrapper(w):
@@ -9578,6 +9771,11 @@ class NftClonerPlugin(BasePlugin):
         self.injection_payloads = payloads
         self.inject_active = bool(payloads)
         self.injection_payload = payloads[0] if payloads else None
+        if skipped_gifted:
+            try:
+                _log(f"_rebuild_injection_payloads: skipped {skipped_gifted} gifted-out entries")
+            except Exception:
+                pass
         try:
             self._debug_state_snapshot("rebuild_payloads", f"rebuilt={len(payloads or [])}")
         except:
@@ -23370,7 +23568,10 @@ class LoadFullUserWearHook(MethodHook):
                     pass
             try:
                 if user_obj is not None:
-                    ctrl.putUser(user_obj, False)
+                    try:
+                        ctrl.putUser(user_obj, False, True)
+                    except Exception:
+                        ctrl.putUser(user_obj, False)
             except:
                 pass
             try:
@@ -23717,7 +23918,10 @@ class ProcessUserInfoCacheHook(MethodHook):
                     self.plugin._apply_profile_overrides_to_obj(user_obj)
                     if ctrl is not None:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
             except:
