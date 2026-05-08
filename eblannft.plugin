@@ -1819,11 +1819,6 @@ def _is_remote_upgrade(remote_version):
     return _version_tuple(remote_version) > _version_tuple(__version__)
 
 
-# Back-compat alias — legacy callers may still reference this name.
-def _is_remote_newer(remote_version):
-    return _is_remote_different(remote_version)
-
-
 def _wrapper_file_path():
     try:
         return os.path.abspath(__file__)
