@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.9"
+__version__ = "1.0.10"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2298,6 +2298,29 @@ class NftClonerPlugin(BasePlugin):
                 cache[user_key] = record
         except Exception:
             pass
+        # As soon as a fresh snapshot lands, patch the cached MessagesController
+        # User/UserFull for that uid and post userInfoDidLoad — this is what
+        # actually makes the rating badge / gifts count / wear ring repaint
+        # without waiting for the next getFullUser fetch. Without this nudge
+        # the foreign profile keeps showing whatever Telegram had cached when
+        # the screen first opened (e.g. default rating level = 1).
+        try:
+            uid = 0
+            try:
+                key = str(user_key or "")
+                if key.startswith("tg:"):
+                    uid = int(key[3:] or 0)
+                else:
+                    uid = int(key or 0)
+            except Exception:
+                uid = 0
+            if uid > 0:
+                try:
+                    self._sync_schedule_remote_user_patch(uid, delays=[60, 240])
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def request_remote_profile(self, user_id):
         try:
@@ -3033,6 +3056,31 @@ class NftClonerPlugin(BasePlugin):
                     eid = _eid("emojiLoaded")
                     if eid > 0 and gnc is not None:
                         gnc.postNotificationName(to_java_int(eid))
+                except Exception:
+                    pass
+
+                # userInfoDidLoad(uid, userFull) — repaints UserFull-driven
+                # widgets in ProfileActivity (rating badge, stories ring, gifts
+                # tab, avatar story-indicator). Without this the StarRatingView
+                # keeps showing the level Telegram drew before our cache patch
+                # landed — symptom: own profile shows level=6, foreign profile
+                # shows the default level=1. updateInterfaces alone does NOT
+                # repaint ratingView; ProfileActivity gates the rating refresh
+                # specifically on userInfoDidLoad (~line 9091).
+                try:
+                    eid = _eid("userInfoDidLoad")
+                    if eid > 0:
+                        try:
+                            ctrl_mc = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            user_full = ctrl_mc.getUserFull(uid)
+                        except Exception:
+                            user_full = None
+                        if user_full is not None:
+                            try:
+                                JLong = jclass("java.lang.Long")
+                                nc.postNotificationName(to_java_int(eid), JLong(uid), user_full)
+                            except Exception:
+                                pass
                 except Exception:
                     pass
             finally:
