@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -2878,13 +2878,16 @@ def _maybe_check_for_update(force=False, reason="load"):
     try:
         last_ts = _read_last_check_ts()
         now = time.time()
-        threshold = (
-            _UPDATE_CHECK_RESUME_THROTTLE_SEC
-            if str(reason or "") == "resume"
-            else _get_update_interval_sec()
-        )
-        if not force and last_ts and (now - last_ts) < threshold:
-            return
+        # Bypass the throttle for plugin-load checks — `on_plugin_load` fires
+        # once per app session (and once right after install), so doing one
+        # HTTP request each time is cheap and means a freshly installed/upgraded
+        # plugin instantly shows the update popup if a newer build was pushed.
+        # Resume polls keep their short 2-min throttle.
+        if str(reason or "") == "resume":
+            threshold = _UPDATE_CHECK_RESUME_THROTTLE_SEC
+            if not force and last_ts and (now - last_ts) < threshold:
+                return
+        # else: load — always check, no early return.
     except Exception:
         pass
 
