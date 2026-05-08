@@ -1,6 +1,6 @@
 {
-  "version": "1.0.13",
-  "notes": "v1.0.13 — стабилизация NFT username и NFT номера в своём профиле. (1) Добавлен GetCurrentUserOverrideHook на UserConfig.getCurrentUser — теперь оверрайды переприменяются на КАЖДОМ чтении (drawer, account-list, profile-rows). Это самый сильный анкер: какой бы код ни мутировал UserConfig.currentUser между нашими патчами, следующий getCurrentUser вернёт уже подменённый. (2) Добавлен файл KNOWLEDGE.md в репо — гайд для AI-агентов по архитектуре, релизам, gotcha'м и тестированию.",
+  "version": "1.0.14",
+  "notes": "v1.0.14 — фикс «Permission denied» при первой установке плагина. (1) Bootstrap теперь сначала пробует app-private папки (getExternalFilesDir / getFilesDir) — они всегда доступны для записи без всяких разрешений Android, и публичный Downloads/eblannft опускается в самый конец списка. На свежих устройствах с Android 11+ установка теперь проходит без любых системных диалогов о памяти. (2) _bootstrap_runtime теперь не падает на первом fail'е: если запись в очередную папку упала с EACCES/Errno 13, бутстрап чистит за собой и пробует следующую. (3) Если ничего не получилось — показываем понятный AlertDialog «Нужно разрешение» с кнопкой «Открыть настройки» (ведёт прямо в App Info Telegram'а), плюс инициируется системный prompt WRITE_EXTERNAL_STORAGE на Android <11 если есть Activity. Никаких больше непонятных PyException в трейсе.",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",
