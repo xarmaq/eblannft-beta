@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2252,7 +2252,11 @@ class NftClonerPlugin(BasePlugin):
                 for key in ("inject", "limited_flag", "pinned_override", "hidden_override"):
                     if key in entry:
                         gift[key] = bool(entry.get(key))
-                for key in ("wear_status_data", "build_config", "identity_config"):
+                # Include all per-gift configs that affect what the receiver
+                # sees in the StarGiftSheet — owner row, "Ценность" row,
+                # TON-blockchain link, custom star prices.
+                for key in ("wear_status_data", "build_config", "identity_config",
+                            "value_config", "gift_stars_config", "ton_display_config"):
                     val = entry.get(key)
                     if isinstance(val, dict):
                         gift[key] = {
@@ -2804,6 +2808,12 @@ class NftClonerPlugin(BasePlugin):
                     continue
         except Exception:
             existing_ids = set()
+        # Make sure the meta cache exists (per-process, lives until plugin reload).
+        if not hasattr(self, "_sync_remote_gift_meta_cache") or not isinstance(
+            getattr(self, "_sync_remote_gift_meta_cache", None), dict
+        ):
+            self._sync_remote_gift_meta_cache = {}
+
         inserted = 0
         for entry in gifts_raw:
             if not isinstance(entry, dict):
@@ -2818,6 +2828,7 @@ class NftClonerPlugin(BasePlugin):
                 continue
             if wrapper is None:
                 continue
+            g = None
             try:
                 g = get_val(wrapper, "gift", None)
                 gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
@@ -2827,6 +2838,74 @@ class NftClonerPlugin(BasePlugin):
                     existing_ids.add(gid)
             except Exception:
                 pass
+
+            # Apply identity (owner / from / to) so Telegram's StarGiftSheet
+            # renders the "Владелец" row natively. The local _apply_*_to_objects
+            # helpers fall back to my_id when a uid field is 0 — for remote
+            # gifts that means the receiver, which is wrong. Patch the cfg
+            # so the fallback is the remote profile owner instead.
+            try:
+                ent_identity = entry.get("identity_config")
+                if isinstance(ent_identity, dict):
+                    cfg = dict(ent_identity)
+                else:
+                    cfg = {}
+                if int(cfg.get("owner_user_id", 0) or 0) == 0:
+                    cfg["owner_user_id"] = int(user_id)
+                if int(cfg.get("from_user_id", 0) or 0) == 0:
+                    cfg["from_user_id"] = int(user_id)
+                if int(cfg.get("to_user_id", 0) or 0) == 0:
+                    cfg["to_user_id"] = int(user_id)
+                try:
+                    self._apply_identity_config_to_objects(gift=g, wrapper=wrapper, identity_config=cfg)
+                except Exception:
+                    # Fallback: at least set owner_id to the remote profile uid
+                    try:
+                        self._set_user_ref_fields(g, ["owner_id", "owner", "ownerId"], int(user_id))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Custom star/upgrade values (transfer/convert/resale).
+            try:
+                stars_cfg = entry.get("gift_stars_config")
+                if isinstance(stars_cfg, dict):
+                    self._apply_gift_stars_config_to_objects(gift=g, wrapper=wrapper, stars_config=stars_cfg)
+            except Exception:
+                pass
+
+            # Remember meta so the StarGiftSheet "Ценность" row injector can
+            # surface it for remote gifts (which have no local library entry).
+            try:
+                meta = {
+                    "_remote_origin_uid": int(user_id),
+                    "identity_config": entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {},
+                    "value_config": entry.get("value_config") if isinstance(entry.get("value_config"), dict) else {},
+                    "gift_stars_config": entry.get("gift_stars_config") if isinstance(entry.get("gift_stars_config"), dict) else {},
+                    "ton_display_config": entry.get("ton_display_config") if isinstance(entry.get("ton_display_config"), dict) else {},
+                    "title": str(entry.get("title", "") or ""),
+                    "slug": str(entry.get("slug", "") or ""),
+                    "unique_id": int(entry.get("unique_id", 0) or 0),
+                }
+                cache = self._sync_remote_gift_meta_cache
+                try:
+                    uniq = int(get_val(g, "id", 0) or 0)
+                except Exception:
+                    uniq = 0
+                if uniq > 0:
+                    cache[f"id:{uniq}"] = meta
+                if meta["unique_id"] > 0:
+                    cache[f"unique:{meta['unique_id']}"] = meta
+                if meta["slug"]:
+                    cache[f"slug:{meta['slug']}"] = meta
+                # Trim oversize cache (keep last ~256 entries)
+                if len(cache) > 320:
+                    for k in list(cache.keys())[: len(cache) - 256]:
+                        cache.pop(k, None)
+            except Exception:
+                pass
+
             try:
                 gifts_list.add(wrapper)
                 inserted += 1
@@ -2835,6 +2914,36 @@ class NftClonerPlugin(BasePlugin):
             if inserted >= 32:
                 break
         return inserted
+
+    def _get_remote_gift_meta_for_gift(self, gift):
+        """Look up cached remote-sync meta for a TL gift object.
+        Tries gift.id → unique_id → slug.
+        """
+        if gift is None:
+            return None
+        cache = getattr(self, "_sync_remote_gift_meta_cache", None)
+        if not isinstance(cache, dict) or not cache:
+            return None
+        try:
+            gid = int(get_val(gift, "id", 0) or 0)
+        except Exception:
+            gid = 0
+        if gid > 0:
+            m = cache.get(f"id:{gid}")
+            if m:
+                return m
+            m = cache.get(f"unique:{gid}")
+            if m:
+                return m
+        try:
+            slug = str(get_val(gift, "slug", "") or "")
+        except Exception:
+            slug = ""
+        if slug:
+            m = cache.get(f"slug:{slug}")
+            if m:
+                return m
+        return None
 
     def _sync_bootstrap(self):
         if not hasattr(self, "_eblannft_sync_lock"):
@@ -5330,9 +5439,14 @@ class NftClonerPlugin(BasePlugin):
             key = self._resolve_library_key_for_gift(gift)
         except:
             key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback so
+        # foreign profile gifts also get TON owner_address / gift_address.
+        e = self._library_find_entry(key) if key else None
+        if not e:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -19111,9 +19225,19 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry — preferred path with editable menu.
+        e = self._library_find_entry(key) if key else None
+        # Remote-sync fallback — gift came from another user's snapshot via
+        # the VPS sync. We have its value_config / gift_stars_config in the
+        # meta cache. Render the row read-only (no "подробнее" callback).
+        is_remote = False
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
+            if e:
+                is_remote = True
         if not e:
             return False
         try:
@@ -19136,7 +19260,14 @@ class NftClonerPlugin(BasePlugin):
                 BulletinHelper.show_error(f"Не удалось открыть меню ценности: {ex}")
 
         try:
-            table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
+            if is_remote:
+                # Remote sync: render read-only, no "подробнее" link (the
+                # editor menu manipulates local library state we don't have).
+                if not self._is_value_config_active(cfg) and not self._is_gift_stars_config_active(stars_cfg):
+                    return False
+                table.addRow(self._ui_text("Ценность"), self._ui_text(value_text))
+            else:
+                table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
             return True
         except Exception as e:
             _log(f"Local gift value row inject error: {e}")
@@ -19155,9 +19286,13 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback.
+        e = self._library_find_entry(key) if key else None
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -19189,9 +19324,13 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback.
+        e = self._library_find_entry(key) if key else None
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
