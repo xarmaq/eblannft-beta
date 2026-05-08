@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.34"
+__version__ = "1.0.35"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2745,6 +2745,10 @@ class NftClonerPlugin(BasePlugin):
                 # shows the default level=1. updateInterfaces alone does NOT
                 # repaint ratingView; ProfileActivity gates the rating refresh
                 # specifically on userInfoDidLoad (~line 9091).
+                # Chaquopy autoboxes Python int -> java.lang.Long in Object[]
+                # varargs, which matches ProfileActivity's `(Long) args[0]`
+                # cast — pass uid bare, no manual JLong wrap (the wrap was
+                # silently failing on some builds).
                 try:
                     eid = _eid("userInfoDidLoad")
                     if eid > 0:
@@ -2755,10 +2759,10 @@ class NftClonerPlugin(BasePlugin):
                             user_full = None
                         if user_full is not None:
                             try:
-                                JLong = jclass("java.lang.Long")
-                                nc.postNotificationName(to_java_int(eid), JLong(uid), user_full)
-                            except Exception:
-                                pass
+                                nc.postNotificationName(to_java_int(eid), uid, user_full)
+                                _log(f"posted userInfoDidLoad for uid={uid}")
+                            except Exception as _ue:
+                                _log(f"userInfoDidLoad post error: {_ue}")
                 except Exception:
                     pass
 
@@ -3321,32 +3325,33 @@ class NftClonerPlugin(BasePlugin):
         client = getattr(self, "_eblannft_sync_client", None)
         if client is None:
             return 0
-        # Mirror the freshness ladder used by _sync_inject_remote_gifts so
-        # we make the same hide/show decision the inject path does. Without
-        # this, on the very first profile open the cache might still be
-        # empty and the hide-official toggle would silently no-op until the
-        # next refresh.
+        # The toggle changes more often than the freshness window, so prefer
+        # an authoritative blocking fetch. Falls back to whatever is cached
+        # if the server is slow / offline so behaviour stays deterministic.
         record = None
         try:
-            record = client.get_cached_fresh(uid, max_age_sec=3)
+            record = client.fetch_remote_state_blocking(uid, max_timeout=1.5)
         except Exception:
             record = None
-        if not isinstance(record, dict):
-            try:
-                record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
-            except Exception:
-                record = None
         if not isinstance(record, dict):
             try:
                 record = client.get_cached(uid)
             except Exception:
                 record = None
         if not isinstance(record, dict):
+            try:
+                _log(f"hide-official: no record for uid={uid}, skipping")
+            except Exception:
+                pass
             return 0
         try:
             hide_flag = bool(record.get("hide_official_gifts", False))
         except Exception:
             hide_flag = False
+        try:
+            _log(f"hide-official: uid={uid} flag={hide_flag} record_age={int(time.time() - (record.get('updated_at') or 0))}s")
+        except Exception:
+            pass
         if not hide_flag:
             return 0
         removed = 0
@@ -19011,6 +19016,18 @@ class NftClonerPlugin(BasePlugin):
                     m.setAccessible(True)
                     self.hooks_refs.append(self.hook_method(m, GetAnyWearHook(self)))
                     hooked += 1
+                    # For getUserFull only, also install a foreign-profile
+                    # sync patcher: applies remote stars_rating + stargifts_count
+                    # to the returned UserFull on every read. This is the
+                    # bulletproof path — the response-wrapper patch (in
+                    # _sync_apply_remote_user_overrides) only runs on fresh
+                    # network responses, missing cache hits.
+                    if name == "getUserFull":
+                        try:
+                            self.hooks_refs.append(self.hook_method(m, GetUserFullForeignSyncHook(self)))
+                            hooked += 1
+                        except Exception as _ge:
+                            _log(f"GetUserFullForeignSyncHook install fail: {_ge}")
                     continue
 
                 if name in ["putUser", "putUserFull"]:
@@ -25049,6 +25066,83 @@ class GetAnyWearHook(MethodHook):
                 param.setResult(user_obj)
         except Exception as e:
             _log(f"GetAnyWearHook error: {e}")
+
+class GetUserFullForeignSyncHook(MethodHook):
+    """Patch foreign UserFull on every getUserFull read with synced rating
+    and stargifts_count. Catches cases where the response-wrapper patch
+    (_sync_apply_remote_user_overrides) didn't fire — e.g. cache hit, no
+    fresh network round-trip."""
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def after_hooked_method(self, param):
+        try:
+            full_obj = param.getResult()
+            if full_obj is None:
+                return
+            try:
+                args = param.args
+            except Exception:
+                args = None
+            if not args or len(args) < 1:
+                return
+            try:
+                uid = int(args[0] or 0)
+            except Exception:
+                uid = 0
+            if uid <= 0:
+                return
+            try:
+                my_id = int(self.plugin._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if uid == my_id:
+                return
+            client = getattr(self.plugin, "_eblannft_sync_client", None)
+            if client is None:
+                return
+            record = None
+            try:
+                record = client.get_cached(uid)
+            except Exception:
+                record = None
+            if not isinstance(record, dict):
+                return
+            changed = False
+            # stargifts_count bump for tab visibility
+            try:
+                gifts_count = int(self.plugin._sync_get_remote_gifts_count(record) or 0)
+                if gifts_count > 0:
+                    if self.plugin._apply_remote_stargifts_count_to_obj(full_obj, gifts_count):
+                        changed = True
+            except Exception:
+                pass
+            # stars_rating
+            try:
+                rs = record.get("rating_state") or {}
+                if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                    rating_args = (
+                        int(rs.get("value", 0) or 0),
+                        int(rs.get("level", 1) or 1),
+                        int(rs.get("next_goal", 0) or 0),
+                    )
+                    if self.plugin._apply_remote_rating_to_full_user(full_obj, *rating_args):
+                        changed = True
+            except Exception:
+                pass
+            if changed:
+                try:
+                    param.setResult(full_obj)
+                    _log(f"GetUserFullForeignSync patched uid={uid}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GetUserFullForeignSyncHook error: {e}")
+            except Exception:
+                pass
+
 
 class PutAnyWearHook(MethodHook):
     def __init__(self, plugin):
