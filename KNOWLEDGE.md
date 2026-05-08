@@ -491,3 +491,194 @@ RequestDelegate, applying a profile override, posting NC notifications,
 serialize/deserialize a TL object via base64, scheduling delayed UI
 batches with a key (`_schedule_ui_batch` / `_schedule_cached_user_patch`
 with deduping). Reuse the patterns instead of inventing new ones.
+
+---
+
+## Foreign profile sync — what fires when
+
+The synced-from-VPS data arrives at the receiver via two parallel paths.
+Both must work for everything to render correctly. If one hangs/drops,
+expect partial rendering (gifts visible but rating wrong, or vice versa).
+
+### Path A: network response wrapper
+
+`NetworkHook.before_hooked_method` wraps `ConnectionsManager.sendRequest`
+delegates by request name. For foreign-profile reads:
+
+- `getFullUser` / `getUsers` → `UserWrapperDelegate`. On response:
+  1. `_sync_apply_remote_user_overrides(response, tuid)` — fetches the
+     remote record (cached_fresh → blocking 2s → cached) and walks the
+     response object patching `emoji_status`, `usernames`, `phone`,
+     `stargifts_count`, `stars_rating`. Mutations on the response object
+     stick because `MessagesController.loadFullUser` puts `res.full_user`
+     directly into `fullUsers` map (no copy).
+  2. `_sync_schedule_remote_user_patch(tuid, [0,80,220,520,1100])` —
+     belt-and-suspenders patch on the cached user/userFull at multiple
+     delays. Catches the case where step 1's record fetch raced.
+
+- `getSavedStarGifts` → `WrapperDelegate` → `process_response` →
+  `_sync_apply_remote_hide_official` → `_sync_inject_remote_gifts`. The
+  inject deserializes b64 wrappers from the snapshot and adds them to
+  `rez.gifts`. **Order matters**: hide-official strip must happen
+  BEFORE inject, otherwise injected wrappers get stripped too.
+
+### Path B: snapshot-arrival callback
+
+`sync_client._fetch_one` calls `on_remote_state(user_key, record)` which
+points to `_sync_on_remote_state`. After updating the cache, this callback:
+
+1. `_sync_schedule_remote_user_patch(uid, [60,240])` — re-applies user/
+   userFull patches now that the snapshot is fresh.
+2. If `_sync_gifts_identity_changed(prev_record, record)` is True (gift
+   `unique_id`/`slug` set differs from previous, or this is the first
+   record for this uid) → `StarsController.invalidateProfileGifts(uid)`.
+   Telegram clears its GiftsList and fires a fresh `getSavedStarGifts`
+   request, which Path A intercepts with the now-fresh cache.
+
+   **Critical**: invalidate is gated on identity change, NOT on
+   `updated_at`. Snapshot bumps `updated_at` on every push (including
+   no-op republishes), so an `updated_at`-based gate would trigger an
+   invalidate-loop with `request_remote_state(force=True)` calls inside
+   `_sync_inject_remote_gifts`.
+
+### UI repaint after a cache patch
+
+ProfileActivity caches `userInfo` on entry and only updates it on the
+**exact** `NotificationCenter.userInfoDidLoad(uid, userFull)` event
+(see ProfileActivity.java:9091). Posting `updateInterfaces` /
+`userEmojiStatusUpdated` does NOT repaint the rating badge / gifts tab /
+stories ring. `_post_remote_profile_notifications` posts all four —
+DON'T trim the userInfoDidLoad post even if it looks redundant.
+
+When emitting `userInfoDidLoad`, pass `uid` as a bare Python int — Chaquopy
+autoboxes it to `java.lang.Long` in `Object[]` varargs, which matches
+ProfileActivity's `(Long) args[0]` cast. Wrapping with
+`jclass("java.lang.Long")(uid)` silently fails on some builds.
+
+## Hook installation — gotchas
+
+### `set(SavedStarGift, IGiftsList)` vs `set(TL_starGiftUnique, boolean)`
+
+`StarGiftSheet` has multiple `set()` overloads. The profile-grid tap path
+calls `set(savedStarGift, list)` which internally calls `set(unique,
+refunded)`. We hook all three (Variants A/B/C in `_hook_local_gift_value_ui`)
+because:
+
+- Variant A `(TL_starGiftUnique, boolean)` runs before each native sheet
+  draw — our before-hook patches `value_amount` / `value_currency` /
+  `flags|=256` so Telegram's GiftValue2 row at line 4194 renders.
+- Variant B `(TL_savedStarGift, IGiftsList)` is the entry point — patching
+  the inner gift here is redundant safety in case Variant A's reflection
+  cache miss.
+- Variant C `(String slug, TL_starGiftUnique, IGiftsList)` is the slug-
+  deeplink path used by `getUniqueStarGift` response.
+
+If you see "value row missing on plugin gift" but no "duplicate native
++ Ценность row", the before-hook isn't firing. Re-check which overload
+exteraGram's build actually exposes.
+
+### `getUserFull` foreign-sync hook
+
+`GetUserFullForeignSyncHook` patches the returned UserFull on EVERY
+`MessagesController.getUserFull(uid)` call for foreign uids. This is the
+backstop for cache-hit paths where Path A never fires (no fresh network
+round-trip). Without this hook the foreign rating badge sometimes shows
+the default level=1 — even though the cache was patched, ProfileActivity
+read it before we patched.
+
+### After-hook isolation
+
+`GiftSheetLocalValueHook.after_hooked_method` runs `_apply_local_ton_*`
+AND `_inject_local_gift_value_row` — they MUST live in separate try/except
+blocks. A throw in the first one was silently suppressing the value row
+injection (manifested as "plugin gifts missing the Value row").
+
+### Skipping the plugin Ценность row
+
+`_inject_local_gift_value_row` skips its row when:
+- `gift.flags & 256` is set
+- `gift.slug` is non-empty
+- `gift.value_amount > 0`
+- `gift_stars_config` is empty
+
+These conditions mean Telegram's native GiftValue2 row will render and
+ours would just be a duplicate. Custom-stars-priced gifts still get the
+plugin row because native doesn't show stars.
+
+## ProfileGiftsContainer 3-column grid
+
+Telegram's `ProfileGiftsContainer$Page.fillItems` computes:
+
+```java
+spanCount = Math.max(1, list == null || list.totalCount == 0 ? 3 : Math.min(3, list.totalCount));
+```
+
+So a foreign profile with 1 real gift renders the gifts tab as 1-column
+banners. We force 3 columns three ways:
+
+1. `ProfileGiftsColumnsHook.before_hooked_method` bumps
+   `Page.list.totalCount` to ≥3 before fillItems runs.
+2. `ProfileGiftsColumnsHook.after_hooked_method` calls
+   `listView.setSpanCount(3)` after fillItems.
+3. `UniversalRecyclerSpanForceHook` rewrites any
+   `setSpanCount(N<3)` queued by fillItems on tagged listViews back to 3.
+
+For foreign profiles with synced gifts, also bump `rez.count` in
+`process_response` and `StarsController.GiftsList.totalCount` for that
+dialog. `_bump_remote_gifts_list_total_count` walks the controller fields
+to find the right GiftsList. This is what makes "spanCount sticks across
+the Telegram-side recompute" reliable.
+
+## Bootstrap re-enable cycle (BasePlugin identity)
+
+When the user disables and re-enables the plugin, exteraGram reloads
+the bootstrap (`eblannft.plugin`) but leaves the runtime
+(`eblannft_runtime/plugin.py`) in `sys.modules`. The runtime's
+`NftClonerPlugin` extends the **old** `BasePlugin` object reference,
+while the fresh bootstrap holds a **new** `BasePlugin`. Plain
+`issubclass(NftClonerPlugin, BasePlugin)` returns False — same name,
+different identity.
+
+`_impl_is_baseplugin_subclass()` handles this: strict identity check
+first, then fallback walk over the MRO matching by `__name__` +
+`__module__`. If the strict check fails but the MRO walk matches, evict
+the runtime from `sys.modules` and re-import — the fresh import binds
+to the current `BasePlugin`.
+
+Symptom of regression here: `eblanNFT runtime unavailable: None` raised
+on plugin enable. The `None` literally means `_LOAD_ERROR is None`, i.e.
+no exception was raised — the issubclass check just silently failed.
+
+## Auto-update — popup retries
+
+`_show_update_popup(manifest, _retry_attempt=0)` self-reschedules via
+`_schedule_popup_retry` when the UI context isn't ready
+(`get_last_fragment()` null AND `ApplicationLoader.applicationContext`
+null AND/OR imports fail). Up to `_UPDATE_POPUP_MAX_RETRIES` (8) attempts
+spaced by `_UPDATE_POPUP_RETRY_DELAY_MS` (2s). Covers cold-start where
+the runtime fires the update check before LaunchActivity finished
+mounting.
+
+`_UPDATE_CHECK_RESUME_THROTTLE_SEC` is 30s — short on purpose. Resume-
+triggered checks aren't expensive (one HTTP HEAD-like GET), and a longer
+window meant rolled-back releases didn't reach idle users for hours.
+
+`_is_remote_different()` (NOT `_is_remote_newer`) drives the popup —
+ANY version mismatch triggers an update, including rollbacks. Lets the
+maintainer publish a lower version and have every install pick it up.
+The popup copy adapts: "Обновление готово" for upgrades vs "Откат на
+vX.Y.Z" for rollbacks.
+
+## VPS sync record — recent additions
+
+Snapshot fields added since the original spec:
+
+- `hide_official_gifts` (bool): when True, receivers strip all server-
+  returned wrappers from the foreign profile's gifts list before
+  injecting synced ones. Pushed immediately on toggle via
+  `client.push_my_state_now(force=True)` so the change reaches viewers
+  on the next 6s pull instead of waiting for the 12s push tick.
+
+When extending the snapshot: ALWAYS additive. Other plugin users on
+older versions read the same record — a removed key would crash their
+deserialize.
