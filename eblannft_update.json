@@ -1,6 +1,6 @@
 {
-  "version": "1.0.19",
-  "notes": "Beta 1.0.19 — фикс отображения раздела «Подарки» на чужом профиле без реальных сохранённых подарков. ProfileActivity рисует таб только когда userFull.stargifts_count > 0; для пустого профиля Telegram возвращает 0, и наш инжект был невидим. Теперь при синке userFull.stargifts_count = max(текущее, число синканутых NFT). Патч идёт при walk'е TL-ответа getFullUser и при доп-патче закешированного UserFull в MessagesController.",
+  "version": "1.0.20",
+  "notes": "Beta 1.0.20 — фикс ложной надписи «X sent you this gift on <date>» на чужих NFT. Telegram показывает эту строку всегда когда gift.from_id != null, без проверки получателя. В предыдущем релизе мы дефолтили from_user_id = uid профиля, и Telegram думал «этот пользователь подарил мне». Теперь при синке устанавливается только owner_id, а from_id / saved_from_id / sender_id явно занулены + снят бит 0x2 во flags.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
