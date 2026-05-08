@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.24"
+__version__ = "1.0.25"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -75,6 +75,171 @@ def _bootstrap_log(msg):
         pass
 
 
+def _looks_like_permission_error(err):
+    if err is None:
+        return False
+    try:
+        if isinstance(err, PermissionError):
+            return True
+    except Exception:
+        pass
+    try:
+        if isinstance(err, OSError) and getattr(err, "errno", None) == 13:
+            return True
+    except Exception:
+        pass
+    try:
+        msg = str(err) or ""
+    except Exception:
+        msg = ""
+    low = msg.lower()
+    return ("permission denied" in low) or ("errno 13" in low) or ("eacces" in low)
+
+
+def _request_storage_permission_async():
+    try:
+        from java import jclass
+    except Exception as e:
+        _bootstrap_log(f"permission request: jclass missing: {e}")
+        return False
+    activity = None
+    try:
+        from client_utils import get_last_fragment
+        frag = get_last_fragment()
+        if frag is not None:
+            activity = frag.getParentActivity()
+    except Exception:
+        activity = None
+    if activity is None:
+        try:
+            from org.telegram.messenger import ApplicationLoader
+            ctx = ApplicationLoader.applicationContext
+            try:
+                cur = ctx.getCurrentActivity() if hasattr(ctx, "getCurrentActivity") else None
+            except Exception:
+                cur = None
+            if cur is not None:
+                activity = cur
+        except Exception:
+            pass
+    if activity is None:
+        _bootstrap_log("permission request skipped: no Activity")
+        return False
+    try:
+        perms = ["android.permission.WRITE_EXTERNAL_STORAGE"]
+        try:
+            ActivityCompat = jclass("androidx.core.app.ActivityCompat")
+            ActivityCompat.requestPermissions(activity, perms, 0xEB1A)
+        except Exception:
+            try:
+                activity.requestPermissions(perms, 0xEB1A)
+            except Exception as e2:
+                _bootstrap_log(f"permission request fallback failed: {e2}")
+                return False
+        _bootstrap_log("WRITE_EXTERNAL_STORAGE permission requested")
+        return True
+    except Exception as e:
+        _bootstrap_log(f"permission request error: {e}")
+        return False
+
+
+def _show_storage_permission_alert():
+    try:
+        from android_utils import run_on_ui_thread
+    except Exception:
+        run_on_ui_thread = None
+
+    def _show():
+        try:
+            from java import jclass  # noqa: F401
+            from client_utils import get_last_fragment
+            frag = get_last_fragment()
+            ctx = frag.getParentActivity() if frag and frag.getParentActivity() else None
+            if ctx is None:
+                from org.telegram.messenger import ApplicationLoader
+                ctx = ApplicationLoader.applicationContext
+            if ctx is None:
+                return
+            from org.telegram.ui.ActionBar import AlertDialog
+            builder = AlertDialog.Builder(ctx)
+            builder.setTitle("Нужно разрешение")
+            builder.setMessage(
+                "eblanNFT не смог записать свои файлы. Дай Telegram доступ "
+                "к памяти/файлам в настройках Android, потом снова включи "
+                "плагин в exteraGram → Настройки → Плагины."
+            )
+            builder.setPositiveButton("Открыть настройки", lambda di, w: _open_app_settings(ctx))
+            builder.setNegativeButton("Закрыть", None)
+            builder.show()
+            return
+        except Exception as e:
+            _bootstrap_log(f"alert show failed, falling back to bulletin: {e}")
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error(
+                "eblanNFT: нет разрешения на запись файлов. Дай Telegram "
+                "доступ к памяти и снова включи плагин."
+            )
+            return
+        except Exception:
+            pass
+        try:
+            from java import jclass
+            from org.telegram.messenger import ApplicationLoader
+            Toast = jclass("android.widget.Toast")
+            ctx = ApplicationLoader.applicationContext
+            t = Toast.makeText(ctx, "eblanNFT: нет разрешения на запись файлов", 1)
+            t.show()
+        except Exception:
+            pass
+
+    if run_on_ui_thread is not None:
+        try:
+            run_on_ui_thread(_show)
+            return
+        except Exception:
+            pass
+    try:
+        _show()
+    except Exception:
+        pass
+
+
+def _open_app_settings(ctx):
+    try:
+        from java import jclass
+        Intent = jclass("android.content.Intent")
+        Settings = jclass("android.provider.Settings")
+        Uri = jclass("android.net.Uri")
+        intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        try:
+            pkg = ctx.getPackageName()
+        except Exception:
+            pkg = None
+        if pkg:
+            intent.setData(Uri.parse(f"package:{pkg}"))
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(intent)
+    except Exception as e:
+        _bootstrap_log(f"open app settings failed: {e}")
+
+
+def _maybe_show_storage_permission_alert(err):
+    try:
+        if not _looks_like_permission_error(err):
+            return
+        try:
+            _request_storage_permission_async()
+        except Exception:
+            pass
+        _show_storage_permission_alert()
+    except Exception as e:
+        try:
+            _bootstrap_log(f"permission alert dispatch failed: {e}")
+        except Exception:
+            pass
+
+
 def _raw_url(rel_path):
     rel = str(rel_path or "").replace("\\", "/").lstrip("/")
     # Append a timestamp query so raw.githubusercontent.com's CDN always
@@ -84,6 +249,11 @@ def _raw_url(rel_path):
 
 
 def _candidate_install_roots():
+    """Order matters. App-private dirs (no permission needed) come FIRST so
+    a fresh install on Android 11+ never has to ask for storage permission.
+    Public Downloads is only useful when the user already has files there
+    from an older install (or has explicitly granted WRITE_EXTERNAL_STORAGE
+    on Android <11)."""
     seen = set()
     roots = []
 
@@ -99,6 +269,25 @@ def _candidate_install_roots():
             roots.append(ap)
 
     try:
+        from org.telegram.messenger import ApplicationLoader
+        ctx = ApplicationLoader.applicationContext
+        if ctx is not None:
+            try:
+                ext = ctx.getExternalFilesDir(None)
+                if ext is not None:
+                    _push(os.path.join(str(ext.getAbsolutePath()), _RUNTIME_DIR_NAME))
+            except Exception:
+                pass
+            try:
+                files_dir = ctx.getFilesDir()
+                if files_dir is not None:
+                    _push(os.path.join(str(files_dir.getAbsolutePath()), _RUNTIME_DIR_NAME))
+            except Exception:
+                pass
+    except Exception as e:
+        _bootstrap_log(f"app dir lookup failed: {e}")
+
+    try:
         from java import jclass
         Environment = jclass("android.os.Environment")
         downloads = Environment.getExternalStoragePublicDirectory(
@@ -108,19 +297,6 @@ def _candidate_install_roots():
             _push(os.path.join(str(downloads.getAbsolutePath()), _RUNTIME_DIR_NAME))
     except Exception as e:
         _bootstrap_log(f"public Downloads lookup failed: {e}")
-
-    try:
-        from org.telegram.messenger import ApplicationLoader
-        ctx = ApplicationLoader.applicationContext
-        if ctx is not None:
-            ext = ctx.getExternalFilesDir(None)
-            if ext is not None:
-                _push(os.path.join(str(ext.getAbsolutePath()), _RUNTIME_DIR_NAME))
-            files_dir = ctx.getFilesDir()
-            if files_dir is not None:
-                _push(os.path.join(str(files_dir.getAbsolutePath()), _RUNTIME_DIR_NAME))
-    except Exception as e:
-        _bootstrap_log(f"app dir lookup failed: {e}")
 
     try:
         _push(os.path.dirname(os.path.abspath(__file__)))
@@ -227,13 +403,47 @@ def _bootstrap_runtime():
         _bootstrap_log(f"runtime found at {existing}")
         return existing, "reused"
 
-    target_root = _pick_writable_install_root()
-    _bootstrap_log(f"downloading runtime into {target_root}")
-    for rel in _RUNTIME_FILES:
-        dest = os.path.join(target_root, rel.replace("/", os.sep))
-        size = _download_to(dest, _raw_url(rel))
-        _bootstrap_log(f"  {rel} -> {size} bytes")
-    return target_root, "downloaded"
+    last_err = None
+    candidates = _candidate_install_roots()
+    if not candidates:
+        raise RuntimeError("No candidate install roots available")
+    for target_root in candidates:
+        try:
+            if not _is_dir_writable(target_root):
+                continue
+            _bootstrap_log(f"downloading runtime into {target_root}")
+            for rel in _RUNTIME_FILES:
+                dest = os.path.join(target_root, rel.replace("/", os.sep))
+                size = _download_to(dest, _raw_url(rel))
+                _bootstrap_log(f"  {rel} -> {size} bytes")
+            return target_root, "downloaded"
+        except PermissionError as e:
+            last_err = e
+            _bootstrap_log(f"download to {target_root} hit EACCES: {e} — trying next candidate")
+            try:
+                pkg_dir = os.path.join(target_root, _RUNTIME_PACKAGE_NAME)
+                if os.path.isdir(pkg_dir):
+                    for fn in os.listdir(pkg_dir):
+                        try:
+                            os.remove(os.path.join(pkg_dir, fn))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            continue
+        except OSError as e:
+            if getattr(e, "errno", None) == 13:
+                last_err = e
+                _bootstrap_log(f"download to {target_root} hit OSError(13): {e} — trying next candidate")
+                continue
+            raise
+    if last_err is not None:
+        raise RuntimeError(
+            "Не удалось записать runtime ни в одну из доступных папок "
+            "(последняя ошибка: Permission denied). "
+            "Разреши приложению доступ к памяти в настройках Android."
+        )
+    raise RuntimeError("No writable directory available for eblannft runtime")
 
 
 def _import_runtime_from(install_root):
@@ -3225,6 +3435,7 @@ if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
     class EblanNftPlugin(_EblanNftImpl):
         def on_plugin_load(self):
             if _LOAD_ERROR is not None:
+                _maybe_show_storage_permission_alert(_LOAD_ERROR)
                 raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
             parent = getattr(super(), "on_plugin_load", None)
             if callable(parent):
@@ -3265,6 +3476,7 @@ if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
 else:
     class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
+            _maybe_show_storage_permission_alert(_LOAD_ERROR)
             raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
 
 
