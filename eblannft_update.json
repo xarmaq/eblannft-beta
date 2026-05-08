@@ -1,6 +1,6 @@
 {
-  "version": "1.0.29",
-  "notes": "Beta 1.0.29 — фикс отображения подарков в чужих профилях. Раньше сетка подарков рендерилась в зависимости от настоящего количества подарков на сервере: если у пользователя плагина был 1 официальный подарок, инжектнутые синхронизированные NFT показывались как полноширинные баннеры (1 колонка), а не как сетка 3×3. Telegram считает spanCount = Math.min(3, list.totalCount) в ProfileGiftsContainer$Page.fillItems(), и totalCount берётся из rez.count ответа сервера. Теперь после инжекта на чужом профиле бампим rez.count до max(3, gifts.size()) и параллельно поднимаем totalCount на уже закэшированной StarsController.GiftsList для этого dialogId — чтобы и racing-перерисовка, и первый рендер давали 3 колонки.",
+  "version": "1.0.30",
+  "notes": "Beta 1.0.30 — фикс «ценности» NFT на чужих профилях для других пользователей плагина. (1) Расширили резолвер remote-meta: помимо id/unique_id/slug-ключей, теперь walk-фолбек по всему кэшу, сравнивая по slug и unique_id — ловим случаи когда Telegram освежает gift через getUniqueStarGift и поля смещаются. (2) Добавили хук на StarGiftSheet.set(TL_savedStarGift, IGiftsList) — точка входа при тапе по ячейке в гриде подарков; патчим saved.gift до того как Telegram сам кастует к TL_starGiftUnique и читает value_amount/value_currency/(flags & 256). (3) Хук на set(String slug, TL_starGiftUnique, IGiftsList) — slug-deeplink путь. Получился тройной слой: variant-A на (TL_starGiftUnique, boolean), variant-B на (TL_savedStarGift, IGiftsList), variant-C на (String, TL_starGiftUnique, IGiftsList). Если хоть один срабатывает — Telegram видит уже пропатченные нативные поля и рисует строку «GiftValue2».",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.29"
+__version__ = "1.0.30"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3768,6 +3768,14 @@ class NftClonerPlugin(BasePlugin):
             slug = str(get_val(gift, "slug", "") or "")
         except Exception:
             slug = ""
+        try:
+            gift_type_id = int(get_val(gift, "gift_id", 0) or 0)
+        except Exception:
+            gift_type_id = 0
+        try:
+            num = int(get_val(gift, "num", 0) or 0)
+        except Exception:
+            num = 0
         if gid > 0:
             m = cache.get(f"id:{gid}")
             if m:
@@ -3791,8 +3799,40 @@ class NftClonerPlugin(BasePlugin):
                 except Exception:
                     pass
                 return m
+        # Fallback: walk all meta entries comparing slug or unique_id (id of
+        # the gift instance). Telegram may have refreshed the gift via
+        # getUniqueStarGift between our injection and the sheet-open, which
+        # could mutate the field-set we keyed on. The walk covers cases where
+        # a fresh-from-server gift carries the same slug but a different
+        # field-name shape than our cache key expects.
         try:
-            _log(f"remote gift meta MISS id={gid} slug={slug!r} cache_size={len(cache)}")
+            for k, m in cache.items():
+                if not isinstance(m, dict):
+                    continue
+                try:
+                    m_slug = str(m.get("slug", "") or "")
+                except Exception:
+                    m_slug = ""
+                if slug and m_slug and m_slug == slug:
+                    try:
+                        _log(f"remote gift meta HIT walk:slug={slug}")
+                    except Exception:
+                        pass
+                    return m
+                try:
+                    m_uniq = int(m.get("unique_id", 0) or 0)
+                except Exception:
+                    m_uniq = 0
+                if gid > 0 and m_uniq > 0 and m_uniq == gid:
+                    try:
+                        _log(f"remote gift meta HIT walk:unique={gid}")
+                    except Exception:
+                        pass
+                    return m
+        except Exception:
+            pass
+        try:
+            _log(f"remote gift meta MISS id={gid} slug={slug!r} gift_type_id={gift_type_id} num={num} cache_size={len(cache)}")
         except Exception:
             pass
         return None
@@ -19488,23 +19528,57 @@ class NftClonerPlugin(BasePlugin):
                     params = list(m.getParameterTypes() or [])
                 except:
                     continue
-                if len(params) != 2:
-                    continue
                 try:
-                    p0 = str(params[0].getName() or "")
-                    p1 = str(params[1].getName() or "").lower()
-                except:
+                    p_names = [str(p.getName() or "") for p in params]
+                except Exception:
                     continue
-                if "TL_stars$TL_starGiftUnique" not in p0:
+
+                # Variant A: set(TL_starGiftUnique gift, boolean refunded)
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_starGiftUnique" in p_names[0]
+                    and "boolean" in p_names[1].lower()
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
+                    hooked += 1
                     continue
-                if "boolean" not in p1:
+
+                # Variant B: set(TL_savedStarGift saved, IGiftsList list)
+                # — entry point for the profile-grid tap path. Patching here
+                # writes value_amount/currency/flags onto saved.gift BEFORE
+                # the inner cast `set((TL_starGiftUnique) saved.gift, refunded)`
+                # delegates back to Variant A. Belt-and-suspenders for cases
+                # where Variant A's reflection-based cache lookup misses.
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_savedStarGift" in p_names[0]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSavedSetHook(self)))
+                    hooked += 1
                     continue
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
-                hooked += 1
+
+                # Variant C: set(String slug, TL_starGiftUnique gift, IGiftsList list)
+                # — slug-deeplink path used by getUniqueStarGift response.
+                if (
+                    len(params) == 3
+                    and "java.lang.String" in p_names[0]
+                    and "TL_stars$TL_starGiftUnique" in p_names[1]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSlugSetHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"Local gift value hook error: {e}")
             return
@@ -23060,6 +23134,94 @@ class GiftSheetLocalValueHook(MethodHook):
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook error: {e}")
+
+class GiftSheetSavedSetHook(MethodHook):
+    """Hook StarGiftSheet.set(TL_savedStarGift, IGiftsList).
+
+    Fires on every profile-grid tap. We pre-patch the inner `saved.gift`
+    object (value_amount / value_currency / flags|256) BEFORE Telegram's
+    body casts it to TL_starGiftUnique and reads those fields. This is
+    a redundant safety net on top of the (TL_starGiftUnique, boolean)
+    hook — if reflection-based cache resolution fails on either of those,
+    one of them will still fire successfully.
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            saved = None
+            try:
+                if param.args and len(param.args) >= 1:
+                    saved = param.args[0]
+            except Exception:
+                saved = None
+            if saved is None:
+                return
+            try:
+                gift = get_val(saved, "gift", None)
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"saved-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSavedSetHook before error: {e}")
+            except Exception:
+                pass
+
+
+class GiftSheetSlugSetHook(MethodHook):
+    """Hook StarGiftSheet.set(String slug, TL_starGiftUnique, IGiftsList).
+
+    Used by the slug-deeplink path (getUniqueStarGift response). Patches
+    the gift before Telegram reads value fields.
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            gift = None
+            try:
+                if param.args and len(param.args) >= 2:
+                    gift = param.args[1]
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"slug-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSlugSetHook before error: {e}")
+            except Exception:
+                pass
+
 
 class GiftMenuPressedHook(MethodHook):
     """
