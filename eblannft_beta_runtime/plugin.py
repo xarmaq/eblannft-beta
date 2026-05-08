@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.14"
+__version__ = "1.0.15"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2402,18 +2402,13 @@ class NftClonerPlugin(BasePlugin):
                 b64 = entry.get("b64") or entry.get("payload_b64")
                 if not isinstance(b64, str) or len(b64) < 16:
                     continue
-                # Skip entries that the user "gifted" to someone else.
-                # The gift-recipient is stored on identity_config.to_user_id
-                # (entry.owner_user_id stays as my_id since that field tracks
-                # the original creator/owner inside the library, not the gift
-                # target). Sending a gifted-out NFT in my snapshot would make
-                # other clients show it as still mine.
-                try:
-                    entry_owner = int(entry.get("owner_user_id", 0) or 0)
-                except Exception:
-                    entry_owner = 0
-                if my_id_for_filter > 0 and entry_owner > 0 and entry_owner != my_id_for_filter:
-                    continue
+                # Only skip "gifted to someone else" — gate on
+                # identity_config.to_user_id, the explicit gift-target field.
+                # The previous owner_user_id check was excluding legacy library
+                # entries (created before _library_upsert_wrapper auto-stamped
+                # owner=my_id, plus stolen-gift entries that kept the original
+                # owner uid) — they all silently stopped uploading after the
+                # filter landed.
                 try:
                     ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
                     to_uid = int(ic.get("to_user_id", 0) or 0)
@@ -2989,20 +2984,28 @@ class NftClonerPlugin(BasePlugin):
         client = getattr(self, "_eblannft_sync_client", None)
         if client is None:
             return 0
+        # Prefer the freshest data. Use cache only if it's < ~3s old; otherwise
+        # do a blocking fetch so the user sees current NFTs on every profile
+        # open instead of an aging snapshot.
         record = None
         try:
-            record = client.get_cached(user_id)
+            record = client.get_cached_fresh(user_id, max_age_sec=3)
         except Exception:
             record = None
-        if not isinstance(record, dict) or not record.get("gifts"):
+        if not isinstance(record, dict):
             try:
                 fetched = client.fetch_remote_state_blocking(user_id, max_timeout=2.0)
                 if isinstance(fetched, dict):
                     record = fetched
             except Exception as _fe:
                 _log(f"sync remote blocking fetch error: {_fe}")
+            if not isinstance(record, dict):
+                try:
+                    record = client.get_cached(user_id)
+                except Exception:
+                    record = None
         try:
-            client.request_remote_state(user_id)
+            client.request_remote_state(user_id, force=True)
         except Exception:
             pass
         if not isinstance(record, dict):
