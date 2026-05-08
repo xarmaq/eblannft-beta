@@ -1,6 +1,6 @@
 {
-  "version": "1.0.28",
-  "notes": "Beta 1.0.28 — настоящий фикс «ценности» на чужих профилях. Telegram читает gift.value_amount / value_currency / flags|=256 ВНУТРИ StarGiftSheet.set() на line 4194 — до того как срабатывает наш after-hook. Поэтому мутировать поля в инжект-фазе или after-hook бесполезно. Теперь native-патч в before_hooked_method GiftSheetLocalValueHook: синхронно резолвим value_config (локальная библиотека для своего, remote-meta-cache для чужого) и пишем поля прямо перед чтением. Telegram видит уже пропатченные значения и сам рисует «GiftValue2» строку.",
+  "version": "1.0.29",
+  "notes": "Beta 1.0.29 — фикс отображения подарков в чужих профилях. Раньше сетка подарков рендерилась в зависимости от настоящего количества подарков на сервере: если у пользователя плагина был 1 официальный подарок, инжектнутые синхронизированные NFT показывались как полноширинные баннеры (1 колонка), а не как сетка 3×3. Telegram считает spanCount = Math.min(3, list.totalCount) в ProfileGiftsContainer$Page.fillItems(), и totalCount берётся из rez.count ответа сервера. Теперь после инжекта на чужом профиле бампим rez.count до max(3, gifts.size()) и параллельно поднимаем totalCount на уже закэшированной StarsController.GiftsList для этого dialogId — чтобы и racing-перерисовка, и первый рендер давали 3 колонки.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
