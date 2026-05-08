@@ -49,7 +49,7 @@ _RUNTIME_FILES = (
 _DOWNLOAD_TIMEOUT_SEC = 35
 
 _UPDATE_MANIFEST_PATH = "eblannft_update.json"
-_UPDATE_CHECK_RESUME_THROTTLE_SEC = 2 * 60     # 2 min between resume-triggered polls
+_UPDATE_CHECK_RESUME_THROTTLE_SEC = 30         # 30s between resume-triggered polls (was 2 min)
 
 # User-selectable load-time check intervals (key in settings:
 # 'eblannft_update_interval_idx', default 0 = 5 hours).
@@ -64,6 +64,8 @@ _UPDATE_INTERVAL_DEFAULT_IDX = 0
 # setting via _get_update_interval_sec().
 _UPDATE_CHECK_INTERVAL_SEC = _UPDATE_INTERVAL_OPTIONS[_UPDATE_INTERVAL_DEFAULT_IDX][0]
 _UPDATE_CHECK_DELAY_MS = 2200                  # let the UI settle first
+_UPDATE_POPUP_RETRY_DELAY_MS = 2000            # 2s between popup-show retries
+_UPDATE_POPUP_MAX_RETRIES = 8                  # ~16s total — covers slow cold starts
 _UPDATE_TIMESTAMP_FILE = ".eblannft_last_update_check"
 
 
@@ -2475,7 +2477,47 @@ def _parse_notes_bullets(text):
     return [body]
 
 
-def _show_update_popup(manifest):
+def _schedule_popup_retry(manifest, attempt, reason):
+    """Re-schedule _show_update_popup later if the first attempt couldn't
+    build (e.g. fired before LaunchActivity finished mounting). Bounded by
+    _UPDATE_POPUP_MAX_RETRIES so we never loop forever."""
+    next_attempt = int(attempt or 0) + 1
+    if next_attempt > _UPDATE_POPUP_MAX_RETRIES:
+        _bootstrap_log(
+            f"update popup: giving up after {next_attempt - 1} retries (last reason: {reason})"
+        )
+        return
+    _bootstrap_log(
+        f"update popup retry #{next_attempt} scheduled in {_UPDATE_POPUP_RETRY_DELAY_MS}ms (reason: {reason})"
+    )
+    try:
+        from java import jclass, dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities
+        Runnable = jclass("java.lang.Runnable")
+
+        class _Retry(dynamic_proxy(Runnable)):
+            def run(self_obj):
+                try:
+                    _show_update_popup(manifest, _retry_attempt=next_attempt)
+                except Exception as e:
+                    _bootstrap_log(f"update popup retry #{next_attempt} crashed: {e}")
+                return None
+
+        AndroidUtilities.runOnUIThread(_Retry(), int(_UPDATE_POPUP_RETRY_DELAY_MS))
+        return
+    except Exception:
+        pass
+
+    def _delayed():
+        try:
+            time.sleep(_UPDATE_POPUP_RETRY_DELAY_MS / 1000.0)
+            _show_update_popup(manifest, _retry_attempt=next_attempt)
+        except Exception as e:
+            _bootstrap_log(f"update popup retry #{next_attempt} fallback crashed: {e}")
+    threading.Thread(target=_delayed, daemon=True).start()
+
+
+def _show_update_popup(manifest, _retry_attempt=0):
     """Build and present an MD3 BottomSheet describing the available update.
 
     Layout (top → bottom):
@@ -2484,10 +2526,17 @@ def _show_update_popup(manifest):
       2. Optional 'Что нового' card with scrollable change notes
       3. Progress card — label / percent / 12dp gradient track / status line
       4. Two-line button stack — filled primary 'Скачать' + text 'Позже'
+
+    Returns True iff the BottomSheet was successfully scheduled for display.
+    On failure (no UI context yet, imports missing, etc.) reschedules itself
+    up to _UPDATE_POPUP_MAX_RETRIES times with _UPDATE_POPUP_RETRY_DELAY_MS
+    spacing — covers the cold-start case where the runtime fires the
+    update check before LaunchActivity has finished mounting.
     """
     try:
         from android_utils import run_on_ui_thread, log as _log_ui
     except Exception:
+        _schedule_popup_retry(manifest, _retry_attempt, "android_utils not ready")
         return False
     try:
         from java import jclass
@@ -2500,6 +2549,7 @@ def _show_update_popup(manifest):
         from android.util import TypedValue
     except Exception as e:
         _bootstrap_log(f"update popup imports failed: {e}")
+        _schedule_popup_retry(manifest, _retry_attempt, f"imports: {e}")
         return False
     try:
         from org.telegram.ui.Components import BackupImageView
@@ -2515,8 +2565,10 @@ def _show_update_popup(manifest):
             except Exception:
                 ctx = None
         if ctx is None:
+            _schedule_popup_retry(manifest, _retry_attempt, "no UI context")
             return False
-    except Exception:
+    except Exception as e:
+        _schedule_popup_retry(manifest, _retry_attempt, f"context lookup: {e}")
         return False
 
     state = {"started": False, "done": False}
