@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -2174,6 +2174,56 @@ def _bind_eblannft_popup_sticker(sticker_view, set_name="HappyHappyPepe", indexe
     return False
 
 
+def _parse_notes_bullets(text):
+    """Split release notes into a list of bullet items.
+
+    Recognises three input styles, in order of preference:
+      1. "(1) ... (2) ... (3) ..." numbered groups (this repo's house style)
+      2. "• item / - item / * item" markdown-ish bullets
+      3. Plain prose — falls back to sentence-split on ". " before a capital
+
+    Returns a list of clean strings without the leading marker. Empty input
+    or no clear structure → returns a single-item list with the whole text.
+    """
+    import re
+    if not text:
+        return []
+    body = str(text).strip()
+    # Strip a "vX.Y.Z — " prefix so it doesn't show up as a bullet on its own.
+    body = re.sub(r"^[Bb]eta\s+v?\d+\.\d+\.\d+\s*[—–-]\s*", "", body)
+    body = re.sub(r"^v?\d+\.\d+\.\d+\s*[—–-]\s*", "", body)
+
+    # 1) Numbered "(N)" groups
+    parts = re.split(r"\s*\(\d+\)\s*", body)
+    if len(parts) >= 3:
+        items = []
+        # Optional intro before "(1)" — keep only if it looks like a real
+        # phrase, not just a category label.
+        intro = parts[0].strip().rstrip(":,.; ")
+        if intro and len(intro) > 16:
+            items.append(intro)
+        for p in parts[1:]:
+            s = p.strip().rstrip(" .;")
+            if s:
+                items.append(s)
+        if len(items) >= 2:
+            return items
+
+    # 2) Bullet markers
+    if re.search(r"(^|\n)\s*[•\-\*]\s+", body):
+        lines = re.split(r"(?:^|\n)\s*[•\-\*]\s+", body)
+        items = [l.strip().rstrip(" .;") for l in lines if l.strip()]
+        if len(items) >= 2:
+            return items
+
+    # 3) Sentence split — only if the text has at least two reasonable sentences.
+    sents = re.split(r"\.\s+(?=[А-ЯA-Z])", body)
+    if len(sents) >= 2:
+        return [s.strip().rstrip(".") for s in sents if s.strip()]
+
+    return [body]
+
+
 def _show_update_popup(manifest):
     """Build and present an MD3 BottomSheet describing the available update.
 
@@ -2473,17 +2523,73 @@ def _show_update_popup(manifest):
                     notes_scroll.setVerticalScrollBarEnabled(False)
                 except Exception:
                     pass
-                notes = TextView(ctx)
+
+                # Parse the notes into bullets and render each as a small
+                # accent dot + text row, so the user scans changes instead
+                # of reading a wall of prose.
+                bullets_container = LinearLayout(ctx)
+                bullets_container.setOrientation(LinearLayout.VERTICAL)
+
                 try:
-                    notes.setText(notes_text)
-                    notes.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-                    notes.setTextColor(text_color)
-                    notes.setLineSpacing(0.0, 1.18)
+                    bullet_items = _parse_notes_bullets(notes_text)
                 except Exception:
-                    pass
-                notes_scroll.addView(notes, FrameLayout.LayoutParams(-1, -2))
-                lp_notes = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(160))
-                lp_notes.topMargin = AndroidUtilities.dp(8)
+                    bullet_items = [notes_text]
+
+                if not bullet_items:
+                    bullet_items = [notes_text]
+
+                for idx, item_text in enumerate(bullet_items):
+                    if not item_text:
+                        continue
+                    row = LinearLayout(ctx)
+                    row.setOrientation(LinearLayout.HORIZONTAL)
+                    row.setGravity(Gravity.TOP)
+
+                    # The dot — 6dp accent disc, vertically nudged down to
+                    # sit on the cap-height of the first line.
+                    dot = View(ctx)
+                    try:
+                        d = GradientDrawable()
+                        d.setShape(GradientDrawable.OVAL)
+                        d.setColor(accent)
+                        dot.setBackground(d)
+                    except Exception:
+                        pass
+                    lp_dot = LinearLayout.LayoutParams(
+                        AndroidUtilities.dp(6),
+                        AndroidUtilities.dp(6),
+                    )
+                    try:
+                        lp_dot.topMargin = AndroidUtilities.dp(8)
+                        lp_dot.rightMargin = AndroidUtilities.dp(12)
+                    except Exception:
+                        pass
+                    row.addView(dot, lp_dot)
+
+                    item_tv = TextView(ctx)
+                    try:
+                        item_tv.setText(str(item_text))
+                        item_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                        item_tv.setTextColor(text_color)
+                        item_tv.setLineSpacing(0.0, 1.18)
+                    except Exception:
+                        pass
+                    try:
+                        row.addView(item_tv, LinearLayout.LayoutParams(0, -2, 1.0))
+                    except Exception:
+                        row.addView(item_tv, LinearLayout.LayoutParams(-1, -2))
+
+                    lp_row = LinearLayout.LayoutParams(-1, -2)
+                    if idx > 0:
+                        try:
+                            lp_row.topMargin = AndroidUtilities.dp(8)
+                        except Exception:
+                            pass
+                    bullets_container.addView(row, lp_row)
+
+                notes_scroll.addView(bullets_container, FrameLayout.LayoutParams(-1, -2))
+                lp_notes = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(180))
+                lp_notes.topMargin = AndroidUtilities.dp(10)
                 notes_card.addView(notes_scroll, lp_notes)
 
             # ============================================================
@@ -2658,11 +2764,61 @@ def _show_update_popup(manifest):
                 except Exception:
                     pass
 
+            # Smoothly tween percent text instead of jumping. Uses a tiny
+            # daemon thread that fires text updates onto the UI thread; an
+            # `anim_id` token cancels stale tweens when a new target arrives.
+            percent_state = {"current": 0.0, "anim_id": 0}
+
             def _set_percent(value):
                 try:
-                    percent.setText(f"{int(round(value))}%")
+                    target = float(value)
                 except Exception:
-                    pass
+                    target = 0.0
+                start = float(percent_state.get("current", 0.0) or 0.0)
+                # Snap on big jumps backwards (idle reset), tween everywhere else.
+                if target < start - 5.0 or abs(target - start) < 0.5:
+                    try:
+                        run_on_ui_thread(lambda t=target: percent.setText(f"{int(round(t))}%"))
+                    except Exception:
+                        try:
+                            percent.setText(f"{int(round(target))}%")
+                        except Exception:
+                            pass
+                    percent_state["current"] = target
+                    return
+                percent_state["anim_id"] += 1
+                my_id = percent_state["anim_id"]
+                steps = 14
+                duration_s = 0.22
+                step_s = duration_s / steps
+
+                def _tween():
+                    for i in range(1, steps + 1):
+                        if percent_state.get("anim_id") != my_id:
+                            return
+                        t = i / float(steps)
+                        # ease-out cubic
+                        eased = 1.0 - (1.0 - t) ** 3
+                        v = start + (target - start) * eased
+                        try:
+                            run_on_ui_thread(lambda v=v: percent.setText(f"{int(round(v))}%"))
+                        except Exception:
+                            pass
+                        try:
+                            time.sleep(step_s)
+                        except Exception:
+                            return
+                    if percent_state.get("anim_id") == my_id:
+                        percent_state["current"] = target
+
+                try:
+                    threading.Thread(target=_tween, daemon=True).start()
+                except Exception:
+                    try:
+                        percent.setText(f"{int(round(target))}%")
+                    except Exception:
+                        pass
+                    percent_state["current"] = target
 
             def _ui_progress(idx, total_steps, current_path, applying, current_bytes,
                               current_total, overall_bytes, overall_total):
@@ -2683,6 +2839,62 @@ def _show_update_popup(manifest):
                     _ui_progress(**kw)
                 run_on_ui_thread(_do)
 
+            # Auto-restart countdown — after a successful download we wait
+            # 5 seconds with a live ticker on the action button before
+            # restarting on our own. The user can tap it to restart now,
+            # or tap "Отмена" to stop the auto-restart.
+            countdown_state = {"active": False, "remaining": 0, "tok": 0}
+
+            def _start_restart_countdown(seconds=5):
+                countdown_state["active"] = True
+                countdown_state["remaining"] = int(seconds)
+                countdown_state["tok"] = countdown_state.get("tok", 0) + 1
+                my_tok = countdown_state["tok"]
+                try:
+                    run_on_ui_thread(lambda: close_btn.setText("Отмена"))
+                except Exception:
+                    pass
+
+                def _ticker():
+                    while True:
+                        if countdown_state.get("tok") != my_tok or not countdown_state.get("active"):
+                            return
+                        rem = int(countdown_state.get("remaining", 0))
+                        if rem <= 0:
+                            try:
+                                run_on_ui_thread(_restart_application)
+                            except Exception:
+                                try:
+                                    _restart_application()
+                                except Exception:
+                                    pass
+                            return
+                        try:
+                            run_on_ui_thread(lambda r=rem: action_btn.setText(f"Перезапустить ({r})"))
+                        except Exception:
+                            pass
+                        try:
+                            time.sleep(1.0)
+                        except Exception:
+                            return
+                        countdown_state["remaining"] = rem - 1
+
+                try:
+                    threading.Thread(target=_ticker, daemon=True).start()
+                except Exception:
+                    pass
+
+            def _cancel_restart_countdown():
+                countdown_state["active"] = False
+                try:
+                    run_on_ui_thread(lambda: action_btn.setText("Перезапустить"))
+                except Exception:
+                    pass
+                try:
+                    run_on_ui_thread(lambda: close_btn.setText("Позже"))
+                except Exception:
+                    pass
+
             def _do_download():
                 try:
                     _download_and_apply_update(manifest, progress_cb=_on_progress)
@@ -2691,11 +2903,15 @@ def _show_update_popup(manifest):
                         _set_ratio(1.0)
                         _set_percent(100)
                         _set_label("Готово")
-                        _set_status("Файлы установлены. Нажми «Перезапустить», чтобы применить обновление.")
+                        _set_status("Файлы установлены. Перезапуск через несколько секунд…")
                         try:
-                            action_btn.setText("Перезапустить")
+                            action_btn.setText("Перезапустить (5)")
                             action_btn.setEnabled(True)
                             action_btn.setAlpha(1.0)
+                        except Exception:
+                            pass
+                        try:
+                            _start_restart_countdown(seconds=5)
                         except Exception:
                             pass
                     run_on_ui_thread(_done)
@@ -2736,6 +2952,16 @@ def _show_update_popup(manifest):
                 threading.Thread(target=_do_download, daemon=True).start()
 
             def _on_close():
+                # If the auto-restart ticker is running, the secondary button
+                # acts as "Отмена" and just stops the countdown — the user
+                # stays on the success screen with a manual «Перезапустить».
+                if countdown_state.get("active"):
+                    _cancel_restart_countdown()
+                    try:
+                        _set_status("Файлы установлены. Нажми «Перезапустить», чтобы применить.")
+                    except Exception:
+                        pass
+                    return
                 try:
                     sheet.dismiss()
                 except Exception:
