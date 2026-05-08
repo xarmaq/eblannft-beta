@@ -1,6 +1,6 @@
 {
-  "version": "1.0.32",
-  "notes": "Beta 1.0.32 — убрали дублирование строки «Ценность» под нативной «Value». Раньше когда before-hook успешно патчил native поля (value_amount + value_currency + flags|256), Telegram рисовал свою GiftValue2 «Value ~€1,337 learn more», а наш after-hook сверху добавлял «Ценность ~1 337 € подробнее» — две одинаковые строки подряд. Теперь _inject_local_gift_value_row проверяет gift.flags & 256 + slug + value_amount > 0: если native строка точно отрендерится, нашу пропускаем. Исключение — когда настроена кастомная цена в звёздах (gift_stars_config): native не умеет показывать звёзды, так что в этом случае всё равно рисуем плагинную строку с дополнительной информацией.",
+  "version": "1.0.33",
+  "notes": "Beta 1.0.33 — кнопка «скрыть официальные подарки» теперь синкается с сервером: другие пользователи плагина тоже не увидят официальные подарки в твоём профиле. (1) В снапшот _sync_collect_local_state добавлено поле hide_official_gifts. (2) В process_response на чужом профиле перед _sync_inject_remote_gifts вызывается _sync_apply_remote_hide_official: тянем remote-record по той же лестнице свежести (cached_fresh → blocking fetch → cached), и если hide_official_gifts=True — стрипаем все серверные обёртки из gifts_list, после чего инжект подкладывает только синкнутые плагин-подарки. (3) В _set_hide_official_gifts_local добавлен немедленный push_my_state_now — чтобы изменение долетело до других клиентов на следующем 6-секундном pull, а не ждало 12-секундный push-тик.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
