@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.23"
+__version__ = "1.0.24"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -18392,22 +18392,42 @@ class NftClonerPlugin(BasePlugin):
         try:
             for m in UC.getDeclaredMethods():
                 try:
-                    if m.getName() != "setCurrentUser":
-                        continue
-                    params = m.getParameterTypes()
-                    if len(params) < 1:
-                        continue
-                    if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
-                        continue
+                    name = m.getName()
                 except:
                     continue
-                m.setAccessible(True)
-                self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
-                hooked += 1
+                if name == "setCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) < 1:
+                            continue
+                        if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
+                            continue
+                    except:
+                        continue
+                    m.setAccessible(True)
+                    self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
+                    hooked += 1
+                    continue
+                # See prod/main repo for rationale — re-apply on every read
+                # is the strongest possible anchor against UserConfig races.
+                if name == "getCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) != 0:
+                            continue
+                    except:
+                        continue
+                    try:
+                        m.setAccessible(True)
+                    except:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GetCurrentUserOverrideHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"UserConfig wear hook scan failed: {e}")
         if hooked:
-            _log(f"UserConfig setCurrentUser wear hooks installed: {hooked}")
+            _log(f"UserConfig wear hooks installed: {hooked}")
 
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
@@ -24730,6 +24750,55 @@ class SetCurrentUserWearHook(MethodHook):
             self.plugin._apply_profile_overrides_to_obj(param.args[0])
         except Exception as e:
             _log(f"SetCurrentUserWearHook error: {e}")
+
+
+class GetCurrentUserOverrideHook(MethodHook):
+    """Re-apply identity / wear / rating overrides on every getCurrentUser
+    read. The drawer header, account list and several profile rows pull
+    from this getter — patching here guarantees they never see a non-spoofed
+    snapshot, regardless of what update path raced our scheduled patches.
+    """
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self._reentry_guard = False
+
+    def after_hooked_method(self, param):
+        try:
+            if self._reentry_guard:
+                return
+            p = self.plugin
+            try:
+                if (not p._has_profile_overrides()) and (not p._is_local_rating_active()):
+                    return
+            except Exception:
+                return
+            user_obj = None
+            try:
+                user_obj = param.getResult()
+            except Exception:
+                user_obj = None
+            if user_obj is None:
+                return
+            try:
+                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
+            except Exception:
+                uid = 0
+            try:
+                my_id = int(p._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if my_id <= 0 or (uid > 0 and uid != my_id):
+                return
+            self._reentry_guard = True
+            try:
+                p._apply_profile_overrides_to_obj(user_obj)
+            finally:
+                self._reentry_guard = False
+        except Exception as e:
+            try:
+                _log(f"GetCurrentUserOverrideHook error: {e}")
+            except Exception:
+                pass
 
 class AttrLoader:
     def __init__(self, plugin, gift_id):
