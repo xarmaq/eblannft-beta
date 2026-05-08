@@ -1,6 +1,6 @@
 {
-  "version": "1.0.12",
-  "notes": "v1.0.12 — локальный рейтинг звёзд теперь синкается между клиентами. (1) В snapshot уезжает rating_state с полями enabled/value/level/next_goal. (2) При просмотре чужого профиля плагин патчит userFull.stars_rating на закешированном объекте + во всех TL-ответах getFullUser, ставя такие же значения как у владельца. Telegram рисует виджет рейтинга поверх userInfo как обычно. (3) Используется параллельная цепочка _apply_remote_rating_to_full_user / _apply_remote_rating_to_stars_rating_obj / _create_remote_stars_rating_obj без self-only гейта (локальные хелперы _apply_local_rating_* применяются только к my_id, для чужих не работали).",
+  "version": "1.0.13",
+  "notes": "v1.0.13 — стабилизация NFT username и NFT номера в своём профиле. (1) Добавлен GetCurrentUserOverrideHook на UserConfig.getCurrentUser — теперь оверрайды переприменяются на КАЖДОМ чтении (drawer, account-list, profile-rows). Это самый сильный анкер: какой бы код ни мутировал UserConfig.currentUser между нашими патчами, следующий getCurrentUser вернёт уже подменённый. (2) Добавлен файл KNOWLEDGE.md в репо — гайд для AI-агентов по архитектуре, релизам, gotcha'м и тестированию.",
   "files": [
     "eblannft.plugin",
     "eblannft_runtime/__init__.py",

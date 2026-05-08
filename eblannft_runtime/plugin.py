@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -18382,22 +18382,46 @@ class NftClonerPlugin(BasePlugin):
         try:
             for m in UC.getDeclaredMethods():
                 try:
-                    if m.getName() != "setCurrentUser":
-                        continue
-                    params = m.getParameterTypes()
-                    if len(params) < 1:
-                        continue
-                    if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
-                        continue
+                    name = m.getName()
                 except:
                     continue
-                m.setAccessible(True)
-                self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
-                hooked += 1
+                if name == "setCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) < 1:
+                            continue
+                        if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
+                            continue
+                    except:
+                        continue
+                    m.setAccessible(True)
+                    self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
+                    hooked += 1
+                    continue
+                # Re-apply identity / wear / rating overrides on EVERY
+                # getCurrentUser read — that's the strongest possible anchor:
+                # the drawer header, the account chooser and various profile
+                # rows all read the spoofed values directly from this getter,
+                # so any path that mutates UserConfig.currentUser between our
+                # patches gets transparently re-overridden on the next read.
+                if name == "getCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) != 0:
+                            continue
+                    except:
+                        continue
+                    try:
+                        m.setAccessible(True)
+                    except:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GetCurrentUserOverrideHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"UserConfig wear hook scan failed: {e}")
         if hooked:
-            _log(f"UserConfig setCurrentUser wear hooks installed: {hooked}")
+            _log(f"UserConfig wear hooks installed: {hooked}")
 
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
@@ -24704,6 +24728,63 @@ class SetCurrentUserWearHook(MethodHook):
             self.plugin._apply_profile_overrides_to_obj(param.args[0])
         except Exception as e:
             _log(f"SetCurrentUserWearHook error: {e}")
+
+
+class GetCurrentUserOverrideHook(MethodHook):
+    """Re-apply identity / wear / rating overrides on every getCurrentUser
+    read. Closes the residual race where a server-side update mutates
+    UserConfig.currentUser between our scheduled patches and a UI render.
+    The drawer header, the account list and several profile rows pull from
+    this getter — patching here guarantees they never see a non-spoofed
+    snapshot, regardless of what update path raced ours.
+
+    Performance: short-circuits when no override is active. When overrides
+    are on, we run the patcher in-place; the cached User object is the
+    same reference the UI is about to render against, so an in-place mutation
+    is enough — no setResult() needed.
+    """
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self._reentry_guard = False
+
+    def after_hooked_method(self, param):
+        try:
+            if self._reentry_guard:
+                return
+            p = self.plugin
+            try:
+                if (not p._has_profile_overrides()) and (not p._is_local_rating_active()):
+                    return
+            except Exception:
+                return
+            user_obj = None
+            try:
+                user_obj = param.getResult()
+            except Exception:
+                user_obj = None
+            if user_obj is None:
+                return
+            try:
+                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
+            except Exception:
+                uid = 0
+            try:
+                my_id = int(p._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if my_id <= 0 or (uid > 0 and uid != my_id):
+                return
+            self._reentry_guard = True
+            try:
+                p._apply_profile_overrides_to_obj(user_obj)
+            finally:
+                self._reentry_guard = False
+        except Exception as e:
+            try:
+                _log(f"GetCurrentUserOverrideHook error: {e}")
+            except Exception:
+                pass
 
 class AttrLoader:
     def __init__(self, plugin, gift_id):
