@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2362,6 +2362,75 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             return None
 
+    def _sync_get_remote_gifts_count(self, record):
+        """How many synced NFTs the remote record carries — used to bump
+        userFull.stargifts_count so the «Подарки» tab shows up on a foreign
+        profile that has zero real saved gifts.
+        """
+        if not isinstance(record, dict):
+            return 0
+        gifts = record.get("gifts")
+        if not isinstance(gifts, list):
+            return 0
+        n = 0
+        for g in gifts:
+            if not isinstance(g, dict):
+                continue
+            b64 = g.get("b64") or g.get("payload_b64")
+            if isinstance(b64, str) and len(b64) >= 16:
+                n += 1
+        return n
+
+    def _apply_remote_stargifts_count_to_obj(self, obj, desired_count):
+        """Bump stargifts_count on a UserFull/ChatFull-shaped object so
+        Telegram renders the gifts tab even when the server says count=0.
+        Only ever increases — never lowers a real value.
+        """
+        if obj is None:
+            return False
+        try:
+            target = int(desired_count or 0)
+        except Exception:
+            target = 0
+        if target <= 0:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("userfull" not in cls_name) and ("chatfull" not in cls_name) \
+                and ("stargifts_count" not in field_names) \
+                and ("stargiftsCount" not in field_names):
+            return False
+        current = 0
+        for name in ["stargifts_count", "stargiftsCount"]:
+            try:
+                v = int(self._to_int(get_val(obj, name, 0), 0) or 0)
+            except Exception:
+                v = 0
+            if v > current:
+                current = v
+        if target <= current:
+            return False
+        changed = False
+        for name in ["stargifts_count", "stargiftsCount"]:
+            try:
+                if self._set_field(obj, name, int(target)):
+                    changed = True
+            except Exception:
+                pass
+            try:
+                if hasattr(obj, name) and int(getattr(obj, name) or 0) != int(target):
+                    setattr(obj, name, int(target))
+                    changed = True
+            except Exception:
+                pass
+        return bool(changed)
+
     def _apply_remote_nft_username_to_user(self, user_obj, tokens):
         if user_obj is None or not tokens:
             return False
@@ -2477,7 +2546,12 @@ class NftClonerPlugin(BasePlugin):
                         remote_numbers.append(t.strip().lstrip("+"))
         except Exception:
             remote_numbers = []
-        if wear_status is None and not remote_unames and not remote_numbers:
+        try:
+            remote_gifts_count = int(self._sync_get_remote_gifts_count(record) or 0)
+        except Exception:
+            remote_gifts_count = 0
+
+        if wear_status is None and not remote_unames and not remote_numbers and remote_gifts_count <= 0:
             return 0
         patched = [0]
         visited = set()
@@ -2492,6 +2566,16 @@ class NftClonerPlugin(BasePlugin):
             if oid in visited:
                 return
             visited.add(oid)
+            # UserFull / ChatFull don't carry an `id` field — they wrap a
+            # nested user. Bump stargifts_count on any UserFull-shaped object
+            # we encounter while walking the response, so the gifts tab shows
+            # up on the foreign profile.
+            if remote_gifts_count > 0:
+                try:
+                    if self._apply_remote_stargifts_count_to_obj(obj, remote_gifts_count):
+                        patched[0] += 1
+                except Exception:
+                    pass
             try:
                 obj_uid = int(get_val(obj, "id", 0) or 0)
             except Exception:
@@ -2589,7 +2673,12 @@ class NftClonerPlugin(BasePlugin):
                         remote_numbers.append(t.strip().lstrip("+"))
         except Exception:
             pass
-        if st is None and not remote_unames and not remote_numbers:
+        try:
+            remote_gifts_count = int(self._sync_get_remote_gifts_count(record) or 0)
+        except Exception:
+            remote_gifts_count = 0
+
+        if st is None and not remote_unames and not remote_numbers and remote_gifts_count <= 0:
             return False
         try:
             account = get_user_config().selectedAccount
@@ -2617,6 +2706,22 @@ class NftClonerPlugin(BasePlugin):
                         any_set = True
                 except Exception:
                     pass
+
+            # Bump cached UserFull.stargifts_count too — that's the field
+            # ProfileActivity reads to decide whether to render the gifts
+            # tab on a foreign profile.
+            full_obj = None
+            try:
+                full_obj = ctrl.getUserFull(tuid)
+            except Exception:
+                full_obj = None
+            if full_obj is not None and remote_gifts_count > 0:
+                try:
+                    if self._apply_remote_stargifts_count_to_obj(full_obj, remote_gifts_count):
+                        any_set = True
+                except Exception:
+                    pass
+
             if not any_set:
                 return False
             try:
