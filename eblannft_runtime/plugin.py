@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.11"
+__version__ = "1.0.12"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2187,6 +2187,15 @@ class NftClonerPlugin(BasePlugin):
                 "price_usd": str(getattr(self, "nft_number_price_usd", "0") or "0"),
                 "purchase_date": str(getattr(self, "nft_number_purchase_date", "") or ""),
             },
+            # Local "Stars Rating" decoration — value/level/next_goal tuple.
+            # Receivers patch userFull.stars_rating with these so the rating
+            # widget on a foreign profile reflects what the owner set.
+            "rating_state": {
+                "enabled": bool(self._is_local_rating_active()) if hasattr(self, "_is_local_rating_active") else False,
+                "value": int(getattr(self, "local_rating_value", 0) or 0),
+                "level": int(getattr(self, "local_rating_level", 0) or 1),
+                "next_goal": int(getattr(self, "local_rating_next_goal", 0) or 0),
+            },
         }
         try:
             if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
@@ -2479,6 +2488,137 @@ class NftClonerPlugin(BasePlugin):
                 pass
         return changed
 
+    def _compute_rating_floor(self, level, next_goal, value):
+        """Same shape as _get_local_rating_floor but parametrised — used for
+        remote sync where the foreign uid doesn't have my local self-state.
+        """
+        try:
+            level = int(level or 0)
+            goal = int(next_goal or 0)
+            value = int(value or 0)
+        except Exception:
+            return 0
+        if level <= 1 or goal <= 1:
+            return 0
+        step = max(int(goal / max(level, 1)), 1)
+        floor = max(goal - step, 0)
+        if floor > value:
+            floor = min(value, floor)
+        if floor >= goal:
+            floor = max(goal - 1, 0)
+        return int(floor)
+
+    def _apply_remote_rating_to_stars_rating_obj(self, obj, value, level, next_goal):
+        """Patch a TL_starsRating-shaped object with explicit values — no
+        self gate, used for syncing a foreign user's local rating.
+        """
+        if obj is None:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        field_names = set()
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("starsrating" not in cls_name) and (not ({"level", "current_level_stars", "stars", "next_level_stars"} & field_names)):
+            return False
+        try:
+            value = int(value or 0)
+            level = int(level or 1)
+            next_goal = int(next_goal or 0)
+        except Exception:
+            return False
+        floor = self._compute_rating_floor(level, next_goal, value)
+        changed = False
+        for names, val in [
+            (["level"], level),
+            (["current_level_stars", "currentLevelStars"], floor),
+            (["stars"], value),
+            (["next_level_stars", "nextLevelStars"], next_goal),
+        ]:
+            for name in names:
+                try:
+                    if self._set_field(obj, name, int(val)):
+                        changed = True
+                except Exception:
+                    pass
+        try:
+            flags = self._to_int(get_val(obj, "flags", 0), 0)
+            wanted = int(flags | 1)
+            if wanted != flags and self._set_field(obj, "flags", wanted):
+                changed = True
+        except Exception:
+            pass
+        return bool(changed)
+
+    def _create_remote_stars_rating_obj(self, value, level, next_goal):
+        for cls_name in [
+            "org.telegram.tgnet.tl.TL_stars$Tl_starsRating",
+            "org.telegram.tgnet.tl.TL_stars$TL_starsRating",
+            "org.telegram.tgnet.TLRPC$TL_starsRating",
+        ]:
+            try:
+                obj = jclass(cls_name)()
+                self._apply_remote_rating_to_stars_rating_obj(obj, value, level, next_goal)
+                return obj
+            except Exception:
+                continue
+        return None
+
+    def _apply_remote_rating_to_full_user(self, obj, value, level, next_goal):
+        """Mirror of _apply_local_rating_to_full_user without the self-only
+        gate — patches userFull.stars_rating for a synced foreign profile.
+        """
+        if obj is None:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        field_names = set()
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("userfull" not in cls_name) and ("stars_rating" not in field_names) and ("starsRating" not in field_names):
+            return False
+        changed = False
+        rating_obj = None
+        for name in ["stars_rating", "starsRating"]:
+            try:
+                rating_obj = get_val(obj, name, None)
+            except Exception:
+                rating_obj = None
+            if rating_obj is not None:
+                break
+        if rating_obj is None:
+            rating_obj = self._create_remote_stars_rating_obj(value, level, next_goal)
+            if rating_obj is not None:
+                for name in ["stars_rating", "starsRating"]:
+                    try:
+                        if self._set_field(obj, name, rating_obj):
+                            changed = True
+                            break
+                    except Exception:
+                        pass
+        else:
+            try:
+                if self._apply_remote_rating_to_stars_rating_obj(rating_obj, value, level, next_goal):
+                    changed = True
+            except Exception:
+                pass
+        try:
+            flags2 = self._to_int(get_val(obj, "flags2", 0), 0)
+            wanted = int(flags2 | (1 << 17))
+            if wanted != flags2 and self._set_field(obj, "flags2", wanted):
+                changed = True
+        except Exception:
+            pass
+        return bool(changed)
+
     def _apply_remote_nft_number_to_user(self, user_obj, token):
         if user_obj is None or not token:
             return False
@@ -2551,7 +2691,23 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             remote_gifts_count = 0
 
-        if wear_status is None and not remote_unames and not remote_numbers and remote_gifts_count <= 0:
+        # Remote local-rating decoration → apply only when the sender had it
+        # enabled with a non-zero value. We pass (value, level, next_goal)
+        # down to _apply_remote_rating_to_full_user.
+        remote_rating = None
+        try:
+            rs = record.get("rating_state") or {}
+            if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                remote_rating = (
+                    int(rs.get("value", 0) or 0),
+                    int(rs.get("level", 1) or 1),
+                    int(rs.get("next_goal", 0) or 0),
+                )
+        except Exception:
+            remote_rating = None
+
+        if wear_status is None and not remote_unames and not remote_numbers \
+                and remote_gifts_count <= 0 and remote_rating is None:
             return 0
         patched = [0]
         visited = set()
@@ -2573,6 +2729,13 @@ class NftClonerPlugin(BasePlugin):
             if remote_gifts_count > 0:
                 try:
                     if self._apply_remote_stargifts_count_to_obj(obj, remote_gifts_count):
+                        patched[0] += 1
+                except Exception:
+                    pass
+            # Foreign-profile local rating (stars_rating widget on userFull).
+            if remote_rating is not None:
+                try:
+                    if self._apply_remote_rating_to_full_user(obj, *remote_rating):
                         patched[0] += 1
                 except Exception:
                     pass
@@ -2678,7 +2841,20 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             remote_gifts_count = 0
 
-        if st is None and not remote_unames and not remote_numbers and remote_gifts_count <= 0:
+        remote_rating = None
+        try:
+            rs = record.get("rating_state") or {}
+            if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                remote_rating = (
+                    int(rs.get("value", 0) or 0),
+                    int(rs.get("level", 1) or 1),
+                    int(rs.get("next_goal", 0) or 0),
+                )
+        except Exception:
+            remote_rating = None
+
+        if st is None and not remote_unames and not remote_numbers \
+                and remote_gifts_count <= 0 and remote_rating is None:
             return False
         try:
             account = get_user_config().selectedAccount
@@ -2718,6 +2894,13 @@ class NftClonerPlugin(BasePlugin):
             if full_obj is not None and remote_gifts_count > 0:
                 try:
                     if self._apply_remote_stargifts_count_to_obj(full_obj, remote_gifts_count):
+                        any_set = True
+                except Exception:
+                    pass
+            # Patch the cached UserFull.stars_rating with the synced rating.
+            if full_obj is not None and remote_rating is not None:
+                try:
+                    if self._apply_remote_rating_to_full_user(full_obj, *remote_rating):
                         any_set = True
                 except Exception:
                     pass
