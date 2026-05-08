@@ -26,7 +26,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы. Имеет систему конфигов.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.9"
+__version__ = "1.0.10"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -2738,17 +2738,68 @@ def _show_update_popup(manifest):
             lp_close.topMargin = AndroidUtilities.dp(4)
             outer.addView(close_btn, lp_close)
 
+            # Track-fill state — we drive the bar both by setScaleX (cheap path)
+            # AND by direct LayoutParams.width fallback (some Android builds
+            # silently drop ViewPropertyAnimator scaleX from 0 → small_value
+            # so the bar stayed empty even at 50%+).
+            track_state = {"ratio": 0.0, "track_w": 0}
+
             def _set_ratio(ratio):
                 try:
                     r = max(0.0, min(1.0, float(ratio or 0.0)))
                 except Exception:
                     r = 0.0
+                # Monotone fill: never visually retract (idle resets are rare;
+                # the Telegram download path occasionally emits a stale earlier
+                # ratio and we don't want the bar to bounce backwards).
+                if r < float(track_state.get("ratio", 0.0) or 0.0) - 0.02:
+                    return
+                track_state["ratio"] = r
+
+                def _apply():
+                    # Method A — pivoted scaleX. Works on most builds.
+                    try:
+                        track_fill.setPivotX(0.0)
+                        track_fill.setScaleX(float(r))
+                    except Exception:
+                        pass
+                    # Method B — also size the View via LayoutParams.width so
+                    # the fill is visible even on builds where scaleX glitches
+                    # (some MIUI / Honor / Huawei skins). Pick width from the
+                    # measured track_bg width once it's laid out.
+                    try:
+                        tw = int(track_state.get("track_w", 0) or 0)
+                        if tw <= 0:
+                            try:
+                                tw = int(track_bg.getWidth() or 0)
+                            except Exception:
+                                tw = 0
+                            if tw > 0:
+                                track_state["track_w"] = tw
+                        if tw > 0:
+                            new_w = max(0, int(round(tw * float(r))))
+                            try:
+                                lp = track_fill.getLayoutParams()
+                                if lp is not None and getattr(lp, "width", -1) != new_w:
+                                    lp.width = new_w
+                                    track_fill.setLayoutParams(lp)
+                                    # Method B uses width, reset scaleX to 1 so
+                                    # we don't double-shrink.
+                                    track_fill.setScaleX(1.0)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    try:
+                        track_fill.invalidate()
+                    except Exception:
+                        pass
+
                 try:
-                    track_fill.setPivotX(0.0)
-                    track_fill.animate().scaleX(r).setDuration(140).start()
+                    run_on_ui_thread(_apply)
                 except Exception:
                     try:
-                        track_fill.setScaleX(r)
+                        _apply()
                     except Exception:
                         pass
 
@@ -2764,61 +2815,108 @@ def _show_update_popup(manifest):
                 except Exception:
                     pass
 
-            # Smoothly tween percent text instead of jumping. Uses a tiny
-            # daemon thread that fires text updates onto the UI thread; an
-            # `anim_id` token cancels stale tweens when a new target arrives.
-            percent_state = {"current": 0.0, "anim_id": 0}
+            # Single persistent percent-tween thread. Eliminates the wobble
+            # bug where overlapping per-callback tweens raced each other on
+            # the UI queue (every progress chunk spawned a new 220ms tween,
+            # and queued setText lambdas arrived out of order producing the
+            # 19→21→20 flicker). Now: one daemon, always pulls the latest
+            # target, never decreases the displayed value.
+            percent_state = {
+                "current": 0.0,   # last value actually pushed to TextView
+                "target": 0.0,    # latest goal
+                "running": False,
+                "stop": False,
+                "last_text": "",
+            }
+
+            def _percent_loop():
+                try:
+                    idle_ticks = 0
+                    while not percent_state.get("stop"):
+                        cur = float(percent_state.get("current", 0.0) or 0.0)
+                        tgt = float(percent_state.get("target", 0.0) or 0.0)
+                        delta = tgt - cur
+                        if abs(delta) < 0.05:
+                            cur = tgt
+                            percent_state["current"] = cur
+                            idle_ticks += 1
+                            # Self-terminate after ~1s of no work.
+                            if idle_ticks > 30:
+                                percent_state["running"] = False
+                                return
+                            try:
+                                time.sleep(0.033)
+                            except Exception:
+                                return
+                            continue
+                        idle_ticks = 0
+                        # Move ~22% of the gap per frame → ~6 frames to converge.
+                        step = delta * 0.22
+                        if abs(step) < 0.25:
+                            step = 0.25 if step > 0 else -0.25
+                        new_cur = cur + step
+                        # Clamp so we don't overshoot or move backwards visually.
+                        if delta > 0 and new_cur > tgt:
+                            new_cur = tgt
+                        elif delta < 0 and new_cur < tgt:
+                            new_cur = tgt
+                        if new_cur < cur:
+                            new_cur = cur  # never retract — see _set_ratio note
+                        percent_state["current"] = new_cur
+                        txt = f"{int(round(new_cur))}%"
+                        if txt != percent_state.get("last_text"):
+                            percent_state["last_text"] = txt
+                            try:
+                                run_on_ui_thread(lambda t=txt: percent.setText(t))
+                            except Exception:
+                                pass
+                        try:
+                            time.sleep(0.033)  # ~30fps
+                        except Exception:
+                            return
+                finally:
+                    percent_state["running"] = False
 
             def _set_percent(value):
                 try:
                     target = float(value)
                 except Exception:
                     target = 0.0
-                start = float(percent_state.get("current", 0.0) or 0.0)
-                # Snap on big jumps backwards (idle reset), tween everywhere else.
-                if target < start - 5.0 or abs(target - start) < 0.5:
-                    try:
-                        run_on_ui_thread(lambda t=target: percent.setText(f"{int(round(t))}%"))
-                    except Exception:
-                        try:
-                            percent.setText(f"{int(round(target))}%")
-                        except Exception:
-                            pass
-                    percent_state["current"] = target
+                # Never push the target backwards — protects against stale
+                # progress ticks that would make the percent flicker down.
+                if target < float(percent_state.get("target", 0.0) or 0.0):
                     return
-                percent_state["anim_id"] += 1
-                my_id = percent_state["anim_id"]
-                steps = 14
-                duration_s = 0.22
-                step_s = duration_s / steps
-
-                def _tween():
-                    for i in range(1, steps + 1):
-                        if percent_state.get("anim_id") != my_id:
-                            return
-                        t = i / float(steps)
-                        # ease-out cubic
-                        eased = 1.0 - (1.0 - t) ** 3
-                        v = start + (target - start) * eased
-                        try:
-                            run_on_ui_thread(lambda v=v: percent.setText(f"{int(round(v))}%"))
-                        except Exception:
-                            pass
-                        try:
-                            time.sleep(step_s)
-                        except Exception:
-                            return
-                    if percent_state.get("anim_id") == my_id:
-                        percent_state["current"] = target
-
-                try:
-                    threading.Thread(target=_tween, daemon=True).start()
-                except Exception:
-                    try:
-                        percent.setText(f"{int(round(target))}%")
-                    except Exception:
-                        pass
+                percent_state["target"] = target
+                # Snap on tiny deltas — no animation needed.
+                cur = float(percent_state.get("current", 0.0) or 0.0)
+                if abs(target - cur) < 0.5:
                     percent_state["current"] = target
+                    txt = f"{int(round(target))}%"
+                    if txt != percent_state.get("last_text"):
+                        percent_state["last_text"] = txt
+                        try:
+                            run_on_ui_thread(lambda t=txt: percent.setText(t))
+                        except Exception:
+                            try:
+                                percent.setText(txt)
+                            except Exception:
+                                pass
+                    return
+                # Spin up the persistent loop on first real motion.
+                if not percent_state.get("running"):
+                    percent_state["running"] = True
+                    try:
+                        threading.Thread(target=_percent_loop, daemon=True).start()
+                    except Exception:
+                        # Fallback: just snap.
+                        percent_state["current"] = target
+                        try:
+                            run_on_ui_thread(lambda t=target: percent.setText(f"{int(round(t))}%"))
+                        except Exception:
+                            try:
+                                percent.setText(f"{int(round(target))}%")
+                            except Exception:
+                                pass
 
             def _ui_progress(idx, total_steps, current_path, applying, current_bytes,
                               current_total, overall_bytes, overall_total):
