@@ -1,6 +1,6 @@
 {
-  "version": "1.0.25",
-  "notes": "Beta 1.0.25 — фикс «Permission denied» при первой установке. Bootstrap сначала пробует app-private папки (getExternalFilesDir / getFilesDir, всегда писабельны без разрешений), Downloads/eblannft теперь fallback. Если запись упала с EACCES — чистим частичные файлы и пробуем следующую папку. Если ничего не помогло — показываем AlertDialog «Нужно разрешение» с кнопкой «Открыть настройки» (App Info Telegram'а) + просим WRITE_EXTERNAL_STORAGE на Android <11.",
+  "version": "1.0.26",
+  "notes": "Beta 1.0.26 — фикс «ценности» на чужих NFT. Теперь дополнительно патчим нативные поля gift.value_amount / value_currency / flags|=256 у синканутого подарка — Telegram сам рисует стандартную строку «GiftValue2» («~$X.XX»), как для реальных платных. Custom «Ценность»-строка через after-hook остаётся как fallback. Добавлены диагностические логи (HIT/MISS) в _get_remote_gift_meta_for_gift и _inject_local_gift_value_row — для дебага через logcat | grep NFT_ARCH.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

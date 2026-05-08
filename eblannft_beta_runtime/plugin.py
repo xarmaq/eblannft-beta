@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.25"
+__version__ = "1.0.26"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3376,6 +3376,18 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 pass
 
+            # Native «GiftValue2» row — see prod for rationale.
+            try:
+                value_cfg = entry.get("value_config")
+                if isinstance(value_cfg, dict):
+                    if self._apply_value_config_to_gift_native(g, value_cfg):
+                        try:
+                            _log(f"remote gift native value applied: id={int(get_val(g, 'id', 0) or 0)}")
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
             try:
                 meta = {
                     "_remote_origin_uid": int(user_id),
@@ -3398,6 +3410,13 @@ class NftClonerPlugin(BasePlugin):
                     cache[f"unique:{meta['unique_id']}"] = meta
                 if meta["slug"]:
                     cache[f"slug:{meta['slug']}"] = meta
+                try:
+                    _vc_str = str((meta.get("value_config") or {}).get("amount", "") or "")
+                    _gs_amt = int((meta.get("gift_stars_config") or {}).get("amount", 0) or 0)
+                    if _vc_str or _gs_amt > 0:
+                        _log(f"remote meta cached id={uniq} slug={meta['slug']!r} value={_vc_str!r} stars={_gs_amt}")
+                except Exception:
+                    pass
                 if len(cache) > 320:
                     for k in list(cache.keys())[: len(cache) - 256]:
                         cache.pop(k, None)
@@ -3495,34 +3514,98 @@ class NftClonerPlugin(BasePlugin):
         return inserted
 
     def _get_remote_gift_meta_for_gift(self, gift):
-        """Look up cached remote-sync meta for a TL gift object.
-        Tries gift.id → unique_id → slug.
-        """
         if gift is None:
             return None
         cache = getattr(self, "_sync_remote_gift_meta_cache", None)
         if not isinstance(cache, dict) or not cache:
+            try:
+                _log("remote gift meta lookup: cache empty")
+            except Exception:
+                pass
             return None
         try:
             gid = int(get_val(gift, "id", 0) or 0)
         except Exception:
             gid = 0
-        if gid > 0:
-            m = cache.get(f"id:{gid}")
-            if m:
-                return m
-            m = cache.get(f"unique:{gid}")
-            if m:
-                return m
         try:
             slug = str(get_val(gift, "slug", "") or "")
         except Exception:
             slug = ""
+        if gid > 0:
+            m = cache.get(f"id:{gid}")
+            if m:
+                try:
+                    _log(f"remote gift meta HIT id:{gid}")
+                except Exception:
+                    pass
+                return m
+            m = cache.get(f"unique:{gid}")
+            if m:
+                try:
+                    _log(f"remote gift meta HIT unique:{gid}")
+                except Exception:
+                    pass
+                return m
         if slug:
             m = cache.get(f"slug:{slug}")
             if m:
+                try:
+                    _log(f"remote gift meta HIT slug:{slug}")
+                except Exception:
+                    pass
                 return m
+        try:
+            _log(f"remote gift meta MISS id={gid} slug={slug!r} cache_size={len(cache)}")
+        except Exception:
+            pass
         return None
+
+    def _apply_value_config_to_gift_native(self, gift, value_config):
+        """Populate native gift.value_amount / value_currency + flags|=256
+        so Telegram's stock GiftValue2 row renders.
+        """
+        if gift is None or not isinstance(value_config, dict):
+            return False
+        try:
+            amount_str = str(value_config.get("amount", "") or "").strip()
+        except Exception:
+            amount_str = ""
+        if not amount_str:
+            return False
+        try:
+            currency = str(value_config.get("currency", "USD") or "USD").strip().upper()
+        except Exception:
+            currency = "USD"
+        if currency not in ("USD", "EUR", "RUB"):
+            currency = "USD"
+        try:
+            amount_float = float(amount_str.replace(",", "."))
+        except Exception:
+            return False
+        if amount_float <= 0:
+            return False
+        cents = int(round(amount_float * 100))
+        if cents <= 0:
+            return False
+        changed = False
+        try:
+            if self._set_field(gift, "value_amount", int(cents)):
+                changed = True
+        except Exception:
+            pass
+        try:
+            if self._set_field(gift, "value_currency", str(currency)):
+                changed = True
+        except Exception:
+            pass
+        try:
+            cur_flags = int(self._to_int(get_val(gift, "flags", 0), 0) or 0)
+            if not (cur_flags & 256):
+                self._set_field(gift, "flags", int(cur_flags | 256))
+                changed = True
+        except Exception:
+            pass
+        return changed
 
     def _sync_bootstrap(self):
         if not hasattr(self, "_eblannft_sync_lock"):
@@ -19687,9 +19770,19 @@ class NftClonerPlugin(BasePlugin):
 
         try:
             if is_remote:
-                if not self._is_value_config_active(cfg) and not self._is_gift_stars_config_active(stars_cfg):
+                value_active = self._is_value_config_active(cfg)
+                stars_active = self._is_gift_stars_config_active(stars_cfg)
+                if not value_active and not stars_active:
+                    try:
+                        _log(f"remote gift value row skipped (empty cfg): value_cfg={cfg} stars_cfg={stars_cfg}")
+                    except Exception:
+                        pass
                     return False
                 table.addRow(self._ui_text("Ценность"), self._ui_text(value_text))
+                try:
+                    _log(f"remote gift value row added: text={value_text!r}")
+                except Exception:
+                    pass
             else:
                 table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
             return True
