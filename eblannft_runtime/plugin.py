@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2944,31 +2944,38 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 pass
 
-            # Apply identity (owner / from / to) so Telegram's StarGiftSheet
-            # renders the "Владелец" row natively. The local _apply_*_to_objects
-            # helpers fall back to my_id when a uid field is 0 — for remote
-            # gifts that means the receiver, which is wrong. Patch the cfg
-            # so the fallback is the remote profile owner instead.
+            # Set owner_id on the gift so Telegram's StarGiftSheet renders
+            # the "Владелец" row. Do NOT propagate from_id / saved_from_id /
+            # to_id — Telegram interprets a non-null `gift.from_id` as
+            # "this user sent you the gift" (StarGiftSheet.java:8374) and
+            # plasters a "X sent you this gift on <date>" header above the
+            # sheet, which is wrong when the viewer just opened a third
+            # party's profile.
             try:
-                ent_identity = entry.get("identity_config")
-                if isinstance(ent_identity, dict):
-                    cfg = dict(ent_identity)
-                else:
-                    cfg = {}
-                if int(cfg.get("owner_user_id", 0) or 0) == 0:
-                    cfg["owner_user_id"] = int(user_id)
-                if int(cfg.get("from_user_id", 0) or 0) == 0:
-                    cfg["from_user_id"] = int(user_id)
-                if int(cfg.get("to_user_id", 0) or 0) == 0:
-                    cfg["to_user_id"] = int(user_id)
+                self._set_user_ref_fields(g, ["owner_id", "owner", "ownerId"], int(user_id))
+            except Exception:
+                pass
+            try:
+                self._set_user_ref_fields(wrapper, ["owner_id", "owner", "ownerId"], int(user_id))
+            except Exception:
+                pass
+            # Explicitly clear from_id / saved_from_id / sender_id on the
+            # wrapper if the sender's serialized b64 had them set (e.g. they
+            # had configured "from" in the constructor — that's a self-only
+            # decoration and must not surface as a gift-sender on the viewer).
+            for _null_field in ("from_id", "fromId", "saved_from_id", "savedFromId",
+                                  "sender_id", "senderId", "sender"):
                 try:
-                    self._apply_identity_config_to_objects(gift=g, wrapper=wrapper, identity_config=cfg)
+                    self._set_field(wrapper, _null_field, None)
                 except Exception:
-                    # Fallback: at least set owner_id to the remote profile uid
-                    try:
-                        self._set_user_ref_fields(g, ["owner_id", "owner", "ownerId"], int(user_id))
-                    except Exception:
-                        pass
+                    pass
+            # Also clear the SavedStarGift `flags & 2` bit ("from_id present")
+            # so any other Telegram code path that reads the flag doesn't
+            # falsely think there's a sender.
+            try:
+                cur_flags = int(self._to_int(get_val(wrapper, "flags", 0), 0) or 0)
+                if cur_flags & 2:
+                    self._set_field(wrapper, "flags", int(cur_flags & ~2))
             except Exception:
                 pass
 
