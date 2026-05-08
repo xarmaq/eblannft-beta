@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2170,6 +2170,11 @@ class NftClonerPlugin(BasePlugin):
             "plugin_id": "eblannft",
             "updated_at": int(time.time()),
             "gifts": [],
+            # Mirror local "hide official gifts" toggle to remote viewers.
+            # When true, other plugin users opening this profile filter out
+            # any non-plugin gift wrappers from the server response, matching
+            # what the owner sees locally.
+            "hide_official_gifts": bool(getattr(self, "hide_official_gifts_local", False)),
             "wear_active": False,
             "wear_collectible_id": 0,
             "wear_status_data": {},
@@ -3045,6 +3050,68 @@ class NftClonerPlugin(BasePlugin):
                 return 1
             except Exception:
                 return 0
+
+    def _sync_apply_remote_hide_official(self, gifts_list, user_id):
+        """If remote user's snapshot has hide_official_gifts=True, strip all
+        server-returned wrappers from the list. Called BEFORE
+        _sync_inject_remote_gifts so the list is clean by the time we
+        re-populate it with synced plugin gifts.
+        """
+        if gifts_list is None:
+            return 0
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return 0
+        # Mirror the freshness ladder used by _sync_inject_remote_gifts so
+        # we make the same hide/show decision the inject path does.
+        record = None
+        try:
+            record = client.get_cached_fresh(uid, max_age_sec=3)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
+            except Exception:
+                record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.get_cached(uid)
+            except Exception:
+                record = None
+        if not isinstance(record, dict):
+            return 0
+        try:
+            hide_flag = bool(record.get("hide_official_gifts", False))
+        except Exception:
+            hide_flag = False
+        if not hide_flag:
+            return 0
+        removed = 0
+        try:
+            for i in range(int(gifts_list.size() or 0) - 1, -1, -1):
+                try:
+                    gifts_list.remove(i)
+                    removed += 1
+                except Exception:
+                    continue
+        except Exception as e:
+            try:
+                _log(f"remote hide-official strip error: {e}")
+            except Exception:
+                pass
+        if removed:
+            try:
+                _log(f"Remote hide-official: stripped {removed} server gifts for uid={uid}")
+            except Exception:
+                pass
+        return removed
 
     def _bump_remote_gifts_list_total_count(self, user_id, desired_min=3):
         """Bump `totalCount` on any cached StarsController.GiftsList for the
@@ -4317,6 +4384,18 @@ class NftClonerPlugin(BasePlugin):
             if self._is_my_profile_activity():
                 self._refresh_profile_gifts_ui()
         except:
+            pass
+        # Push the new flag to the server immediately so other plugin users
+        # see the hidden state on the next pull (default 6s) instead of
+        # waiting for the next 12s push tick.
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is not None:
+                threading.Thread(
+                    target=lambda: client.push_my_state_now(force=True),
+                    daemon=True,
+                ).start()
+        except Exception:
             pass
         try:
             BulletinHelper.show_info("Official gifts hidden locally" if enabled else "Official gifts are visible again")
@@ -22864,6 +22943,18 @@ class NftClonerPlugin(BasePlugin):
                     except Exception:
                         remote_uid = 0
                     if remote_uid > 0 and remote_uid != my_id:
+                        # Honor remote owner's "hide official gifts" toggle:
+                        # if the foreign user enabled it locally, their snapshot
+                        # carries hide_official_gifts=True, and we strip all
+                        # server-returned (= real Telegram) gifts before our
+                        # _sync_inject_remote_gifts re-populates the list with
+                        # only the plugin/synced ones. This makes the hide
+                        # toggle visible to other plugin users, not just to
+                        # the owner.
+                        try:
+                            self._sync_apply_remote_hide_official(gifts_list, remote_uid)
+                        except Exception as _hoe:
+                            _log(f"  Remote sync hide-official error: {_hoe}")
                         try:
                             inj = self._sync_inject_remote_gifts(gifts_list, remote_uid)
                             if inj > 0:
