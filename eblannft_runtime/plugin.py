@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.7"
+__version__ = "1.0.8"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20172,8 +20172,43 @@ class NftClonerPlugin(BasePlugin):
             return False
         cfg = self._sanitize_value_config(e.get("value_config", None))
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
+        # If our before-hook successfully wrote native value fields the
+        # gift's `flags & 256` is set and `slug` is non-empty — Telegram's
+        # own GiftValue2 row at StarGiftSheet:4194 will render, so the
+        # plugin row would just be a duplicate ("Value ~€1,337 learn more"
+        # immediately followed by "Ценность ~1 337 € подробнее"). Skip
+        # ours when the native one is going to render and there is no
+        # extra info we add (custom stars line). The custom-stars case
+        # still goes through our row since native one only shows currency.
+        try:
+            native_value_amount = int(self._to_int(get_val(gift, "value_amount", 0), 0) or 0) if gift is not None else 0
+        except Exception:
+            native_value_amount = 0
+        try:
+            native_flags = int(self._to_int(get_val(gift, "flags", 0), 0) or 0) if gift is not None else 0
+        except Exception:
+            native_flags = 0
+        try:
+            native_slug = str(get_val(gift, "slug", "") or "") if gift is not None else ""
+        except Exception:
+            native_slug = ""
+        native_will_render = bool(
+            native_slug
+            and (native_flags & 256)
+            and native_value_amount > 0
+        )
+        stars_active = self._is_gift_stars_config_active(stars_cfg)
+        if native_will_render and not stars_active:
+            try:
+                _log(
+                    f"value row skipped (native will render): value_amount={native_value_amount} "
+                    f"slug={native_slug!r} flags&256={bool(native_flags & 256)}"
+                )
+            except Exception:
+                pass
+            return False
         value_text = self._format_local_value_text(cfg, placeholder="не задана")
-        if self._is_gift_stars_config_active(stars_cfg):
+        if stars_active:
             value_text = f"{value_text} • {self._format_gift_stars_text(stars_cfg)}"
         button_text = "подробнее"
 
@@ -20188,7 +20223,6 @@ class NftClonerPlugin(BasePlugin):
                 # Remote sync: render read-only, no "подробнее" link (the
                 # editor menu manipulates local library state we don't have).
                 value_active = self._is_value_config_active(cfg)
-                stars_active = self._is_gift_stars_config_active(stars_cfg)
                 if not value_active and not stars_active:
                     try:
                         _log(f"remote gift value row skipped (empty cfg): value_cfg={cfg} stars_cfg={stars_cfg}")
