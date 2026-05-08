@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.10"
+__version__ = "1.0.11"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2919,6 +2919,13 @@ class NftClonerPlugin(BasePlugin):
         ):
             self._sync_remote_gift_meta_cache = {}
 
+        # Buffers for two-phase insert: pinned ones go above the fold, normal
+        # ones get appended. Telegram orders saved gifts by `pinned_to_top`
+        # first; if we just `gifts_list.add(wrapper)` for a pinned gift it
+        # lands at the bottom anyway because we appended after the natural
+        # pinned block. Collect first, place properly after.
+        pending_pinned = []   # list of (wrapper, pinned_order_hint)
+        pending_normal = []
         inserted = 0
         for entry in gifts_raw:
             if not isinstance(entry, dict):
@@ -3018,13 +3025,103 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 pass
 
+            # Re-apply pinned / hidden / order_hint from the entry meta so
+            # pinned status survives even when the sender's serialized b64
+            # was captured before they pinned the gift.
+            is_pinned = False
+            entry_pinned = entry.get("pinned_override", None)
+            if entry_pinned is not None:
+                is_pinned = bool(entry_pinned)
+                for fn in ("pinned_to_top", "pinnedToTop", "pinned", "is_pinned", "isPinned"):
+                    try:
+                        self._set_field(wrapper, fn, bool(entry_pinned))
+                    except Exception:
+                        pass
+            else:
+                # No entry override → trust whatever the deserialized wrapper had.
+                try:
+                    is_pinned = bool(get_val(wrapper, "pinned_to_top", False))
+                except Exception:
+                    is_pinned = False
+
+            entry_hidden = entry.get("hidden_override", None)
+            if entry_hidden is not None:
+                for fn in ("hidden", "is_hidden", "isHidden"):
+                    try:
+                        self._set_field(wrapper, fn, bool(entry_hidden))
+                    except Exception:
+                        pass
+
             try:
-                gifts_list.add(wrapper)
-                inserted += 1
+                ord_hint = int(entry.get("order_hint", 0) or 0)
             except Exception:
-                pass
+                ord_hint = 0
+
+            inserted += 1
+            if is_pinned:
+                pending_pinned.append((wrapper, ord_hint))
+            else:
+                pending_normal.append(wrapper)
             if inserted >= 32:
                 break
+
+        # Phase 2: insert pinned wrappers above the fold, normal wrappers at end.
+        if pending_pinned or pending_normal:
+            try:
+                # Find first non-pinned index in the existing list — this is
+                # where new pinned items should slot in so they stay together
+                # with whatever pinned items the server already returned.
+                pin_anchor = 0
+                try:
+                    cur_size = int(gifts_list.size() or 0)
+                except Exception:
+                    cur_size = 0
+                for i in range(cur_size):
+                    try:
+                        it = gifts_list.get(i)
+                    except Exception:
+                        break
+                    try:
+                        if not bool(get_val(it, "pinned_to_top", False)):
+                            break
+                    except Exception:
+                        break
+                    pin_anchor = i + 1
+
+                # Sort our pinned candidates by descending order_hint so the
+                # most recently-pinned ones land closest to the top.
+                try:
+                    pending_pinned.sort(key=lambda t: -int(t[1] or 0))
+                except Exception:
+                    pass
+                for w, _oh in pending_pinned:
+                    try:
+                        gifts_list.add(int(pin_anchor), w)
+                        pin_anchor += 1
+                    except Exception:
+                        try:
+                            gifts_list.add(w)
+                        except Exception:
+                            pass
+                for w in pending_normal:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+            except Exception as _ie:
+                _log(f"sync remote insert error: {_ie}")
+                # Fallback: just append everything
+                for w, _oh in pending_pinned:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+                for w in pending_normal:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+
         return inserted
 
     def _get_remote_gift_meta_for_gift(self, gift):
