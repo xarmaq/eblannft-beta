@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.4"
+__version__ = "1.0.5"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3496,6 +3496,57 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             pass
         return None
+
+    def _apply_native_value_to_gift_for_sheet(self, gift):
+        """Resolve the value_config for `gift` (from either local library
+        for own gifts, or remote sync meta cache for foreign gifts) and
+        write the native gift.value_amount / value_currency / flags|=256
+        fields BEFORE Telegram's StarGiftSheet.set() reads them. This is
+        the only timing where the native «GiftValue2» row can be made to
+        appear — patching the same fields after-hook is too late.
+        """
+        if gift is None:
+            return False
+        cfg = None
+        # Local library — both for own profile and for any gift the user
+        # has stored locally (e.g. they added a foreign user's gift to
+        # their library and want to see their own value annotation).
+        try:
+            key = self._resolve_library_key_for_gift(gift)
+        except Exception:
+            key = None
+        if key:
+            try:
+                e = self._library_find_entry(key)
+            except Exception:
+                e = None
+            if isinstance(e, dict):
+                vc = e.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        # Remote sync — meta cache populated by _sync_inject_remote_gifts
+        # and the dedup-patch helper. Fires for foreign profile gifts.
+        if cfg is None:
+            try:
+                meta = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                meta = None
+            if isinstance(meta, dict):
+                vc = meta.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        if not isinstance(cfg, dict):
+            return False
+        try:
+            ok = bool(self._apply_value_config_to_gift_native(gift, cfg))
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                _log(f"native value pre-patch OK gift_id={int(get_val(gift, 'id', 0) or 0)}")
+            except Exception:
+                pass
+        return ok
 
     def _apply_value_config_to_gift_native(self, gift, value_config):
         """Populate Telegram's native gift.value_amount / value_currency /
@@ -22854,8 +22905,22 @@ class GiftSheetLocalValueHook(MethodHook):
                     gift = param.args[0]
             except:
                 gift = None
-            if gift is not None:
-                self.plugin._apply_local_ton_display_to_gift(gift)
+            if gift is None:
+                return
+            self.plugin._apply_local_ton_display_to_gift(gift)
+            # Native value patch — Telegram reads gift.value_amount /
+            # gift.value_currency / (gift.flags & 256) at StarGiftSheet:4194
+            # *during* set(), so mutating those fields in the after-hook is
+            # too late. We must patch them here, in before, so Telegram sees
+            # the spoofed value when it builds the table. Source of truth:
+            # local library entry for own gifts, sync meta cache for foreign.
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
         except Exception as e:
             _log(f"GiftSheetLocalValueHook before error: {e}")
 
