@@ -69,7 +69,7 @@ __id__ = "eblannft"
 __name__ = "eblanNFT"
 __description__ = "Это релиз eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3046,6 +3046,131 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 return 0
 
+    def _bump_remote_gifts_list_total_count(self, user_id, desired_min=3):
+        """Bump `totalCount` on any cached StarsController.GiftsList for the
+        given foreign dialog so the gift grid renders 3 columns even when the
+        server's real `count` is < 3.
+        """
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        try:
+            desired = max(int(desired_min or 0), 3)
+        except Exception:
+            desired = 3
+        bumped = 0
+        try:
+            CtrlClass = jclass("org.telegram.ui.Stars.StarsController")
+            try:
+                ctrl = CtrlClass.getInstance(self._get_user_account_or_default())
+            except Exception:
+                try:
+                    ctrl = CtrlClass.getInstance(0)
+                except Exception:
+                    ctrl = None
+            if ctrl is None:
+                return 0
+            try:
+                fields = list(self._iter_object_fields(ctrl))
+            except Exception:
+                fields = []
+            seen_ids = set()
+            for f in fields:
+                try:
+                    val = f.get(ctrl)
+                except Exception:
+                    continue
+                if val is None:
+                    continue
+                bumped += self._maybe_bump_gifts_list_total(val, uid, desired, seen_ids, depth=0)
+        except Exception as _ee:
+            try:
+                _log(f"_bump_remote_gifts_list_total_count error: {_ee}")
+            except Exception:
+                pass
+        if bumped:
+            try:
+                _log(f"Remote GiftsList totalCount bumped to >= {desired} for uid={uid} (n={bumped})")
+            except Exception:
+                pass
+        return bumped
+
+    def _maybe_bump_gifts_list_total(self, obj, uid, desired, seen_ids, depth=0):
+        if obj is None or depth > 3:
+            return 0
+        try:
+            oid = int(obj.hashCode())
+        except Exception:
+            oid = id(obj)
+        if oid in seen_ids:
+            return 0
+        seen_ids.add(oid)
+        bumped = 0
+        try:
+            cls_name = str(obj.getClass().getName() or "")
+        except Exception:
+            cls_name = ""
+        if "GiftsList" in cls_name:
+            try:
+                did = int(self._to_int(get_val(obj, "dialogId", 0), 0) or 0)
+            except Exception:
+                did = 0
+            if did == uid:
+                try:
+                    cur = int(self._to_int(get_val(obj, "totalCount", 0), 0) or 0)
+                except Exception:
+                    cur = 0
+                if cur < desired:
+                    try:
+                        if self._set_field(obj, "totalCount", int(desired)):
+                            bumped += 1
+                    except Exception:
+                        pass
+            return bumped
+        try:
+            if hasattr(obj, "size") and hasattr(obj, "get") and not hasattr(obj, "put"):
+                try:
+                    n = int(obj.size() or 0)
+                except Exception:
+                    n = 0
+                for i in range(min(n, 32)):
+                    try:
+                        bumped += self._maybe_bump_gifts_list_total(obj.get(i), uid, desired, seen_ids, depth + 1)
+                    except Exception:
+                        continue
+                return bumped
+            if hasattr(obj, "values") and hasattr(obj, "get") and hasattr(obj, "size"):
+                try:
+                    vals = obj.values()
+                    it = vals.iterator()
+                    cnt = 0
+                    while it.hasNext() and cnt < 64:
+                        cnt += 1
+                        try:
+                            bumped += self._maybe_bump_gifts_list_total(it.next(), uid, desired, seen_ids, depth + 1)
+                        except Exception:
+                            break
+                    return bumped
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return bumped
+
+    def _get_user_account_or_default(self):
+        try:
+            UC = jclass("org.telegram.messenger.UserConfig")
+            try:
+                return int(UC.selectedAccount)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return 0
+
     def _sync_inject_remote_gifts(self, gifts_list, user_id):
         if gifts_list is None or int(user_id or 0) <= 0:
             return 0
@@ -3491,6 +3616,36 @@ class NftClonerPlugin(BasePlugin):
                 except Exception:
                     pass
                 return m
+        # Fallback: walk all meta entries comparing slug or unique_id. Catches
+        # cases where Telegram refreshed the gift via getUniqueStarGift between
+        # our injection and the sheet-open and the field-name shape we keyed
+        # on no longer matches.
+        try:
+            for k, m in cache.items():
+                if not isinstance(m, dict):
+                    continue
+                try:
+                    m_slug = str(m.get("slug", "") or "")
+                except Exception:
+                    m_slug = ""
+                if slug and m_slug and m_slug == slug:
+                    try:
+                        _log(f"remote gift meta HIT walk:slug={slug}")
+                    except Exception:
+                        pass
+                    return m
+                try:
+                    m_uniq = int(m.get("unique_id", 0) or 0)
+                except Exception:
+                    m_uniq = 0
+                if gid > 0 and m_uniq > 0 and m_uniq == gid:
+                    try:
+                        _log(f"remote gift meta HIT walk:unique={gid}")
+                    except Exception:
+                        pass
+                    return m
+        except Exception:
+            pass
         try:
             _log(f"remote gift meta MISS id={gid} slug={slug!r} cache_size={len(cache)}")
         except Exception:
@@ -19380,23 +19535,53 @@ class NftClonerPlugin(BasePlugin):
                     params = list(m.getParameterTypes() or [])
                 except:
                     continue
-                if len(params) != 2:
-                    continue
                 try:
-                    p0 = str(params[0].getName() or "")
-                    p1 = str(params[1].getName() or "").lower()
-                except:
+                    p_names = [str(p.getName() or "") for p in params]
+                except Exception:
                     continue
-                if "TL_stars$TL_starGiftUnique" not in p0:
+
+                # Variant A: set(TL_starGiftUnique gift, boolean refunded)
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_starGiftUnique" in p_names[0]
+                    and "boolean" in p_names[1].lower()
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
+                    hooked += 1
                     continue
-                if "boolean" not in p1:
+
+                # Variant B: set(TL_savedStarGift saved, IGiftsList list)
+                # — entry point for the profile-grid tap path. Patches
+                # saved.gift before Telegram casts it to TL_starGiftUnique.
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_savedStarGift" in p_names[0]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSavedSetHook(self)))
+                    hooked += 1
                     continue
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
-                hooked += 1
+
+                # Variant C: set(String slug, TL_starGiftUnique gift, IGiftsList list)
+                if (
+                    len(params) == 3
+                    and "java.lang.String" in p_names[0]
+                    and "TL_stars$TL_starGiftUnique" in p_names[1]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSlugSetHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"Local gift value hook error: {e}")
             return
@@ -22602,6 +22787,34 @@ class NftClonerPlugin(BasePlugin):
                             self._sync_schedule_remote_user_patch(remote_uid)
                         except Exception as _re2:
                             _log(f"  Remote sync schedule error: {_re2}")
+                        # Bump response.count >= max(3, gifts_list.size()). Telegram's
+                        # ProfileGiftsContainer$Page.fillItems() computes the grid
+                        # spanCount as Math.min(3, list.totalCount), and totalCount is
+                        # later assigned from rez.count in StarsController.GiftsList.
+                        # Without this bump a foreign profile with 1 real gift renders
+                        # injected gifts as full-width banners (1 column) instead of
+                        # the expected 3x3 grid.
+                        try:
+                            try:
+                                _gs = int(gifts_list.size() or 0)
+                            except Exception:
+                                _gs = 0
+                            _desired_count = max(3, _gs)
+                            self._sync_saved_gifts_owner_count_fields(
+                                response,
+                                gifts_list=gifts_list,
+                                field_names=["count"],
+                                desired_min=_desired_count,
+                            )
+                        except Exception as _ce:
+                            _log(f"  Remote sync count bump error: {_ce}")
+                        # Belt-and-suspenders: also bump totalCount on any cached
+                        # StarsController.GiftsList for this dialog so a fillItems()
+                        # racing the response delivery still gets spanCount=3.
+                        try:
+                            self._bump_remote_gifts_list_total_count(remote_uid, desired_min=_desired_count)
+                        except Exception as _be:
+                            _log(f"  Remote GiftsList totalCount bump error: {_be}")
                     _log(f"  Skip saved gifts patch: req_uid={req_user_id}, owner_uid={owner_user_id}, target_uid={target_user_id}, my_id={my_id}")
                     return
 
@@ -22937,6 +23150,90 @@ class GiftSheetLocalValueHook(MethodHook):
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook error: {e}")
+
+class GiftSheetSavedSetHook(MethodHook):
+    """Hook StarGiftSheet.set(TL_savedStarGift, IGiftsList).
+
+    Fires on every profile-grid tap. Pre-patches saved.gift (value_amount /
+    value_currency / flags|256) BEFORE Telegram's body casts it to
+    TL_starGiftUnique and reads those fields.
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            saved = None
+            try:
+                if param.args and len(param.args) >= 1:
+                    saved = param.args[0]
+            except Exception:
+                saved = None
+            if saved is None:
+                return
+            try:
+                gift = get_val(saved, "gift", None)
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"saved-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSavedSetHook before error: {e}")
+            except Exception:
+                pass
+
+
+class GiftSheetSlugSetHook(MethodHook):
+    """Hook StarGiftSheet.set(String slug, TL_starGiftUnique, IGiftsList).
+
+    Used by the slug-deeplink path (getUniqueStarGift response).
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            gift = None
+            try:
+                if param.args and len(param.args) >= 2:
+                    gift = param.args[1]
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"slug-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSlugSetHook before error: {e}")
+            except Exception:
+                pass
+
 
 class GiftMenuPressedHook(MethodHook):
     """
