@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.26"
+__version__ = "1.0.27"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3327,12 +3327,19 @@ class NftClonerPlugin(BasePlugin):
             try:
                 g = get_val(wrapper, "gift", None)
                 gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
-                if gid > 0 and gid in existing_ids:
-                    continue
-                if gid > 0:
-                    existing_ids.add(gid)
             except Exception:
-                pass
+                gid = 0
+            # Dedup case: gift already in server response. Patch the existing
+            # wrapper in-place instead of skipping (otherwise our value /
+            # stars / TON configs never reach the gift the user actually sees).
+            if gid > 0 and gid in existing_ids:
+                try:
+                    self._sync_patch_existing_gift_in_list(gifts_list, gid, entry, int(user_id))
+                except Exception as _pe:
+                    _log(f"sync remote dedup-patch error gid={gid}: {_pe}")
+                continue
+            if gid > 0:
+                existing_ids.add(gid)
 
             # Set owner_id on the gift so Telegram's StarGiftSheet renders
             # the "Владелец" row. Do NOT propagate from_id / saved_from_id /
@@ -3512,6 +3519,102 @@ class NftClonerPlugin(BasePlugin):
                         pass
 
         return inserted
+
+    def _sync_patch_existing_gift_in_list(self, gifts_list, gid, entry, owner_uid):
+        """Walk gifts_list, find a wrapper whose inner gift.id == gid, and
+        apply the per-gift configs from `entry` to it in-place. Also populates
+        the remote-meta cache keyed by gid so the StarGiftSheet after-hook
+        can later find the cfg for that gid.
+        """
+        if gifts_list is None or gid <= 0 or not isinstance(entry, dict):
+            return False
+        try:
+            size = int(gifts_list.size() or 0)
+        except Exception:
+            size = 0
+        target_w = None
+        target_g = None
+        for i in range(size):
+            try:
+                w = gifts_list.get(i)
+            except Exception:
+                continue
+            if w is None:
+                continue
+            try:
+                g = get_val(w, "gift", None)
+            except Exception:
+                g = None
+            if g is None:
+                continue
+            try:
+                this_id = int(get_val(g, "id", 0) or 0)
+            except Exception:
+                this_id = 0
+            if this_id == gid:
+                target_w = w
+                target_g = g
+                break
+        if target_g is None:
+            try:
+                _log(f"sync remote dedup-patch: gid={gid} not found in list (size={size})")
+            except Exception:
+                pass
+            return False
+
+        try:
+            value_cfg = entry.get("value_config")
+            if isinstance(value_cfg, dict):
+                if self._apply_value_config_to_gift_native(target_g, value_cfg):
+                    try:
+                        _log(f"sync remote dedup-patch: native value applied gid={gid}")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            stars_cfg = entry.get("gift_stars_config")
+            if isinstance(stars_cfg, dict):
+                self._apply_gift_stars_config_to_objects(gift=target_g, wrapper=target_w, stars_config=stars_cfg)
+        except Exception:
+            pass
+        try:
+            cache = getattr(self, "_sync_remote_gift_meta_cache", None)
+            if not isinstance(cache, dict):
+                cache = {}
+                self._sync_remote_gift_meta_cache = cache
+            try:
+                slug = str(get_val(target_g, "slug", "") or "")
+            except Exception:
+                slug = ""
+            try:
+                unique_id_val = int(entry.get("unique_id", 0) or 0)
+            except Exception:
+                unique_id_val = 0
+            meta = {
+                "_remote_origin_uid": int(owner_uid or 0),
+                "identity_config": entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {},
+                "value_config": entry.get("value_config") if isinstance(entry.get("value_config"), dict) else {},
+                "gift_stars_config": entry.get("gift_stars_config") if isinstance(entry.get("gift_stars_config"), dict) else {},
+                "ton_display_config": entry.get("ton_display_config") if isinstance(entry.get("ton_display_config"), dict) else {},
+                "title": str(entry.get("title", "") or ""),
+                "slug": slug or str(entry.get("slug", "") or ""),
+                "unique_id": unique_id_val,
+            }
+            cache[f"id:{gid}"] = meta
+            if unique_id_val > 0:
+                cache[f"unique:{unique_id_val}"] = meta
+            if meta["slug"]:
+                cache[f"slug:{meta['slug']}"] = meta
+            try:
+                _vc_str = str((meta.get("value_config") or {}).get("amount", "") or "")
+                if _vc_str:
+                    _log(f"sync remote dedup-patch: meta cached gid={gid} value={_vc_str!r}")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return True
 
     def _get_remote_gift_meta_for_gift(self, gift):
         if gift is None:
