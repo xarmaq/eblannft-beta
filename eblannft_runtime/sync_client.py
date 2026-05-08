@@ -28,10 +28,14 @@ from urllib.request import Request, urlopen
 
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8787"
-DEFAULT_PUSH_INTERVAL_SEC = 30
-DEFAULT_PULL_INTERVAL_SEC = 25
+# Tighter intervals so remote NFTs/wear actually feel "live".
+# push: my snapshot uploaded every 12s (was 30)
+# pull: per-uid cache considered stale after 6s (was 25) — triggers async refetch
+# STALE_CACHE_SEC: get_cached_fresh() returns None if older than 4s (was 15)
+DEFAULT_PUSH_INTERVAL_SEC = 12
+DEFAULT_PULL_INTERVAL_SEC = 6
 DEFAULT_TIMEOUT_SEC = 6
-STALE_CACHE_SEC = 15
+STALE_CACHE_SEC = 4
 USER_KEY_PREFIX = "tg:"
 
 
@@ -64,8 +68,8 @@ class SyncClient(object):
                  get_my_user_id=None):
         self.server_url = (server_url or DEFAULT_SERVER_URL).rstrip("/")
         self.plugin_key = plugin_key or ""
-        self.push_interval = max(15, int(push_interval or DEFAULT_PUSH_INTERVAL_SEC))
-        self.pull_interval = max(20, int(pull_interval or DEFAULT_PULL_INTERVAL_SEC))
+        self.push_interval = max(8, int(push_interval or DEFAULT_PUSH_INTERVAL_SEC))
+        self.pull_interval = max(3, int(pull_interval or DEFAULT_PULL_INTERVAL_SEC))
         self.timeout = max(2, int(timeout or DEFAULT_TIMEOUT_SEC))
         self.collect_local_state = collect_local_state
         self.on_remote_state = on_remote_state
