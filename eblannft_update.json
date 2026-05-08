@@ -1,6 +1,6 @@
 {
-  "version": "1.0.22",
-  "notes": "Beta 1.0.22 — закреплённые NFT теперь правильно показываются вверху раздела «Подарки» на чужих профилях. Раньше синканутые подарки добавлялись в конец списка независимо от pinned_to_top. Теперь два прохода: deserialize + восстановление pinned/hidden/order_hint из меты, потом вставка закреплённых в позицию после серверных pinned-блоков, остальные — в конец. Сортировка закреплённых по order_hint.",
+  "version": "1.0.23",
+  "notes": "Beta 1.0.23 — локальный рейтинг звёзд теперь синкается между клиентами. В snapshot уезжает rating_state {enabled, value, level, next_goal}. При просмотре чужого профиля плагин патчит userFull.stars_rating через новые helpers _apply_remote_rating_to_full_user / _apply_remote_rating_to_stars_rating_obj (без self-only гейта).",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
