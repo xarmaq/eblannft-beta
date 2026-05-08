@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.30"
+__version__ = "1.0.31"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20103,12 +20103,66 @@ class NftClonerPlugin(BasePlugin):
             if e:
                 is_remote = True
         if not e:
+            try:
+                gid_dbg = int(get_val(gift, "id", 0) or 0) if gift is not None else 0
+                slug_dbg = str(get_val(gift, "slug", "") or "") if gift is not None else ""
+                _log(f"value row skip: no entry resolved (key={key!r}, gid={gid_dbg}, slug={slug_dbg!r})")
+            except Exception:
+                pass
             return False
-        try:
-            table = get_val(sheet, "tableView", None)
-        except:
-            table = None
+        # tableView is normally a direct field on StarGiftSheet, but on some
+        # Telegram-fork builds the field name is mangled (R8 keep rules vary).
+        # Walk a small allowlist of likely names, then fall back to scanning
+        # declared fields for the first TableView-typed one. Without this the
+        # «Ценность» row silently vanished on certain installs and the only
+        # symptom was an officially-formatted gift with no Value row.
+        table = None
+        for tv_name in ("tableView", "table", "infoTable", "tableViewBottom"):
+            try:
+                v = get_val(sheet, tv_name, None)
+            except Exception:
+                v = None
+            if v is None:
+                continue
+            try:
+                cls_name = str(v.getClass().getName() or "")
+            except Exception:
+                cls_name = ""
+            if "TableView" in cls_name or hasattr(v, "addRow"):
+                table = v
+                break
         if table is None:
+            try:
+                cls = sheet.getClass()
+                while cls is not None:
+                    for f in cls.getDeclaredFields():
+                        try:
+                            f.setAccessible(True)
+                            v = f.get(sheet)
+                        except Exception:
+                            continue
+                        if v is None:
+                            continue
+                        try:
+                            cls_name = str(v.getClass().getName() or "")
+                        except Exception:
+                            cls_name = ""
+                        if "TableView" in cls_name and hasattr(v, "addRow"):
+                            table = v
+                            break
+                    if table is not None:
+                        break
+                    try:
+                        cls = cls.getSuperclass()
+                    except Exception:
+                        cls = None
+            except Exception:
+                pass
+        if table is None:
+            try:
+                _log("value row skip: tableView not found on StarGiftSheet")
+            except Exception:
+                pass
             return False
         cfg = self._sanitize_value_config(e.get("value_config", None))
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
@@ -23122,18 +23176,32 @@ class GiftSheetLocalValueHook(MethodHook):
             _log(f"GiftSheetLocalValueHook before error: {e}")
 
     def after_hooked_method(self, param):
+        sheet = None
+        gift = None
         try:
             sheet = getattr(param, "thisObject", None)
-            gift = None
             try:
                 if param.args and len(param.args) >= 1:
                     gift = param.args[0]
-            except:
+            except Exception:
                 gift = None
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook after preamble error: {e}")
+            return
+        # Each side-effect lives in its own try so an exception in the TON
+        # blockchain row doesn't suppress the «Ценность» row injection
+        # (and vice versa). Earlier they shared a try/except — a single
+        # throw in the first call meant the «Ценность» row silently never
+        # rendered, which surfaced as "plugin gifts missing the Value row
+        # like real Telegram gifts have".
+        try:
             self.plugin._apply_local_ton_blockchain_line(sheet, gift=gift)
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook ton-line error: {e}")
+        try:
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
-            _log(f"GiftSheetLocalValueHook error: {e}")
+            _log(f"GiftSheetLocalValueHook value-row error: {e}")
 
 class GiftSheetSavedSetHook(MethodHook):
     """Hook StarGiftSheet.set(TL_savedStarGift, IGiftsList).
