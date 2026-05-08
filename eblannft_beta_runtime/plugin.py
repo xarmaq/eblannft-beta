@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.36"
+__version__ = "1.0.37"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2461,6 +2461,13 @@ class NftClonerPlugin(BasePlugin):
         return snapshot
 
     def _sync_on_remote_state(self, user_key, record):
+        # Detect a content change so we know whether to force a gifts-list
+        # invalidate. The snapshot's gift identities are the definitive
+        # signal — `updated_at` bumps on every push (even no-op ones), so
+        # comparing identities avoids needless re-fetches that would
+        # otherwise loop with our request_remote_state(force=True) ticks
+        # in _sync_inject_remote_gifts.
+        prev_record = None
         try:
             lock = getattr(self, "_eblannft_sync_lock", None)
             if lock is None:
@@ -2470,15 +2477,11 @@ class NftClonerPlugin(BasePlugin):
                 if cache is None:
                     cache = {}
                     self._eblannft_sync_remote_cache = cache
+                prev_record = cache.get(user_key)
                 cache[user_key] = record
         except Exception:
             pass
-        # As soon as a fresh snapshot lands, patch the cached MessagesController
-        # User/UserFull for that uid and post userInfoDidLoad — this is what
-        # actually makes the rating badge / gifts count / wear ring repaint
-        # without waiting for the next getFullUser fetch. Without this nudge
-        # the foreign profile keeps showing whatever Telegram had cached when
-        # the screen first opened (e.g. default rating level = 1).
+
         try:
             uid = 0
             try:
@@ -2489,13 +2492,108 @@ class NftClonerPlugin(BasePlugin):
                     uid = int(key or 0)
             except Exception:
                 uid = 0
-            if uid > 0:
+            if uid <= 0:
+                return
+            # Patch the cached MessagesController User/UserFull and post
+            # userInfoDidLoad — refreshes the rating badge / gifts count /
+            # wear ring without waiting for the next getFullUser fetch.
+            try:
+                self._sync_schedule_remote_user_patch(uid, delays=[60, 240])
+            except Exception:
+                pass
+            # When the gift identities in the snapshot change vs what we
+            # already cached, force Telegram's StarsController.GiftsList
+            # for this dialog to reload — getSavedStarGifts re-fires, our
+            # network wrapper intercepts, and _sync_inject_remote_gifts
+            # picks up the now-fresh snapshot. This fixes the "gifts
+            # randomly don't show on first profile open" symptom: cold
+            # opens were racing the blocking 2s fetch and silently
+            # rendering an empty list when the fetch lost the race.
+            try:
+                if self._sync_gifts_identity_changed(prev_record, record):
+                    self._sync_invalidate_remote_gifts_list(uid)
+            except Exception as _ie:
                 try:
-                    self._sync_schedule_remote_user_patch(uid, delays=[60, 240])
+                    _log(f"sync invalidate-on-arrival error: {_ie}")
                 except Exception:
                     pass
         except Exception:
             pass
+
+    def _sync_gifts_identity_changed(self, prev_record, new_record):
+        def _ids(rec):
+            if not isinstance(rec, dict):
+                return None
+            gifts = rec.get("gifts") or []
+            if not isinstance(gifts, list):
+                return None
+            out = []
+            for g in gifts:
+                if not isinstance(g, dict):
+                    continue
+                # Prefer unique_id when present; fall back to slug. b64-only
+                # entries are still distinguishable via slug since the snapshot
+                # builder always populates that field.
+                uid_g = int(g.get("unique_id", 0) or 0)
+                slug_g = str(g.get("slug", "") or "")
+                if uid_g > 0:
+                    out.append(("u", uid_g))
+                elif slug_g:
+                    out.append(("s", slug_g))
+            out.sort()
+            return tuple(out)
+
+        prev_ids = _ids(prev_record)
+        new_ids = _ids(new_record)
+        # First arrival (prev was None) counts as a change — that's exactly
+        # the case where the foreign profile opened before the fetch landed
+        # and rendered an empty grid.
+        if new_ids is None:
+            return False
+        if prev_ids is None:
+            return bool(new_ids)
+        return prev_ids != new_ids
+
+    def _sync_invalidate_remote_gifts_list(self, user_id):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return False
+        try:
+            CtrlClass = jclass("org.telegram.ui.Stars.StarsController")
+            try:
+                ctrl = CtrlClass.getInstance(self._get_user_account_or_default())
+            except Exception:
+                try:
+                    ctrl = CtrlClass.getInstance(0)
+                except Exception:
+                    ctrl = None
+            if ctrl is None:
+                return False
+
+            def _do_invalidate():
+                try:
+                    ctrl.invalidateProfileGifts(int(uid))
+                    _log(f"invalidated profile gifts for uid={uid} (snapshot identities changed)")
+                except Exception as e:
+                    try:
+                        _log(f"invalidateProfileGifts error uid={uid}: {e}")
+                    except Exception:
+                        pass
+
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_do_invalidate))
+            except Exception:
+                _do_invalidate()
+            return True
+        except Exception as e:
+            try:
+                _log(f"_sync_invalidate_remote_gifts_list setup error: {e}")
+            except Exception:
+                pass
+            return False
 
     def request_remote_profile(self, user_id):
         try:
@@ -3530,8 +3628,16 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             record = None
         if not isinstance(record, dict):
+            # First-open fetches are racing ProfileActivity's render — give
+            # the HTTP round-trip 4s instead of 2s. If the user has never
+            # opened this foreign profile before there's no cached record,
+            # and a 2s timeout was losing the race often enough to surface
+            # as "gifts randomly don't show". The async invalidate path in
+            # _sync_on_remote_state will retry anyway when the snapshot
+            # eventually lands, so this is purely an immediate-rendering
+            # quality knob.
             try:
-                fetched = client.fetch_remote_state_blocking(user_id, max_timeout=2.0)
+                fetched = client.fetch_remote_state_blocking(user_id, max_timeout=4.0)
                 if isinstance(fetched, dict):
                     record = fetched
             except Exception as _fe:
