@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.20"
+__version__ = "1.0.21"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -2727,17 +2727,54 @@ def _show_update_popup(manifest):
             lp_close.topMargin = AndroidUtilities.dp(4)
             outer.addView(close_btn, lp_close)
 
+            track_state = {"ratio": 0.0, "track_w": 0}
+
             def _set_ratio(ratio):
                 try:
                     r = max(0.0, min(1.0, float(ratio or 0.0)))
                 except Exception:
                     r = 0.0
+                if r < float(track_state.get("ratio", 0.0) or 0.0) - 0.02:
+                    return
+                track_state["ratio"] = r
+
+                def _apply():
+                    try:
+                        track_fill.setPivotX(0.0)
+                        track_fill.setScaleX(float(r))
+                    except Exception:
+                        pass
+                    try:
+                        tw = int(track_state.get("track_w", 0) or 0)
+                        if tw <= 0:
+                            try:
+                                tw = int(track_bg.getWidth() or 0)
+                            except Exception:
+                                tw = 0
+                            if tw > 0:
+                                track_state["track_w"] = tw
+                        if tw > 0:
+                            new_w = max(0, int(round(tw * float(r))))
+                            try:
+                                lp = track_fill.getLayoutParams()
+                                if lp is not None and getattr(lp, "width", -1) != new_w:
+                                    lp.width = new_w
+                                    track_fill.setLayoutParams(lp)
+                                    track_fill.setScaleX(1.0)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    try:
+                        track_fill.invalidate()
+                    except Exception:
+                        pass
+
                 try:
-                    track_fill.setPivotX(0.0)
-                    track_fill.animate().scaleX(r).setDuration(140).start()
+                    run_on_ui_thread(_apply)
                 except Exception:
                     try:
-                        track_fill.setScaleX(r)
+                        _apply()
                     except Exception:
                         pass
 
@@ -2753,56 +2790,94 @@ def _show_update_popup(manifest):
                 except Exception:
                     pass
 
-            percent_state = {"current": 0.0, "anim_id": 0}
+            percent_state = {
+                "current": 0.0,
+                "target": 0.0,
+                "running": False,
+                "stop": False,
+                "last_text": "",
+            }
+
+            def _percent_loop():
+                try:
+                    idle_ticks = 0
+                    while not percent_state.get("stop"):
+                        cur = float(percent_state.get("current", 0.0) or 0.0)
+                        tgt = float(percent_state.get("target", 0.0) or 0.0)
+                        delta = tgt - cur
+                        if abs(delta) < 0.05:
+                            cur = tgt
+                            percent_state["current"] = cur
+                            idle_ticks += 1
+                            if idle_ticks > 30:
+                                percent_state["running"] = False
+                                return
+                            try:
+                                time.sleep(0.033)
+                            except Exception:
+                                return
+                            continue
+                        idle_ticks = 0
+                        step = delta * 0.22
+                        if abs(step) < 0.25:
+                            step = 0.25 if step > 0 else -0.25
+                        new_cur = cur + step
+                        if delta > 0 and new_cur > tgt:
+                            new_cur = tgt
+                        elif delta < 0 and new_cur < tgt:
+                            new_cur = tgt
+                        if new_cur < cur:
+                            new_cur = cur
+                        percent_state["current"] = new_cur
+                        txt = f"{int(round(new_cur))}%"
+                        if txt != percent_state.get("last_text"):
+                            percent_state["last_text"] = txt
+                            try:
+                                run_on_ui_thread(lambda t=txt: percent.setText(t))
+                            except Exception:
+                                pass
+                        try:
+                            time.sleep(0.033)
+                        except Exception:
+                            return
+                finally:
+                    percent_state["running"] = False
 
             def _set_percent(value):
                 try:
                     target = float(value)
                 except Exception:
                     target = 0.0
-                start = float(percent_state.get("current", 0.0) or 0.0)
-                if target < start - 5.0 or abs(target - start) < 0.5:
-                    try:
-                        run_on_ui_thread(lambda t=target: percent.setText(f"{int(round(t))}%"))
-                    except Exception:
-                        try:
-                            percent.setText(f"{int(round(target))}%")
-                        except Exception:
-                            pass
-                    percent_state["current"] = target
+                if target < float(percent_state.get("target", 0.0) or 0.0):
                     return
-                percent_state["anim_id"] += 1
-                my_id = percent_state["anim_id"]
-                steps = 14
-                duration_s = 0.22
-                step_s = duration_s / steps
-
-                def _tween():
-                    for i in range(1, steps + 1):
-                        if percent_state.get("anim_id") != my_id:
-                            return
-                        t = i / float(steps)
-                        eased = 1.0 - (1.0 - t) ** 3
-                        v = start + (target - start) * eased
-                        try:
-                            run_on_ui_thread(lambda v=v: percent.setText(f"{int(round(v))}%"))
-                        except Exception:
-                            pass
-                        try:
-                            time.sleep(step_s)
-                        except Exception:
-                            return
-                    if percent_state.get("anim_id") == my_id:
-                        percent_state["current"] = target
-
-                try:
-                    threading.Thread(target=_tween, daemon=True).start()
-                except Exception:
-                    try:
-                        percent.setText(f"{int(round(target))}%")
-                    except Exception:
-                        pass
+                percent_state["target"] = target
+                cur = float(percent_state.get("current", 0.0) or 0.0)
+                if abs(target - cur) < 0.5:
                     percent_state["current"] = target
+                    txt = f"{int(round(target))}%"
+                    if txt != percent_state.get("last_text"):
+                        percent_state["last_text"] = txt
+                        try:
+                            run_on_ui_thread(lambda t=txt: percent.setText(t))
+                        except Exception:
+                            try:
+                                percent.setText(txt)
+                            except Exception:
+                                pass
+                    return
+                if not percent_state.get("running"):
+                    percent_state["running"] = True
+                    try:
+                        threading.Thread(target=_percent_loop, daemon=True).start()
+                    except Exception:
+                        percent_state["current"] = target
+                        try:
+                            run_on_ui_thread(lambda t=target: percent.setText(f"{int(round(t))}%"))
+                        except Exception:
+                            try:
+                                percent.setText(f"{int(round(target))}%")
+                            except Exception:
+                                pass
 
             def _ui_progress(idx, total_steps, current_path, applying, current_bytes,
                               current_total, overall_bytes, overall_total):

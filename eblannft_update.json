@@ -1,6 +1,6 @@
 {
-  "version": "1.0.20",
-  "notes": "Beta 1.0.20 — фикс ложной надписи «X sent you this gift on <date>» на чужих NFT. Telegram показывает эту строку всегда когда gift.from_id != null, без проверки получателя. В предыдущем релизе мы дефолтили from_user_id = uid профиля, и Telegram думал «этот пользователь подарил мне». Теперь при синке устанавливается только owner_id, а from_id / saved_from_id / sender_id явно занулены + снят бит 0x2 во flags.",
+  "version": "1.0.21",
+  "notes": "Beta 1.0.21 — два фикса в попапе обновления: (1) полоска прогресса теперь действительно заполняется (раньше ViewPropertyAnimator.scaleX тихо игнорировался на некоторых Android-сборках). Прямой setScaleX + LayoutParams.width дубль. (2) Проценты больше не прыгают 19→21→20 — заменил per-callback tween-тред на один persistent тред с always-fresh target, который монотонно растёт.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
