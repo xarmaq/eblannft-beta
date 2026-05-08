@@ -1,6 +1,6 @@
 {
-  "version": "1.0.27",
-  "notes": "Beta 1.0.27 — НАСТОЯЩАЯ причина почему «ценность» не показывалась. Если NFT в библиотеке — реальный Telegram-подарок, он уже в getSavedStarGifts ответе с сервера. Наш sync-инжект пропускал его как duplicate, server-копия оставалась без наших патчей. Теперь при дедуп-skipе walk'аем gifts_list, находим существующий wrapper по gid и патчим ЕГО inner gift: native value fields (value_amount/currency/flags|=256) + meta cache для after-hook. Patches попадают на тот gift который user реально видит.",
+  "version": "1.0.28",
+  "notes": "Beta 1.0.28 — настоящий фикс «ценности» на чужих профилях. Telegram читает gift.value_amount / value_currency / flags|=256 ВНУТРИ StarGiftSheet.set() на line 4194 — до того как срабатывает наш after-hook. Поэтому мутировать поля в инжект-фазе или after-hook бесполезно. Теперь native-патч в before_hooked_method GiftSheetLocalValueHook: синхронно резолвим value_config (локальная библиотека для своего, remote-meta-cache для чужого) и пишем поля прямо перед чтением. Telegram видит уже пропатченные значения и сам рисует «GiftValue2» строку.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

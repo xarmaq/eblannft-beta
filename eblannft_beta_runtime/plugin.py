@@ -69,7 +69,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.27"
+__version__ = "1.0.28"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -3662,6 +3662,50 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             pass
         return None
+
+    def _apply_native_value_to_gift_for_sheet(self, gift):
+        """Resolve the value_config for `gift` (local library or remote
+        sync meta cache) and write native value fields BEFORE Telegram's
+        StarGiftSheet.set() reads them. Patching in the after-hook is too
+        late for the native «GiftValue2» row.
+        """
+        if gift is None:
+            return False
+        cfg = None
+        try:
+            key = self._resolve_library_key_for_gift(gift)
+        except Exception:
+            key = None
+        if key:
+            try:
+                e = self._library_find_entry(key)
+            except Exception:
+                e = None
+            if isinstance(e, dict):
+                vc = e.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        if cfg is None:
+            try:
+                meta = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                meta = None
+            if isinstance(meta, dict):
+                vc = meta.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        if not isinstance(cfg, dict):
+            return False
+        try:
+            ok = bool(self._apply_value_config_to_gift_native(gift, cfg))
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                _log(f"native value pre-patch OK gift_id={int(get_val(gift, 'id', 0) or 0)}")
+            except Exception:
+                pass
+        return ok
 
     def _apply_value_config_to_gift_native(self, gift, value_config):
         """Populate native gift.value_amount / value_currency + flags|=256
@@ -22824,8 +22868,20 @@ class GiftSheetLocalValueHook(MethodHook):
                     gift = param.args[0]
             except:
                 gift = None
-            if gift is not None:
-                self.plugin._apply_local_ton_display_to_gift(gift)
+            if gift is None:
+                return
+            self.plugin._apply_local_ton_display_to_gift(gift)
+            # Native value patch — Telegram reads gift.value_amount /
+            # gift.value_currency / (gift.flags & 256) at StarGiftSheet:4194
+            # *during* set(), so mutating those fields in the after-hook is
+            # too late. Must patch in before-hook so Telegram sees them.
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
         except Exception as e:
             _log(f"GiftSheetLocalValueHook before error: {e}")
 
