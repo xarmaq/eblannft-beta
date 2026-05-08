@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.37"
+__version__ = "1.0.38"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -514,28 +514,38 @@ def _force_redownload_runtime(target_root):
         _bootstrap_log(f"  {rel} -> {size} bytes (re-download)")
 
 
-def _load_eblannft_impl():
+def _impl_is_baseplugin_subclass(impl):
+    """Check if impl is a class that subclasses *this* bootstrap's BasePlugin
+    by IDENTITY. When the user disables/re-enables the plugin, exteraGram
+    can reload the bootstrap module while leaving the runtime module in
+    sys.modules — the runtime's NftClonerPlugin then extends the OLD
+    BasePlugin object while the new bootstrap is referencing a fresh
+    BasePlugin object. Plain `issubclass(impl, BasePlugin)` returns False
+    in that case and the bootstrap falls into the «runtime unavailable»
+    error branch even though the runtime files are perfectly fine.
+    """
+    if not isinstance(impl, type):
+        return False, False
     try:
-        plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
-        for attr in _IMPL_ATTR_CANDIDATES:
-            impl = getattr(plugin_mod, attr, None)
-            if isinstance(impl, type):
-                _bootstrap_log("loaded runtime via existing sys.path import")
-                return impl, None
+        if issubclass(impl, BasePlugin):
+            return True, True
     except Exception:
         pass
-
-    install_root, mode = _bootstrap_runtime()
-    _bootstrap_log(f"using runtime root ({mode}): {install_root}")
     try:
-        impl = _import_runtime_from(install_root)
-        return impl, install_root
-    except Exception as e:
-        _bootstrap_log(f"first import attempt failed: {e}")
+        bp_name = BasePlugin.__name__
+        bp_mod = getattr(BasePlugin, "__module__", "")
+        for cls in impl.__mro__:
+            try:
+                if cls.__name__ == bp_name and getattr(cls, "__module__", "") == bp_mod:
+                    return False, True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False, False
 
-    # Self-heal: the runtime files exist but either don't expose the impl
-    # class or fail to import. Most likely an aborted earlier download or a
-    # file overwritten by hand. Drop them, evict from sys.modules, refetch.
+
+def _evict_runtime_from_sys_modules():
     for cached in (
         f"{_RUNTIME_PACKAGE_ALIAS}.plugin",
         _RUNTIME_PACKAGE_ALIAS,
@@ -547,6 +557,51 @@ def _load_eblannft_impl():
         except Exception:
             pass
 
+
+def _load_eblannft_impl():
+    try:
+        plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
+        for attr in _IMPL_ATTR_CANDIDATES:
+            impl = getattr(plugin_mod, attr, None)
+            if not isinstance(impl, type):
+                continue
+            strict_ok, looks_like = _impl_is_baseplugin_subclass(impl)
+            if strict_ok:
+                _bootstrap_log("loaded runtime via existing sys.path import")
+                return impl, None
+            if looks_like:
+                _bootstrap_log(
+                    "runtime impl extends a stale BasePlugin (re-enable cycle); "
+                    "evicting cached modules and re-importing"
+                )
+                _evict_runtime_from_sys_modules()
+                break
+    except Exception:
+        pass
+
+    install_root, mode = _bootstrap_runtime()
+    _bootstrap_log(f"using runtime root ({mode}): {install_root}")
+    try:
+        impl = _import_runtime_from(install_root)
+        strict_ok, looks_like = _impl_is_baseplugin_subclass(impl)
+        if strict_ok:
+            return impl, install_root
+        if looks_like:
+            _bootstrap_log(
+                "fresh runtime import still bound to stale BasePlugin; "
+                "self-healing via re-import"
+            )
+            _evict_runtime_from_sys_modules()
+        else:
+            raise ImportError(
+                f"Runtime class {impl!r} is not a BasePlugin subclass "
+                "and does not match by name — likely a corrupt download"
+            )
+    except Exception as e:
+        _bootstrap_log(f"first import attempt failed: {e}")
+
+    _evict_runtime_from_sys_modules()
+
     try:
         _force_redownload_runtime(install_root)
     except Exception as e:
@@ -554,6 +609,11 @@ def _load_eblannft_impl():
         raise
 
     impl = _import_runtime_from(install_root)
+    strict_ok, _looks_like = _impl_is_baseplugin_subclass(impl)
+    if not strict_ok:
+        raise ImportError(
+            f"Runtime impl {impl!r} still not a BasePlugin subclass after self-heal"
+        )
     _bootstrap_log("self-heal succeeded — runtime re-downloaded and imported")
     return impl, install_root
 
@@ -3529,7 +3589,15 @@ else:
     class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
             _maybe_show_storage_permission_alert(_LOAD_ERROR)
-            raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
+            err_text = (
+                str(_LOAD_ERROR) if _LOAD_ERROR is not None
+                else (
+                    "runtime impl resolved but is not a BasePlugin subclass "
+                    "(likely a stale module after disable/enable — try "
+                    "force-stop the app or reinstall the plugin)"
+                )
+            )
+            raise RuntimeError(f"eblanNFT runtime unavailable: {err_text}")
 
 
 NftClonerPlugin = EblanNftPlugin
