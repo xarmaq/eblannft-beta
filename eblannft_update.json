@@ -1,5 +1,5 @@
 {
-  "version": "1.0.11",
+  "version": "1.0.3",
   "notes": "v1.0.11 — повторный заход на рейтинг и hide-official, прошлый не сработал. (1) Новый хук GetUserFullForeignSyncHook на MessagesController.getUserFull для чужих uid: на КАЖДОМ чтении применяет synced rating и stargifts_count к возвращаемому UserFull. Это ловит cache-hit пути, где наш response-wrapper патч (_sync_apply_remote_user_overrides) не отрабатывает потому что Telegram достаёт UserFull из кэша без сетевого round-trip. (2) userInfoDidLoad: убрал ручной jclass(\"java.lang.Long\")(uid) — Chaquopy уже автобоксит Python int в Long в Object[] varargs, ручной wrap молча падал на части сборок. Передаём uid голым. Добавлен лог 'posted userInfoDidLoad for uid=...'. (3) hide-official strip: вместо лестницы cached_fresh→blocking→cached теперь сразу blocking fetch (1.5s) — снапшот меняется чаще чем 3-секундное окно свежести, и старая ладдер могла вернуть кэш без свежего флага. Добавлен диагностический лог 'hide-official: uid=X flag=Y record_age=Zs' — теперь видно по logcat NFT_SYNC что именно не сходится.",
   "files": [
     "eblannft.plugin",
