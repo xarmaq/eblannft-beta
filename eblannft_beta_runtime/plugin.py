@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.44"
+__version__ = "1.0.45"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -24830,6 +24830,24 @@ class NetworkHook(MethodHook):
                 except:
                     pass
 
+            # payments.upgradeStarGift safety net. The method-level intercept
+            # (StarGiftUpgradeInterceptHook) catches button clicks before they
+            # turn into RPCs, but if it misses — e.g. obfuscated method names
+            # in a future client build, or a code path that goes straight to
+            # ConnectionsManager — Telegram replies with STARGIFT_ALREADY_CONVERTED
+            # / STARGIFT_NOT_FOUND and shows an "Unknown error" toast. Here we
+            # catch those terminal errors and reroute into the local upgrade.
+            if ("upgrade" in req_name_l) and ("stargift" in req_name_l):
+                entry_key = ""
+                try:
+                    entry = self.plugin._resolve_library_entry_for_saved_action(req)
+                    if entry is not None:
+                        entry_key = str(entry.get("key", "") or "")
+                except Exception as e:
+                    _log(f"Upgrade hook resolve entry failed: {e}")
+                _log(f">>> Hooking UPGRADE_STARGIFT: {req_name} entry_key='{entry_key}'")
+                param.args[1] = UpgradeStarGiftDelegate(self.plugin, param.args[1], req_name, entry_key)
+
             if "emojistatus" in req_name_l and "update" in req_name_l:
                 cid = self.plugin._on_update_emoji_status_request(req)
                 _log(f">>> Hooking STATUS: {req_name}, collectible_id={cid}")
@@ -24915,6 +24933,80 @@ class WrapperDelegate(dynamic_proxy(RequestDelegate)):
                 _log(f"WrapperDelegate error: {e}")
         if self.original:
             self.original.run(response, error)
+
+class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
+    """Network-level safety net for payments.upgradeStarGift.
+
+    The method-level StarGiftSheet intercept (1.0.44) catches button clicks
+    before they become RPCs in most cases. This delegate is the fallback for
+    paths that slip past it: when Telegram replies with STARGIFT_ALREADY_CONVERTED
+    or other terminal upgrade errors, we suppress the error toast (so the user
+    doesn't see "Unknown error: STARGIFT_ALREADY_CONVERTED") and reroute into
+    the local visual upgrade flow on the matching library entry, when we have
+    one. Successful real upgrades pass through unchanged.
+    """
+    _UPGRADE_REROUTE_TOKENS = (
+        "STARGIFT_ALREADY_CONVERTED",
+        "STARGIFT_NOT_FOUND",
+        "STARGIFT_NOT_MODIFIED",
+        "STARGIFT_UPGRADE_UNAVAILABLE",
+        "STARGIFT_RESELLABLE",
+    )
+
+    def __init__(self, plugin, original, req_name="", entry_key=""):
+        super().__init__()
+        self.plugin = plugin
+        self.original = original
+        self.req_name = str(req_name or "")
+        self.entry_key = str(entry_key or "")
+
+    def run(self, response, error):
+        try:
+            err_text = ""
+            if error is not None:
+                try:
+                    err_text = str(getattr(error, "text", "") or "")
+                except:
+                    err_text = ""
+            should_local = False
+            if error is not None:
+                up = err_text.upper()
+                for tok in self._UPGRADE_REROUTE_TOKENS:
+                    if tok in up:
+                        should_local = True
+                        break
+            if should_local:
+                # Don't fabricate an Updates response — Telegram's gift-sheet
+                # handler casts it; passing the wrong type would crash. Drop
+                # both response and error: the sheet stays put and we open
+                # our own local-upgrade UI on top of it.
+                response = None
+                error = None
+                key = self.entry_key
+                def _open():
+                    try:
+                        opened = False
+                        if key:
+                            opened = bool(self.plugin._open_local_upgrade_for_entry(key))
+                        if not opened:
+                            BulletinHelper.show_info(
+                                "Подарок уже сконвертирован в звёзды — используй локальный апгрейд из меню eblanNFT"
+                            )
+                    except Exception as e:
+                        _log(f"UpgradeStarGiftDelegate reroute open failed: {e}")
+                try:
+                    run_on_ui_thread(_open)
+                except Exception as e:
+                    _log(f"UpgradeStarGiftDelegate run_on_ui_thread failed: {e}")
+                _log(f"UpgradeStarGiftDelegate: rerouted to local upgrade (err='{err_text}', key='{key}')")
+        except Exception as e:
+            _log(f"UpgradeStarGiftDelegate error: {e}")
+        if self.original is not None:
+            try:
+                self.original.run(response, error)
+            except Exception as e:
+                _log(f"UpgradeStarGiftDelegate original.run failed: {e}")
+
 
 class StatusWrapperDelegate(dynamic_proxy(RequestDelegate)):
     def __init__(self, plugin, original, collectible_id=0, req_name=""):
