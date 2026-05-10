@@ -1,6 +1,6 @@
 {
-  "version": "1.0.39",
-  "notes": "Beta 1.0.39 - support for normal Telegram gifts, legacy non-upgraded gifts, rare legacy gifts, and free local-only visual upgrades with Telegram-like animation inside eblanNFT.",
+  "version": "1.0.40",
+  "notes": "Beta 1.0.40 - fixes local gift upgrade flow on native Upgrade button and prevents newly added normal/local gifts from being auto-pinned above existing NFT gifts.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

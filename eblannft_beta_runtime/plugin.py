@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.39"
+__version__ = "1.0.40"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20350,14 +20350,14 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            self._set_field(wrapper, "pinned_to_top", True)
+            self._set_field(wrapper, "pinned_to_top", False)
         except:
             pass
         try:
             self._set_field(wrapper, "unsaved", False)
         except:
             pass
-        self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_user_id)
+        self._normalize_saved_gift_for_actions(wrapper, force_pin=False, update_date=True, owner_user_id=owner_user_id)
         return wrapper
 
     def _annotate_library_entry_kind(self, key, gift_kind="", official_import=None, local_only=None, original_b64=None, animation_style=""):
@@ -23809,7 +23809,21 @@ class NftClonerPlugin(BasePlugin):
             owner_uid = self._sanitize_identity_config(getattr(self, "identity_config", None)).get("owner_user_id", 0)
         except:
             owner_uid = 0
-        self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_uid)
+        force_pin = False
+        try:
+            existing_entry = self._library_find_entry(self.editing_gift_key) if getattr(self, "editing_gift_key", None) else None
+        except:
+            existing_entry = None
+        try:
+            if existing_entry is not None and existing_entry.get("pinned_override", None) is not None:
+                force_pin = bool(existing_entry.get("pinned_override"))
+            elif self.stolen_gift_wrapper is not None:
+                has_pin, pin_val = self._saved_gift_pinned_value(self.stolen_gift_wrapper)
+                if has_pin:
+                    force_pin = bool(pin_val)
+        except:
+            force_pin = False
+        self._normalize_saved_gift_for_actions(wrapper, force_pin=force_pin, update_date=True, owner_user_id=owner_uid)
         entry_key = self._library_upsert_wrapper(
             wrapper,
             base_gift_id=self.cached_gift_id or 0,
@@ -24434,6 +24448,21 @@ class NetworkHook(MethodHook):
                     pass
 
             # Actions on saved gifts: hide/unhide/reorder/pin. For injected gifts we fake success to avoid UI errors.
+            is_local_upgrade_action = ("gift" in req_name_l and "upgrade" in req_name_l and "get" not in req_name_l)
+            if is_local_upgrade_action:
+                try:
+                    entry = self.plugin._resolve_library_entry_for_saved_action(req)
+                    entry_key = str(entry.get("key")) if isinstance(entry, dict) and entry.get("key") else None
+                    if entry_key and self.plugin._entry_can_local_upgrade(entry):
+                        _log(f">>> Hooking LOCAL GIFT UPGRADE: {req_name} key={entry_key}")
+                        try:
+                            run_on_ui_thread(lambda ek=entry_key: self.plugin._open_local_upgrade_for_entry(ek))
+                        except:
+                            pass
+                        param.args[1] = SavedGiftActionDelegate(self.plugin, param.args[1], entry_key, req_name)
+                except:
+                    pass
+
             is_saved_action = ("saved" in req_name_l and "gift" in req_name_l)
             if (not is_saved_action) and ("gift" in req_name_l) and ("get" not in req_name_l):
                 for tok in ["hide", "unhide", "pin", "pinned", "unpin", "order", "reorder", "sort", "unsave", "remove", "visible", "show"]:
