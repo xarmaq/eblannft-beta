@@ -1,6 +1,6 @@
 {
-  "version": "1.0.42",
-  "notes": "Beta 1.0.42 - local gift native Upgrade now falls back to eblanNFT visual upgrade on any Telegram-side upgrade error, including STARGIFT_ALREADY_CONVERTED.",
+  "version": "1.0.43",
+  "notes": "Beta 1.0.43 - direct StarGiftSheet Upgrade button override for local gifts, bypassing Telegram native upgrade requests for visual-only eblanNFT upgrades.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.42"
+__version__ = "1.0.43"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20329,6 +20329,167 @@ class NftClonerPlugin(BasePlugin):
                 pass
         return None
 
+    def _find_upgrade_button_view(self, sheet):
+        if sheet is None:
+            return None
+
+        direct_candidates = []
+        for name in [
+            "button",
+            "actionButton",
+            "bottomButton",
+            "upgradeButton",
+            "buttonTextView",
+            "buttonView",
+            "buttonContainer",
+            "containerView",
+        ]:
+            try:
+                v = get_val(sheet, name, None)
+            except:
+                v = None
+            if v is not None:
+                direct_candidates.append(v)
+
+        def _looks_like_upgrade_view(v):
+            if v is None:
+                return False
+            try:
+                if isinstance(v, TextView):
+                    txt = str(v.getText() or "").strip().lower()
+                    if "upgrade" in txt:
+                        return True
+            except:
+                pass
+            try:
+                if isinstance(v, ViewGroup):
+                    count = int(v.getChildCount() or 0)
+                else:
+                    count = 0
+            except:
+                count = 0
+            for i in range(count):
+                try:
+                    ch = v.getChildAt(i)
+                except:
+                    continue
+                try:
+                    if isinstance(ch, TextView):
+                        txt = str(ch.getText() or "").strip().lower()
+                        if "upgrade" in txt:
+                            return True
+                    if isinstance(ch, ViewGroup) and _looks_like_upgrade_view(ch):
+                        return True
+                except:
+                    continue
+            return False
+
+        for v in direct_candidates:
+            try:
+                if isinstance(v, View) and _looks_like_upgrade_view(v):
+                    return v
+            except:
+                continue
+
+        roots = []
+        try:
+            if isinstance(sheet, View):
+                roots.append(sheet)
+        except:
+            pass
+        for name in ["containerView", "topViewLayout", "topView", "buttons", "buttonContainer"]:
+            try:
+                v = get_val(sheet, name, None)
+                if v is not None:
+                    roots.append(v)
+            except:
+                continue
+
+        seen = set()
+        queue = []
+        for root in roots:
+            try:
+                queue.append(root)
+            except:
+                pass
+        scanned = 0
+        while queue and scanned < 800:
+            try:
+                v = queue.pop(0)
+            except:
+                break
+            scanned += 1
+            try:
+                ident = int(v.hashCode())
+            except:
+                ident = id(v)
+            if ident in seen:
+                continue
+            seen.add(ident)
+            try:
+                if isinstance(v, View) and _looks_like_upgrade_view(v):
+                    return v
+            except:
+                pass
+            try:
+                if isinstance(v, ViewGroup):
+                    count = int(v.getChildCount() or 0)
+                    for i in range(count):
+                        try:
+                            queue.append(v.getChildAt(i))
+                        except:
+                            continue
+            except:
+                pass
+        return None
+
+    def _install_local_upgrade_button_override(self, sheet):
+        if sheet is None:
+            return False
+        try:
+            entry_key = getattr(self, "_active_gift_sheet_entry_key", None) or self._resolve_library_key_from_gift_sheet(sheet)
+        except:
+            entry_key = None
+        if not entry_key:
+            return False
+        try:
+            entry = self._library_find_entry(entry_key)
+        except:
+            entry = None
+        if entry is None:
+            return False
+        try:
+            if not self._entry_can_local_upgrade(entry):
+                return False
+        except:
+            return False
+        btn = self._find_upgrade_button_view(sheet)
+        if btn is None:
+            return False
+
+        def _on_click(_self, _view):
+            try:
+                try:
+                    if hasattr(sheet, "dismiss"):
+                        sheet.dismiss()
+                except:
+                    pass
+                run_on_ui_thread(lambda ek=str(entry_key): self._open_local_upgrade_for_entry(ek))
+            except Exception as e:
+                _log(f"Local upgrade button override click error: {e}")
+
+        try:
+            btn.setOnClickListener(JOnClickListener(_on_click))
+            try:
+                btn.setClickable(True)
+            except:
+                pass
+            _log(f"Installed local upgrade button override for key={entry_key}")
+            return True
+        except Exception as e:
+            _log(f"Install local upgrade button override failed: {e}")
+            return False
+
     def _build_saved_wrapper_from_gift(self, gift, owner_user_id=0):
         if gift is None:
             return None
@@ -24000,6 +24161,11 @@ class GiftSheetLocalValueHook(MethodHook):
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook value-row error: {e}")
+        try:
+            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook upgrade-button error: {e}")
 
 class GiftSheetSavedSetHook(MethodHook):
     """Hook StarGiftSheet.set(TL_savedStarGift, IGiftsList).
@@ -24054,6 +24220,20 @@ class GiftSheetSavedSetHook(MethodHook):
             except Exception:
                 pass
 
+    def after_hooked_method(self, param):
+        try:
+            sheet = getattr(param, "thisObject", None)
+        except:
+            sheet = None
+        try:
+            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSavedSetHook after error: {e}")
+            except Exception:
+                pass
+
 
 class GiftSheetSlugSetHook(MethodHook):
     """Hook StarGiftSheet.set(String slug, TL_starGiftUnique, IGiftsList).
@@ -24095,6 +24275,20 @@ class GiftSheetSlugSetHook(MethodHook):
         except Exception as e:
             try:
                 _log(f"GiftSheetSlugSetHook before error: {e}")
+            except Exception:
+                pass
+
+    def after_hooked_method(self, param):
+        try:
+            sheet = getattr(param, "thisObject", None)
+        except:
+            sheet = None
+        try:
+            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSlugSetHook after error: {e}")
             except Exception:
                 pass
 
@@ -30422,6 +30616,167 @@ class NftBuilderSheet:
             panel_right_dp=16,
             panel_width_dp=176,
         ))
+
+    def _find_upgrade_button_view(self, sheet):
+        if sheet is None:
+            return None
+
+        direct_candidates = []
+        for name in [
+            "button",
+            "actionButton",
+            "bottomButton",
+            "upgradeButton",
+            "buttonTextView",
+            "buttonView",
+            "buttonContainer",
+            "containerView",
+        ]:
+            try:
+                v = get_val(sheet, name, None)
+            except:
+                v = None
+            if v is not None:
+                direct_candidates.append(v)
+
+        def _looks_like_upgrade_view(v):
+            if v is None:
+                return False
+            try:
+                if isinstance(v, TextView):
+                    txt = str(v.getText() or "").strip().lower()
+                    if "upgrade" in txt:
+                        return True
+            except:
+                pass
+            try:
+                if isinstance(v, ViewGroup):
+                    count = int(v.getChildCount() or 0)
+                else:
+                    count = 0
+            except:
+                count = 0
+            for i in range(count):
+                try:
+                    ch = v.getChildAt(i)
+                except:
+                    continue
+                try:
+                    if isinstance(ch, TextView):
+                        txt = str(ch.getText() or "").strip().lower()
+                        if "upgrade" in txt:
+                            return True
+                    if isinstance(ch, ViewGroup) and _looks_like_upgrade_view(ch):
+                        return True
+                except:
+                    continue
+            return False
+
+        for v in direct_candidates:
+            try:
+                if isinstance(v, View) and _looks_like_upgrade_view(v):
+                    return v
+            except:
+                continue
+
+        roots = []
+        try:
+            if isinstance(sheet, View):
+                roots.append(sheet)
+        except:
+            pass
+        for name in ["containerView", "topViewLayout", "topView", "buttons", "buttonContainer"]:
+            try:
+                v = get_val(sheet, name, None)
+                if v is not None:
+                    roots.append(v)
+            except:
+                continue
+
+        seen = set()
+        queue = []
+        for root in roots:
+            try:
+                queue.append(root)
+            except:
+                pass
+        scanned = 0
+        while queue and scanned < 800:
+            try:
+                v = queue.pop(0)
+            except:
+                break
+            scanned += 1
+            try:
+                ident = int(v.hashCode())
+            except:
+                ident = id(v)
+            if ident in seen:
+                continue
+            seen.add(ident)
+            try:
+                if isinstance(v, View) and _looks_like_upgrade_view(v):
+                    return v
+            except:
+                pass
+            try:
+                if isinstance(v, ViewGroup):
+                    count = int(v.getChildCount() or 0)
+                    for i in range(count):
+                        try:
+                            queue.append(v.getChildAt(i))
+                        except:
+                            continue
+            except:
+                pass
+        return None
+
+    def _install_local_upgrade_button_override(self, sheet):
+        if sheet is None:
+            return False
+        try:
+            entry_key = getattr(self, "_active_gift_sheet_entry_key", None) or self._resolve_library_key_from_gift_sheet(sheet)
+        except:
+            entry_key = None
+        if not entry_key:
+            return False
+        try:
+            entry = self._library_find_entry(entry_key)
+        except:
+            entry = None
+        if entry is None:
+            return False
+        try:
+            if not self._entry_can_local_upgrade(entry):
+                return False
+        except:
+            return False
+        btn = self._find_upgrade_button_view(sheet)
+        if btn is None:
+            return False
+
+        def _on_click(_self, _view):
+            try:
+                try:
+                    if hasattr(sheet, "dismiss"):
+                        sheet.dismiss()
+                except:
+                    pass
+                run_on_ui_thread(lambda ek=str(entry_key): self._open_local_upgrade_for_entry(ek))
+            except Exception as e:
+                _log(f"Local upgrade button override click error: {e}")
+
+        try:
+            btn.setOnClickListener(JOnClickListener(_on_click))
+            try:
+                btn.setClickable(True)
+            except:
+                pass
+            _log(f"Installed local upgrade button override for key={entry_key}")
+            return True
+        except Exception as e:
+            _log(f"Install local upgrade button override failed: {e}")
+            return False
 
     def _create_native_preview(self, context):
         try:
