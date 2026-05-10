@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.43"
+__version__ = "1.0.44"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20044,6 +20044,28 @@ class NftClonerPlugin(BasePlugin):
                     self.hooks_refs.append(self.hook_method(m, GiftSheetSlugSetHook(self)))
                     hooked += 1
                     continue
+
+                try:
+                    m_name = str(m.getName() or "").lower()
+                except Exception:
+                    m_name = ""
+                if (
+                    m_name
+                    and m_name != "set"
+                    and "menu" not in m_name
+                    and (
+                        "upgrade" in m_name
+                        or "click" in m_name
+                        or "button" in m_name
+                    )
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, StarGiftUpgradeInterceptHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"Local gift value hook error: {e}")
             return
@@ -24290,6 +24312,101 @@ class GiftSheetSlugSetHook(MethodHook):
             try:
                 _log(f"GiftSheetSlugSetHook after error: {e}")
             except Exception:
+                pass
+
+
+class StarGiftUpgradeInterceptHook(MethodHook):
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            sheet = getattr(param, "thisObject", None)
+        except:
+            sheet = None
+        if sheet is None:
+            return
+        try:
+            self.plugin._active_gift_sheet_ref = sheet
+        except:
+            pass
+        try:
+            entry_key = getattr(self.plugin, "_active_gift_sheet_entry_key", None) or self.plugin._resolve_library_key_from_gift_sheet(sheet)
+        except:
+            entry_key = None
+        if not entry_key:
+            return
+        try:
+            self.plugin._active_gift_sheet_entry_key = entry_key
+        except:
+            pass
+        try:
+            entry = self.plugin._library_find_entry(entry_key)
+        except:
+            entry = None
+        if entry is None:
+            return
+        try:
+            if not self.plugin._entry_can_local_upgrade(entry):
+                return
+        except:
+            return
+        try:
+            method_name = str(param.method.getName() or "").lower()
+        except:
+            method_name = ""
+        if not method_name:
+            return
+        if "menu" in method_name or method_name == "set":
+            return
+        looks_upgrade = ("upgrade" in method_name)
+        looks_click = ("click" in method_name or "button" in method_name)
+        if not (looks_upgrade or looks_click):
+            return
+        try:
+            argc = len(param.args or [])
+        except:
+            argc = 0
+        if argc > 1 and (not looks_upgrade):
+            return
+
+        try:
+            _log(f"Intercepting StarGiftSheet method for local upgrade: {method_name} key={entry_key}")
+        except:
+            pass
+
+        def _open():
+            try:
+                try:
+                    if hasattr(sheet, "dismiss"):
+                        sheet.dismiss()
+                except:
+                    pass
+                self.plugin._open_local_upgrade_for_entry(str(entry_key))
+            except Exception as e:
+                _log(f"StarGiftUpgradeInterceptHook open error: {e}")
+
+        try:
+            run_on_ui_thread(_open)
+        except:
+            pass
+
+        try:
+            rt = str(param.method.getReturnType().getName() or "")
+        except:
+            rt = ""
+        try:
+            if rt == "boolean":
+                param.setResult(True)
+            elif rt in ("int", "long", "float", "double", "short", "byte"):
+                param.setResult(0)
+            else:
+                param.setResult(None)
+        except Exception as e:
+            try:
+                _log(f"StarGiftUpgradeInterceptHook setResult error: {e}")
+            except:
                 pass
 
 

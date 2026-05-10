@@ -1,6 +1,6 @@
 {
-  "version": "1.0.43",
-  "notes": "Beta 1.0.43 - direct StarGiftSheet Upgrade button override for local gifts, bypassing Telegram native upgrade requests for visual-only eblanNFT upgrades.",
+  "version": "1.0.44",
+  "notes": "Beta 1.0.44 - method-level StarGiftSheet intercept for local gift upgrade actions, blocking Telegram native upgrade handlers before request execution.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
