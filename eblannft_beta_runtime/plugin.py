@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.45"
+__version__ = "1.0.46"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -20496,7 +20496,7 @@ class NftClonerPlugin(BasePlugin):
                         sheet.dismiss()
                 except:
                     pass
-                run_on_ui_thread(lambda ek=str(entry_key): self._open_local_upgrade_for_entry(ek))
+                run_on_ui_thread(lambda ek=str(entry_key): self._local_upgrade_entry_runnable(ek))
             except Exception as e:
                 _log(f"Local upgrade button override click error: {e}")
 
@@ -20675,6 +20675,21 @@ class NftClonerPlugin(BasePlugin):
             if upg > 0 or self._looks_like_unique_gift(g):
                 return int(base_id)
         return 0
+
+    def _local_upgrade_entry_runnable(self, key):
+        # Void wrapper: never return the bool — Chaquopy's PyInvocationHandler
+        # crashes on `Cannot convert bool object to void` when a lambda passed
+        # to run_on_ui_thread returns non-None (proxy expects Runnable.run -> void).
+        try:
+            self._open_local_upgrade_for_entry(key)
+        except Exception as e:
+            _log(f"local upgrade entry runnable: {e}")
+
+    def _local_upgrade_gift_runnable(self, gift):
+        try:
+            self._open_local_upgrade_for_gift(gift)
+        except Exception as e:
+            _log(f"local upgrade gift runnable: {e}")
 
     def _open_local_upgrade_for_entry(self, key):
         e = self._library_find_entry(key)
@@ -24516,9 +24531,9 @@ class GiftItemOptionsShowHook(MethodHook):
 
             def _on_local_upgrade():
                 if key:
-                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_entry(key))
+                    run_on_ui_thread(lambda: self.plugin._local_upgrade_entry_runnable(key))
                 elif importable_gift is not None:
-                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_gift(importable_gift))
+                    run_on_ui_thread(lambda: self.plugin._local_upgrade_gift_runnable(importable_gift))
 
             try:
                 if key:
@@ -24799,7 +24814,7 @@ class NetworkHook(MethodHook):
                     if entry_key and self.plugin._entry_can_local_upgrade(entry):
                         _log(f">>> Hooking LOCAL GIFT UPGRADE: {req_name} key={entry_key}")
                         try:
-                            run_on_ui_thread(lambda ek=entry_key: self.plugin._open_local_upgrade_for_entry(ek))
+                            run_on_ui_thread(lambda ek=entry_key: self.plugin._local_upgrade_entry_runnable(ek))
                         except:
                             pass
                         param.args[1] = SavedGiftActionDelegate(self.plugin, param.args[1], entry_key, req_name)
@@ -24961,6 +24976,9 @@ class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
         self.entry_key = str(entry_key or "")
 
     def run(self, response, error):
+        # NB: must return None (Java void). Never `return some_bool` here —
+        # Chaquopy's PyInvocationHandler will throw
+        # "Cannot convert bool object to void" on the proxy boundary.
         try:
             err_text = ""
             if error is not None:
@@ -24976,12 +24994,6 @@ class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
                         should_local = True
                         break
             if should_local:
-                # Don't fabricate an Updates response — Telegram's gift-sheet
-                # handler casts it; passing the wrong type would crash. Drop
-                # both response and error: the sheet stays put and we open
-                # our own local-upgrade UI on top of it.
-                response = None
-                error = None
                 key = self.entry_key
                 def _open():
                     try:
@@ -24994,11 +25006,19 @@ class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
                             )
                     except Exception as e:
                         _log(f"UpgradeStarGiftDelegate reroute open failed: {e}")
+                    # explicit: Runnable.run -> void
+                    return None
                 try:
                     run_on_ui_thread(_open)
                 except Exception as e:
                     _log(f"UpgradeStarGiftDelegate run_on_ui_thread failed: {e}")
                 _log(f"UpgradeStarGiftDelegate: rerouted to local upgrade (err='{err_text}', key='{key}')")
+                # Suppress the original delegate entirely. Calling
+                # original.run(None, None) is unsafe — Telegram's gift-sheet
+                # handler may dereference response without null-checks. We
+                # already dismissed/overlaid the sheet via the local upgrade
+                # flow, so swallowing the callback is the safe path.
+                return None
         except Exception as e:
             _log(f"UpgradeStarGiftDelegate error: {e}")
         if self.original is not None:
@@ -25006,6 +25026,7 @@ class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
                 self.original.run(response, error)
             except Exception as e:
                 _log(f"UpgradeStarGiftDelegate original.run failed: {e}")
+        return None
 
 
 class StatusWrapperDelegate(dynamic_proxy(RequestDelegate)):
@@ -25096,7 +25117,7 @@ class SavedGiftActionDelegate(dynamic_proxy(RequestDelegate)):
                     should_local_upgrade = False
                 try:
                     if should_local_upgrade:
-                        run_on_ui_thread(lambda ek=str(active_key): self.plugin._open_local_upgrade_for_entry(ek))
+                        run_on_ui_thread(lambda ek=str(active_key): self.plugin._local_upgrade_entry_runnable(ek))
                 except:
                     pass
             if error and active_key:
@@ -30971,7 +30992,7 @@ class NftBuilderSheet:
                         sheet.dismiss()
                 except:
                     pass
-                run_on_ui_thread(lambda ek=str(entry_key): self._open_local_upgrade_for_entry(ek))
+                run_on_ui_thread(lambda ek=str(entry_key): self._local_upgrade_entry_runnable(ek))
             except Exception as e:
                 _log(f"Local upgrade button override click error: {e}")
 

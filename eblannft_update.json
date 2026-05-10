@@ -1,6 +1,6 @@
 {
-  "version": "1.0.45",
-  "notes": "Beta 1.0.45 - network-level safety net for STARGIFT_ALREADY_CONVERTED: if the method-level upgrade intercept misses a code path, the Telegram error toast is suppressed and the local visual upgrade is opened automatically on the matching library entry.",
+  "version": "1.0.46",
+  "notes": "Beta 1.0.46 - fix client crash 'Cannot convert bool object to void' on local upgrade: lambdas passed to run_on_ui_thread now go through void runnables instead of returning bool from _open_local_upgrade_for_entry/_gift. Network-level UpgradeStarGiftDelegate also hardened to never call the original RequestDelegate with synthesized null response and to always return void.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
