@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.40"
+__version__ = "1.0.41"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -949,6 +949,8 @@ class NftClonerPlugin(BasePlugin):
         self._gift_menu_injected_once = False
         self._gift_menu_token = 0
         self._gift_menu_sheet_ref = None
+        self._active_gift_sheet_ref = None
+        self._active_gift_sheet_entry_key = None
         self.active_catalog_controllers = []
         self.active_controllers = self.active_catalog_controllers
 
@@ -10661,7 +10663,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             gift_uid = 0
 
-        for name in ["saved_id", "savedId", "savedID", "saved_gift_id", "savedGiftId", "savedStarGiftId"]:
+        for name in ["saved_id", "savedId", "savedID", "saved_gift_id", "savedGiftId", "savedStarGiftId", "msg_id", "msgId", "message_id", "messageId"]:
             try:
                 v = self._to_int(get_val(wrapper, name, 0), 0)
                 if v > 0:
@@ -10685,7 +10687,7 @@ class NftClonerPlugin(BasePlugin):
         if sid <= 0 or wrapper is None:
             return False
         ok = False
-        for name in ["saved_id", "savedId", "savedID", "saved_gift_id", "savedGiftId", "savedStarGiftId"]:
+        for name in ["saved_id", "savedId", "savedID", "saved_gift_id", "savedGiftId", "savedStarGiftId", "msg_id", "msgId", "message_id", "messageId"]:
             try:
                 if self._set_field(wrapper, name, sid):
                     ok = True
@@ -23943,6 +23945,11 @@ class GiftSheetLocalValueHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
+            try:
+                self.plugin._active_gift_sheet_ref = getattr(param, "thisObject", None)
+                self.plugin._active_gift_sheet_entry_key = self.plugin._resolve_library_key_from_gift_sheet(self.plugin._active_gift_sheet_ref)
+            except:
+                pass
             gift = None
             try:
                 if param.args and len(param.args) >= 1:
@@ -24011,6 +24018,11 @@ class GiftSheetSavedSetHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
+            try:
+                self.plugin._active_gift_sheet_ref = getattr(param, "thisObject", None)
+                self.plugin._active_gift_sheet_entry_key = self.plugin._resolve_library_key_from_gift_sheet(self.plugin._active_gift_sheet_ref)
+            except:
+                pass
             saved = None
             try:
                 if param.args and len(param.args) >= 1:
@@ -24056,6 +24068,11 @@ class GiftSheetSlugSetHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
+            try:
+                self.plugin._active_gift_sheet_ref = getattr(param, "thisObject", None)
+                self.plugin._active_gift_sheet_entry_key = self.plugin._resolve_library_key_from_gift_sheet(self.plugin._active_gift_sheet_ref)
+            except:
+                pass
             gift = None
             try:
                 if param.args and len(param.args) >= 2:
@@ -24095,6 +24112,11 @@ class GiftMenuPressedHook(MethodHook):
         try:
             try:
                 self.plugin._gift_menu_sheet_ref = param.thisObject
+            except:
+                pass
+            try:
+                self.plugin._active_gift_sheet_ref = param.thisObject
+                self.plugin._active_gift_sheet_entry_key = self.plugin._resolve_library_key_from_gift_sheet(param.thisObject)
             except:
                 pass
             self.plugin._inside_gift_menu = True
@@ -24448,11 +24470,21 @@ class NetworkHook(MethodHook):
                     pass
 
             # Actions on saved gifts: hide/unhide/reorder/pin. For injected gifts we fake success to avoid UI errors.
-            is_local_upgrade_action = ("gift" in req_name_l and "upgrade" in req_name_l and "get" not in req_name_l)
+            is_local_upgrade_action = ("upgrade" in req_name_l and "get" not in req_name_l)
             if is_local_upgrade_action:
                 try:
                     entry = self.plugin._resolve_library_entry_for_saved_action(req)
                     entry_key = str(entry.get("key")) if isinstance(entry, dict) and entry.get("key") else None
+                    if not entry_key:
+                        try:
+                            entry_key = getattr(self.plugin, "_active_gift_sheet_entry_key", None) or self.plugin._resolve_library_key_from_gift_sheet(getattr(self.plugin, "_active_gift_sheet_ref", None))
+                        except:
+                            entry_key = None
+                    if entry is None and entry_key:
+                        try:
+                            entry = self.plugin._library_find_entry(entry_key)
+                        except:
+                            entry = None
                     if entry_key and self.plugin._entry_can_local_upgrade(entry):
                         _log(f">>> Hooking LOCAL GIFT UPGRADE: {req_name} key={entry_key}")
                         try:
@@ -24631,12 +24663,33 @@ class SavedGiftActionDelegate(dynamic_proxy(RequestDelegate)):
 
     def run(self, response, error):
         try:
-            if error and self.entry_key:
+            err_text = ""
+            try:
+                err_text = str(getattr(error, "text", "") or "")
+            except:
+                err_text = ""
+            active_key = self.entry_key
+            if not active_key:
+                try:
+                    active_key = getattr(self.plugin, "_active_gift_sheet_entry_key", None) or self.plugin._resolve_library_key_from_gift_sheet(getattr(self.plugin, "_active_gift_sheet_ref", None))
+                except:
+                    active_key = None
+            if error and active_key and "SAVED_ID_EMPTY" in err_text.upper():
+                try:
+                    entry = self.plugin._library_find_entry(active_key)
+                except:
+                    entry = None
+                try:
+                    if entry is not None and self.plugin._entry_can_local_upgrade(entry):
+                        run_on_ui_thread(lambda ek=str(active_key): self.plugin._open_local_upgrade_for_entry(ek))
+                except:
+                    pass
+            if error and active_key:
                 try:
                     BoolTrue = jclass("org.telegram.tgnet.TLRPC$TL_boolTrue")
                     response = BoolTrue()
                     error = None
-                    _log(f"SAVED_GIFT action faked success key={self.entry_key} req={self.req_name}")
+                    _log(f"SAVED_GIFT action faked success key={active_key} req={self.req_name} err={err_text}")
                 except Exception as e:
                     _log(f"SAVED_GIFT fake success failed: {e}")
                     error = None

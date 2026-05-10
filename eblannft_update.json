@@ -1,6 +1,6 @@
 {
-  "version": "1.0.40",
-  "notes": "Beta 1.0.40 - fixes local gift upgrade flow on native Upgrade button and prevents newly added normal/local gifts from being auto-pinned above existing NFT gifts.",
+  "version": "1.0.41",
+  "notes": "Beta 1.0.41 - broader fallback for local gift upgrade from StarGiftSheet, with active-sheet detection and extra saved-id aliases to suppress SAVED_ID_EMPTY on native Upgrade.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
