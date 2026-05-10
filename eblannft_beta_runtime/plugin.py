@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.41"
+__version__ = "1.0.42"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -24674,13 +24674,25 @@ class SavedGiftActionDelegate(dynamic_proxy(RequestDelegate)):
                     active_key = getattr(self.plugin, "_active_gift_sheet_entry_key", None) or self.plugin._resolve_library_key_from_gift_sheet(getattr(self.plugin, "_active_gift_sheet_ref", None))
                 except:
                     active_key = None
-            if error and active_key and "SAVED_ID_EMPTY" in err_text.upper():
+            if error and active_key:
                 try:
                     entry = self.plugin._library_find_entry(active_key)
                 except:
                     entry = None
                 try:
-                    if entry is not None and self.plugin._entry_can_local_upgrade(entry):
+                    req_name_l = str(self.req_name or "").lower()
+                except:
+                    req_name_l = ""
+                try:
+                    should_local_upgrade = bool(
+                        entry is not None
+                        and self.plugin._entry_can_local_upgrade(entry)
+                        and "upgrade" in req_name_l
+                    )
+                except:
+                    should_local_upgrade = False
+                try:
+                    if should_local_upgrade:
                         run_on_ui_thread(lambda ek=str(active_key): self.plugin._open_local_upgrade_for_entry(ek))
                 except:
                     pass

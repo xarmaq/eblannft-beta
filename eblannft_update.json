@@ -1,6 +1,6 @@
 {
-  "version": "1.0.41",
-  "notes": "Beta 1.0.41 - broader fallback for local gift upgrade from StarGiftSheet, with active-sheet detection and extra saved-id aliases to suppress SAVED_ID_EMPTY on native Upgrade.",
+  "version": "1.0.42",
+  "notes": "Beta 1.0.42 - local gift native Upgrade now falls back to eblanNFT visual upgrade on any Telegram-side upgrade error, including STARGIFT_ALREADY_CONVERTED.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
