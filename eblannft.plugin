@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.38"
+__version__ = "1.0.39"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -45,6 +45,7 @@ _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/__init__.py",
     f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
     f"{_RUNTIME_PACKAGE_NAME}/sync_client.py",
+    f"{_RUNTIME_PACKAGE_NAME}/legacy_gifts.py",
 )
 _DOWNLOAD_TIMEOUT_SEC = 35
 

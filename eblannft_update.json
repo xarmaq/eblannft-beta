@@ -1,10 +1,11 @@
 {
-  "version": "1.0.38",
-  "notes": "Beta 1.0.38 — фикс «eblanNFT runtime unavailable: None» при выключении-включении плагина. Если выключить и сразу включить плагин, exteraGram перезагружает оболочку (eblannft.plugin), но рантайм (eblannft_beta_runtime/plugin.py) остаётся в памяти со ссылкой на старый объект BasePlugin. Новая оболочка получает свежий BasePlugin, и проверка issubclass возвращает False — плагин решает что рантайма «нет» и валится с непонятной ошибкой. Теперь оболочка детектит этот случай по имени класса в MRO и автоматически перезагружает рантайм против актуального BasePlugin. Если самопочинка не сработала — сообщение об ошибке стало внятным вместо литералки «None».",
+  "version": "1.0.39",
+  "notes": "Beta 1.0.39 - support for normal Telegram gifts, legacy non-upgraded gifts, rare legacy gifts, and free local-only visual upgrades with Telegram-like animation inside eblanNFT.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
     "eblannft_beta_runtime/plugin.py",
-    "eblannft_beta_runtime/sync_client.py"
+    "eblannft_beta_runtime/sync_client.py",
+    "eblannft_beta_runtime/legacy_gifts.py"
   ]
 }
