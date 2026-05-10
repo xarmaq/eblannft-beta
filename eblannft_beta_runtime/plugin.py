@@ -49,6 +49,14 @@ import base64
 import re
 import math
 from urllib.request import Request, urlopen
+try:
+    from .legacy_gifts import get_legacy_gift_meta
+except Exception:
+    try:
+        from legacy_gifts import get_legacy_gift_meta
+    except Exception:
+        def get_legacy_gift_meta(base_gift_id=0):
+            return {}
 
 def _gen(java_class, method_name):
     def _run(instance, *java_args):
@@ -91,6 +99,12 @@ EBLANNFT_LOCAL_ABOUT_AVATAR_FILES = [
 ]
 PROFILE_CONFIG_FILE_EXTENSION = ".profile"
 PROFILE_CONFIG_VERSION = 1
+GIFT_KIND_REAL_UPGRADED = "real_upgraded"
+GIFT_KIND_NORMAL = "normal"
+GIFT_KIND_LEGACY = "legacy_normal"
+GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
+GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
+LOCAL_VISUAL_UPGRADE_STARS = 0
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -923,6 +937,11 @@ class NftClonerPlugin(BasePlugin):
         self._catalog_nft_cache_last_ts = 0.0
         self._catalog_gift_lookup_sig = ""
         self._catalog_gift_lookup = {}
+        self._upgrade_attr_pool = {"model": [], "pattern": [], "backdrop": []}
+        self._pending_local_upgrade_key = None
+        self._pending_local_upgrade_source_b64 = ""
+        self._pending_local_upgrade_source_kind = ""
+        self._pending_local_upgrade_animation = "telegram_upgrade"
 
         # Gift (three dots) menu integration on StarGiftSheet.
         self._inside_gift_menu = False
@@ -2428,7 +2447,7 @@ class NftClonerPlugin(BasePlugin):
                 if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
                     continue
                 gift = {"b64": b64}
-                for key in ("title", "slug", "key", "gift_kind"):
+                for key in ("title", "slug", "key", "gift_kind", "source_gift_kind"):
                     val = entry.get(key)
                     if isinstance(val, str) and val:
                         gift[key] = val
@@ -2438,14 +2457,15 @@ class NftClonerPlugin(BasePlugin):
                     val = entry.get(key)
                     if isinstance(val, (int, float)):
                         gift[key] = int(val)
-                for key in ("inject", "limited_flag", "pinned_override", "hidden_override"):
+                for key in ("inject", "limited_flag", "pinned_override", "hidden_override", "official_import", "local_only"):
                     if key in entry:
                         gift[key] = bool(entry.get(key))
                 # Include all per-gift configs that affect what the receiver
                 # sees in the StarGiftSheet — owner row, "Ценность" row,
                 # TON-blockchain link, custom star prices.
                 for key in ("wear_status_data", "build_config", "identity_config",
-                            "value_config", "gift_stars_config", "ton_display_config"):
+                            "value_config", "gift_stars_config", "ton_display_config",
+                            "local_upgrade_state", "legacy_meta"):
                     val = entry.get(key)
                     if isinstance(val, dict):
                         gift[key] = {
@@ -6081,6 +6101,12 @@ class NftClonerPlugin(BasePlugin):
         try:
             if bool(entry.get("inject", False)):
                 tags.append("\u0430\u043a\u0442\u0438\u0432\u0435\u043d")
+        except:
+            pass
+        try:
+            kind_label = self._gift_kind_label(self._classify_gift_kind(entry=entry))
+            if kind_label:
+                tags.append(kind_label)
         except:
             pass
         try:
@@ -12291,7 +12317,7 @@ class NftClonerPlugin(BasePlugin):
         return bool(changed)
 
     def _get_catalog_nft_gifts(self):
-        """Filter only NFT gifts from StarsController list."""
+        """Return all catalog gifts we can add or visually upgrade locally."""
         lst = self._get_catalog_gifts_from_memory()
         if not lst:
             return []
@@ -12331,14 +12357,10 @@ class NftClonerPlugin(BasePlugin):
                     self._normalize_catalog_gift_availability(g)
                 except:
                     pass
-                upg = get_val(g, "upgrade_stars", 0)
-                if upg is None:
-                    upg = 0
-                if int(upg) > 0:
-                    out.append(g)
+                cls_name = str(g.getClass().getName() or "").lower()
+                if "stargift" not in cls_name or "saved" in cls_name:
                     continue
-                if "unique" in g.getClass().getName().lower():
-                    out.append(g)
+                out.append(g)
             except:
                 pass
         try:
@@ -12380,6 +12402,189 @@ class NftClonerPlugin(BasePlugin):
             return f"Gift {gid}"
         except:
             return "NFT"
+
+    def _looks_like_unique_gift(self, gift):
+        if gift is None:
+            return False
+        try:
+            return "unique" in str(gift.getClass().getName() or "").lower()
+        except:
+            return False
+
+    def _upgrade_attr_signature(self, obj):
+        if obj is None:
+            return "none"
+        try:
+            cls = str(obj.getClass().getName() or "")
+        except:
+            cls = "?"
+        try:
+            doc = get_val(obj, "document", None)
+            if doc is None:
+                doc = get_val(obj, "sticker", None)
+            doc_id = int(get_val(doc, "id", 0) or 0) if doc is not None else 0
+        except:
+            doc_id = 0
+        try:
+            center = int(get_val(obj, "center_color", 0) or 0)
+            edge = int(get_val(obj, "edge_color", 0) or 0)
+            pattern = int(get_val(obj, "pattern_color", 0) or 0)
+        except:
+            center, edge, pattern = 0, 0, 0
+        try:
+            name = str(get_val(obj, "name", "") or "")
+        except:
+            name = ""
+        return f"{cls}|d{doc_id}|c{center}|e{edge}|p{pattern}|n{name}"
+
+    def _gift_looks_rare(self, gift):
+        if gift is None:
+            return False
+        for name in ["limited", "is_limited", "rare", "is_rare"]:
+            try:
+                if bool(get_val(gift, name, False)):
+                    return True
+            except:
+                pass
+        for name in ["availability_total", "availabilityTotal", "limited_count", "limitedCount"]:
+            try:
+                total = int(self._to_int(get_val(gift, name, 0), 0) or 0)
+            except:
+                total = 0
+            if total > 0 and total <= 5000:
+                return True
+        return False
+
+    def _classify_gift_kind(self, gift=None, entry=None, official_import=False, local_only=False):
+        try:
+            if isinstance(entry, dict):
+                raw = str(entry.get("gift_kind", "") or "").strip()
+                if raw:
+                    return raw
+        except:
+            pass
+        if bool(local_only):
+            return GIFT_KIND_LOCAL_UPGRADED
+        base_id = 0
+        try:
+            if isinstance(entry, dict):
+                base_id = int(entry.get("base_gift_id", 0) or 0)
+        except:
+            base_id = 0
+        if base_id <= 0 and gift is not None:
+            try:
+                base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+            except:
+                base_id = 0
+        legacy_meta = get_legacy_gift_meta(base_id)
+        is_legacy = False
+        if base_id > 0:
+            try:
+                is_legacy = self._get_catalog_gift_by_id(base_id) is None
+            except:
+                is_legacy = False
+        if official_import and self._looks_like_unique_gift(gift):
+            return GIFT_KIND_REAL_UPGRADED
+        if is_legacy:
+            rarity = str(legacy_meta.get("rarity", "") or "").strip().lower()
+            if rarity == "rare" or self._gift_looks_rare(gift):
+                return GIFT_KIND_LEGACY_RARE
+            return GIFT_KIND_LEGACY
+        return GIFT_KIND_NORMAL
+
+    def _gift_kind_label(self, kind):
+        kind_s = str(kind or "").strip().lower()
+        if kind_s == GIFT_KIND_REAL_UPGRADED:
+            return "реально улучшен"
+        if kind_s == GIFT_KIND_NORMAL:
+            return "обычный"
+        if kind_s == GIFT_KIND_LEGACY:
+            return "старый"
+        if kind_s == GIFT_KIND_LEGACY_RARE:
+            return "старый rare"
+        if kind_s == GIFT_KIND_LOCAL_UPGRADED:
+            return "локально улучшен"
+        return ""
+
+    def _entry_can_local_upgrade(self, entry, gift=None):
+        if not isinstance(entry, dict):
+            return False
+        kind = self._classify_gift_kind(gift=gift, entry=entry, official_import=bool(entry.get("official_import", False)), local_only=bool(entry.get("local_only", False)))
+        return kind in [GIFT_KIND_NORMAL, GIFT_KIND_LEGACY, GIFT_KIND_LEGACY_RARE]
+
+    def _remember_upgrade_attrs(self, gift_id, response):
+        if response is None:
+            return False
+        pool = getattr(self, "_upgrade_attr_pool", None)
+        if not isinstance(pool, dict):
+            pool = {"model": [], "pattern": [], "backdrop": []}
+            self._upgrade_attr_pool = pool
+        raw_list = None
+        try:
+            raw_list = get_val(response, "attributes", None)
+        except:
+            raw_list = None
+        if raw_list is None:
+            try:
+                for f in response.getClass().getFields():
+                    try:
+                        val = f.get(response)
+                    except:
+                        continue
+                    if val is not None and hasattr(val, "size") and hasattr(val, "get"):
+                        raw_list = val
+                        break
+            except:
+                raw_list = None
+        if raw_list is None:
+            return False
+        changed = False
+        try:
+            count = int(raw_list.size() or 0)
+        except:
+            count = 0
+        for i in range(count):
+            try:
+                obj = raw_list.get(i)
+            except:
+                continue
+            if obj is None:
+                continue
+            try:
+                cls_name = str(obj.getClass().getName() or "").lower()
+            except:
+                cls_name = ""
+            group = None
+            if "model" in cls_name:
+                group = "model"
+            elif "pattern" in cls_name:
+                group = "pattern"
+            elif "backdrop" in cls_name:
+                group = "backdrop"
+            if not group:
+                continue
+            try:
+                sig = self._upgrade_attr_signature(obj)
+            except:
+                sig = str(obj)
+            found = False
+            for existing in list(pool.get(group, []) or []):
+                try:
+                    if self._upgrade_attr_signature(existing) == sig:
+                        found = True
+                        break
+                except:
+                    continue
+            if not found:
+                pool[group].append(obj)
+                changed = True
+        return bool(changed)
+
+    def _has_generic_upgrade_attrs(self):
+        pool = getattr(self, "_upgrade_attr_pool", None)
+        if not isinstance(pool, dict):
+            return False
+        return bool(pool.get("model") and pool.get("pattern") and pool.get("backdrop"))
 
     def _get_gift_floor_stars(self, gift):
         """Best-effort: try to resolve current floor/min resale price in stars for a catalog gift."""
@@ -20075,6 +20280,251 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
+    def _extract_saved_gift_wrapper_from_sheet(self, sheet):
+        if sheet is None:
+            return None
+        for name in ["savedGift", "saved_gift", "savedStarGift", "saved_star_gift", "saved", "savedGiftItem"]:
+            try:
+                v = get_val(sheet, name, None)
+            except:
+                v = None
+            if v is not None and self._looks_like_saved_gift_wrapper(v):
+                return v
+        try:
+            cls = sheet.getClass()
+            for f in cls.getDeclaredFields():
+                try:
+                    f.setAccessible(True)
+                except:
+                    pass
+                try:
+                    v = f.get(sheet)
+                except:
+                    continue
+                if v is not None and self._looks_like_saved_gift_wrapper(v):
+                    return v
+        except:
+            pass
+        return None
+
+    def _extract_visible_gift_from_sheet(self, sheet):
+        if sheet is None:
+            return None
+        wrapper = self._extract_saved_gift_wrapper_from_sheet(sheet)
+        if wrapper is not None:
+            try:
+                gift = self._extract_wrapper_gift(wrapper)
+                if gift is not None:
+                    return gift
+            except:
+                pass
+        for name in ["gift", "starGift", "currentGift", "giftUnique", "uniqueGift"]:
+            try:
+                v = get_val(sheet, name, None)
+                if v is not None:
+                    return v
+            except:
+                pass
+        return None
+
+    def _build_saved_wrapper_from_gift(self, gift, owner_user_id=0):
+        if gift is None:
+            return None
+        try:
+            if not self.cls_saved and not self._ensure_gift_classes():
+                return None
+        except:
+            return None
+        try:
+            wrapper = self._new_java_instance(self.cls_saved)
+        except:
+            wrapper = None
+        if wrapper is None:
+            return None
+        try:
+            self._set_field(wrapper, "gift", gift)
+        except:
+            return None
+        try:
+            self._set_field(wrapper, "date", int(time.time()))
+        except:
+            pass
+        try:
+            self._set_field(wrapper, "pinned_to_top", True)
+        except:
+            pass
+        try:
+            self._set_field(wrapper, "unsaved", False)
+        except:
+            pass
+        self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_user_id)
+        return wrapper
+
+    def _annotate_library_entry_kind(self, key, gift_kind="", official_import=None, local_only=None, original_b64=None, animation_style=""):
+        e = self._library_find_entry(key)
+        if not e:
+            return False
+        kind = str(gift_kind or "").strip() or self._classify_gift_kind(
+            entry=e,
+            official_import=bool(e.get("official_import", False)) if official_import is None else bool(official_import),
+            local_only=bool(e.get("local_only", False)) if local_only is None else bool(local_only),
+        )
+        e["gift_kind"] = kind
+        if official_import is not None:
+            e["official_import"] = bool(official_import)
+        if local_only is not None:
+            e["local_only"] = bool(local_only)
+        if original_b64:
+            try:
+                if not str(e.get("original_b64", "") or ""):
+                    e["original_b64"] = str(original_b64)
+            except:
+                pass
+        try:
+            if kind == GIFT_KIND_LOCAL_UPGRADED:
+                e["local_upgrade_state"] = {
+                    "enabled": True,
+                    "cost_stars": int(LOCAL_VISUAL_UPGRADE_STARS),
+                    "animation_style": str(animation_style or "telegram_upgrade"),
+                    "upgraded_at": int(time.time()),
+                }
+        except:
+            pass
+        legacy_meta = get_legacy_gift_meta(int(e.get("base_gift_id", 0) or 0))
+        if legacy_meta:
+            e["legacy_meta"] = dict(legacy_meta)
+        try:
+            e["updated_at"] = int(time.time())
+        except:
+            pass
+        self._library_dirty = True
+        return True
+
+    def _import_gift_to_library(self, gift=None, wrapper=None, inject=True, official_import=False, gift_kind="", local_only=False, original_b64=""):
+        if wrapper is None and gift is None:
+            return None
+        if wrapper is None and gift is not None:
+            wrapper = self._build_saved_wrapper_from_gift(gift, owner_user_id=self._get_my_user_id())
+        if wrapper is None:
+            return None
+        if gift is None:
+            try:
+                gift = self._extract_wrapper_gift(wrapper)
+            except:
+                gift = None
+        try:
+            base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+        except:
+            base_id = 0
+        key = self._library_upsert_wrapper(
+            wrapper,
+            base_gift_id=base_id,
+            key=None,
+            inject=bool(inject),
+            make_active=False,
+            build_config=(self.build_config.copy() if isinstance(self.build_config, dict) else None),
+            identity_config=(self.identity_config.copy() if isinstance(self.identity_config, dict) else None),
+            value_config=(self.value_config.copy() if isinstance(self.value_config, dict) else None),
+            gift_stars_config=(self.gift_stars_config.copy() if isinstance(self.gift_stars_config, dict) else None),
+        )
+        if not key:
+            return None
+        src_b64 = str(original_b64 or "")
+        if not src_b64:
+            try:
+                src_b64 = str(serialize_tl_object(wrapper) or "")
+            except:
+                src_b64 = ""
+        resolved_kind = str(gift_kind or "").strip() or self._classify_gift_kind(
+            gift=gift,
+            official_import=bool(official_import),
+            local_only=bool(local_only),
+        )
+        self._annotate_library_entry_kind(
+            key,
+            gift_kind=resolved_kind,
+            official_import=bool(official_import),
+            local_only=bool(local_only),
+            original_b64=src_b64,
+            animation_style="telegram_upgrade",
+        )
+        self._save_cache()
+        try:
+            self._save_injection_cache()
+        except:
+            pass
+        return key
+
+    def _import_gift_from_sheet(self, sheet):
+        wrapper = self._extract_saved_gift_wrapper_from_sheet(sheet)
+        gift = self._extract_visible_gift_from_sheet(sheet)
+        key = self._import_gift_to_library(gift=gift, wrapper=wrapper, inject=True, official_import=True, local_only=False)
+        if not key:
+            BulletinHelper.show_error("Не удалось добавить подарок в eblanNFT")
+            return False
+        BulletinHelper.show_success("Подарок добавлен в eblanNFT")
+        return True
+
+    def _clear_pending_local_upgrade(self):
+        self._pending_local_upgrade_key = None
+        self._pending_local_upgrade_source_b64 = ""
+        self._pending_local_upgrade_source_kind = ""
+        self._pending_local_upgrade_animation = "telegram_upgrade"
+
+    def _get_fallback_upgrade_seed_gift_id(self, exclude_gift_id=0):
+        try:
+            exclude_id = int(exclude_gift_id or 0)
+        except:
+            exclude_id = 0
+        for g in list(self._get_catalog_nft_gifts() or []):
+            try:
+                base_id = int(self._get_gift_base_id(g, fallback=int(get_val(g, "id", 0) or 0)) or 0)
+            except:
+                base_id = 0
+            if base_id <= 0 or base_id == exclude_id:
+                continue
+            try:
+                upg = int(self._to_int(get_val(g, "upgrade_stars", 0), 0) or 0)
+            except:
+                upg = 0
+            if upg > 0 or self._looks_like_unique_gift(g):
+                return int(base_id)
+        return 0
+
+    def _open_local_upgrade_for_entry(self, key):
+        e = self._library_find_entry(key)
+        if not e:
+            BulletinHelper.show_error("Подарок не найден")
+            return False
+        w = self._library_get_wrapper(key)
+        g = self._extract_wrapper_gift(w) if w is not None else None
+        if g is None:
+            BulletinHelper.show_error("Не удалось прочитать подарок")
+            return False
+        if not self._entry_can_local_upgrade(e, gift=g):
+            BulletinHelper.show_info("Этот подарок уже улучшен или не поддерживает локальный апгрейд")
+            return False
+        self._pending_local_upgrade_key = str(key)
+        self._pending_local_upgrade_source_b64 = str(e.get("original_b64", "") or e.get("b64", "") or "")
+        self._pending_local_upgrade_source_kind = str(e.get("gift_kind", "") or self._classify_gift_kind(entry=e))
+        self.editing_gift_key = str(key)
+        self.stolen_gift_wrapper = w
+        self.stolen_gift_inner = g
+        self.cached_gift_id = int(self._get_gift_base_id(g, fallback=int(e.get("base_gift_id", 0) or 0)) or 0)
+        AttrLoader(self, int(self.cached_gift_id or 0), allow_generic_fallback=True).start()
+        return True
+
+    def _open_local_upgrade_for_gift(self, gift):
+        if gift is None:
+            return False
+        self._clear_pending_local_upgrade()
+        self.editing_gift_key = None
+        self.stolen_gift_wrapper = None
+        self.stolen_gift_inner = gift
+        self.cached_gift_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+        AttrLoader(self, int(self.cached_gift_id or 0), allow_generic_fallback=True).start()
+        return True
+
     def _save_library_gift_stars_config(self, key, value, refresh_ui=True):
         e = self._library_find_entry(key)
         if not e:
@@ -23360,7 +23810,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             owner_uid = 0
         self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_uid)
-        self._library_upsert_wrapper(
+        entry_key = self._library_upsert_wrapper(
             wrapper,
             base_gift_id=self.cached_gift_id or 0,
             key=self.editing_gift_key,
@@ -23372,6 +23822,27 @@ class NftClonerPlugin(BasePlugin):
             value_config=(self.value_config.copy() if isinstance(self.value_config, dict) else None),
             gift_stars_config=(self.gift_stars_config.copy() if isinstance(self.gift_stars_config, dict) else None),
         )
+        try:
+            pending_key = str(getattr(self, "_pending_local_upgrade_key", None) or "")
+        except:
+            pending_key = ""
+        try:
+            entry_key_s = str(entry_key or "")
+        except:
+            entry_key_s = ""
+        if entry_key_s and pending_key and pending_key == entry_key_s:
+            try:
+                self._annotate_library_entry_kind(
+                    entry_key_s,
+                    gift_kind=GIFT_KIND_LOCAL_UPGRADED,
+                    official_import=False,
+                    local_only=True,
+                    original_b64=str(getattr(self, "_pending_local_upgrade_source_b64", "") or ""),
+                    animation_style="telegram_upgrade",
+                )
+            except:
+                pass
+        self._clear_pending_local_upgrade()
         self.editing_gift_key = None
         self._save_cache()
         self._save_injection_cache()
@@ -23442,8 +23913,10 @@ class NftClonerPlugin(BasePlugin):
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
         actions = [
             ("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", lambda: self._open_constructor_for_library_key(key)),
-            (f"TON \u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
+        if self._entry_can_local_upgrade(e):
+            actions.append((f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", lambda: self._open_local_upgrade_for_entry(key)))
+        actions.append((f"TON \u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)))
         if bool(ton_cfg.get("enabled", False)):
             actions.insert(2, (f"\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446 TON \u2022 {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0438\u0437 \u0431\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0438", lambda: self._delete_library_gift_key(key)))
@@ -23660,17 +24133,30 @@ class GiftItemOptionsShowHook(MethodHook):
             if bool(getattr(self.plugin, "_gift_menu_injected_once", False)):
                 return
             key = getattr(self.plugin, "_gift_menu_entry_key", None)
-            if not key:
-                return
 
             item_options = param.thisObject
+            sheet = getattr(self.plugin, "_gift_menu_sheet_ref", None)
+            importable_wrapper = None
+            importable_gift = None
+            try:
+                importable_wrapper = self.plugin._extract_saved_gift_wrapper_from_sheet(sheet)
+            except:
+                importable_wrapper = None
+            try:
+                importable_gift = self.plugin._extract_visible_gift_from_sheet(sheet)
+            except:
+                importable_gift = None
+            if not key and importable_wrapper is None and importable_gift is None:
+                return
 
             try:
                 R_drawable = jclass("org.telegram.messenger.R$drawable")
                 icon_edit = int(getattr(R_drawable, "msg_edit", 0) or 0)
                 icon_delete = int(getattr(R_drawable, "msg_delete", 0) or 0)
+                icon_add = int(getattr(R_drawable, "msg_add", 0) or 0)
+                icon_upgrade = int(getattr(R_drawable, "msg_retry", 0) or 0)
             except:
-                icon_edit, icon_delete = 0, 0
+                icon_edit, icon_delete, icon_add, icon_upgrade = 0, 0, 0, 0
 
             def _on_edit():
                 run_on_ui_thread(lambda: self.plugin._open_constructor_for_library_key(key))
@@ -23678,9 +24164,29 @@ class GiftItemOptionsShowHook(MethodHook):
             def _on_delete():
                 run_on_ui_thread(lambda: self.plugin._delete_library_gift_key(key))
 
+            def _on_add():
+                run_on_ui_thread(lambda: self.plugin._import_gift_from_sheet(sheet))
+
+            def _on_local_upgrade():
+                if key:
+                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_entry(key))
+                elif importable_gift is not None:
+                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_gift(importable_gift))
+
             try:
-                item_options.add(icon_edit, "\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", JRunnable(_on_edit))
-                item_options.add(icon_delete, "\u0423\u0434\u0430\u043b\u0438\u0442\u044c", JRunnable(_on_delete))
+                if key:
+                    item_options.add(icon_edit, "\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", JRunnable(_on_edit))
+                    try:
+                        entry = self.plugin._library_find_entry(key)
+                    except:
+                        entry = None
+                    if entry is not None and self.plugin._entry_can_local_upgrade(entry):
+                        item_options.add(icon_upgrade, f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", JRunnable(_on_local_upgrade))
+                    item_options.add(icon_delete, "\u0423\u0434\u0430\u043b\u0438\u0442\u044c", JRunnable(_on_delete))
+                else:
+                    item_options.add(icon_add, "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0432 eblanNFT", JRunnable(_on_add))
+                    if importable_gift is not None and (not self.plugin._looks_like_unique_gift(importable_gift)):
+                        item_options.add(icon_upgrade, f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", JRunnable(_on_local_upgrade))
                 self.plugin._gift_menu_injected_once = True
                 self.plugin._inside_gift_menu = False
                 self.plugin._gift_menu_entry_key = None
@@ -25826,10 +26332,13 @@ class GetCurrentUserOverrideHook(MethodHook):
                 pass
 
 class AttrLoader:
-    def __init__(self, plugin, gift_id):
+    def __init__(self, plugin, gift_id, allow_generic_fallback=False):
         self.plugin = plugin
-        self.gift_id = gift_id
+        self.base_gift_id = int(gift_id or 0)
+        self.gift_id = int(gift_id or 0)
         self.req_callback = None
+        self.allow_generic_fallback = bool(allow_generic_fallback)
+        self._fallback_requested = False
 
     def start(self):
         try:
@@ -25846,10 +26355,31 @@ class AttrLoader:
     def on_done(self, response, error):
         if error:
             _log(f"AttrLoader net error: {error.text}")
+            if self.allow_generic_fallback:
+                try:
+                    if self.plugin._has_generic_upgrade_attrs():
+                        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, None).show())
+                        return
+                except:
+                    pass
+                try:
+                    if not self._fallback_requested:
+                        seed_id = int(self.plugin._get_fallback_upgrade_seed_gift_id(exclude_gift_id=self.gift_id) or 0)
+                        if seed_id > 0:
+                            self._fallback_requested = True
+                            self.gift_id = int(seed_id)
+                            self.start()
+                            return
+                except:
+                    pass
             run_on_ui_thread(lambda: BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438: {error.text}"))
             return
         _log("AttrLoader: attributes received")
-        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.gift_id, response).show())
+        try:
+            self.plugin._remember_upgrade_attrs(self.gift_id, response)
+        except:
+            pass
+        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
 
 class ResaleGridController:
     def __init__(self, plugin, is_catalog=False):
@@ -26104,6 +26634,20 @@ class ResaleGridController:
             gift = getattr(item, "object", None)
             if not gift:
                 return
+            try:
+                is_unique = bool(self.plugin._looks_like_unique_gift(gift))
+            except:
+                is_unique = False
+            if not is_unique:
+                self.plugin._show_action_menu(
+                    "Обычный подарок",
+                    [
+                        ("Добавить как обычный", lambda: self.plugin._import_gift_to_library(gift=gift, wrapper=None, inject=True, official_import=False, gift_kind=GIFT_KIND_NORMAL, local_only=False)),
+                        (f"Локально улучшить • {LOCAL_VISUAL_UPGRADE_STARS}★", lambda: self.plugin._open_local_upgrade_for_gift(gift)),
+                    ],
+                    negative_text="Назад",
+                )
+                return
             self.plugin.stolen_gift_inner = gift
             try:
                 self.plugin.cached_gift_id = int(self.plugin._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
@@ -26117,7 +26661,7 @@ class ResaleGridController:
             except:
                 pass
             self._release()
-            AttrLoader(self.plugin, self.plugin.cached_gift_id).start()
+            AttrLoader(self.plugin, self.plugin.cached_gift_id, allow_generic_fallback=True).start()
         except Exception as e:
             _log(f"ResaleGridController click error: {e}")
 
@@ -27723,6 +28267,14 @@ class NftBuilderSheet:
 
         if attr_response:
             self._sort_by_classes(attr_response)
+        if (not self.models) and (not self.patterns) and (not self.backdrops):
+            try:
+                pool = getattr(self.plugin, "_upgrade_attr_pool", None) or {}
+                self.models = list(pool.get("model", []) or [])
+                self.patterns = list(pool.get("pattern", []) or [])
+                self.backdrops = list(pool.get("backdrop", []) or [])
+            except:
+                pass
 
         # Keep user's last/active build config (loaded from cache/library).
         self._apply_initial_build_config()
@@ -30302,6 +30854,11 @@ class NftBuilderSheet:
                     self.plugin._set_field(gift, name, val)
                 except:
                     pass
+            try:
+                if str(getattr(self.plugin, "_pending_local_upgrade_key", "") or ""):
+                    self.plugin._set_field(gift, "upgrade_stars", int(LOCAL_VISUAL_UPGRADE_STARS))
+            except:
+                pass
 
             cfg = self.plugin.build_config
             try:
