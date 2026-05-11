@@ -102,7 +102,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.55"
+__version__ = "1.0.56"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11307,19 +11307,37 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
     def _my_gifts_palette(self):
+        # All values pre-converted to signed Java int via to_java_int so
+        # Chaquopy doesn't reject 0xFFAARRGGBB literals on setTextColor /
+        # setColorFilter / setBackgroundColor (Java int range is signed
+        # 32-bit; raw hex values like 0xFFFFFFFF = 4294967295 > MAX_INT).
+        # Falls back to theme-derived colors where reasonable so the UI
+        # adapts to the user's theme.
+        def _t(name, fb):
+            try:
+                key = getattr(Theme, name, None)
+                if key is not None:
+                    v = int(Theme.getColor(key))
+                    if v != 0:
+                        return v
+            except:
+                pass
+            return to_java_int(fb)
+        def _c(v):
+            return to_java_int(int(v))
         return {
-            "bg":          0xFF0E1316,
-            "card":        0xFF161D24,
-            "card_inner":  0xFF0A0F13,
-            "stroke":      0x1FFFFFFF,
-            "text":        0xFFFFFFFF,
-            "secondary":   0xFFB4BCC4,
-            "tertiary":    0xFF7E8893,
-            "primary":     0xFF6FA3FF,
-            "primary_bg":  0xFF1B2854,
-            "danger":      0xFFFF6B6B,
-            "danger_bg":   0xFF3F2024,
-            "accent_text": 0xFFFFFFFF,
+            "bg":          _t("key_windowBackgroundWhite",          0xFF0E1316),
+            "card":        _t("key_windowBackgroundGray",           0xFF161D24),
+            "card_inner":  _t("key_dialogBackground",               0xFF0A0F13),
+            "stroke":      _c(0x1FFFFFFF),
+            "text":        _t("key_windowBackgroundWhiteBlackText", 0xFFFFFFFF),
+            "secondary":   _t("key_windowBackgroundWhiteGrayText",  0xFFB4BCC4),
+            "tertiary":    _t("key_windowBackgroundWhiteGrayText2", 0xFF7E8893),
+            "primary":     _t("key_featuredStickers_addButton",     0xFF6FA3FF),
+            "primary_bg":  _c(0xFF1B2854),
+            "danger":      _t("key_dialogTextRed",                  0xFFFF6B6B),
+            "danger_bg":   _c(0xFF3F2024),
+            "accent_text": _c(0xFFFFFFFF),
         }
 
     def _resolve_library_entry_attrs(self, entry):
@@ -12078,7 +12096,11 @@ class NftClonerPlugin(BasePlugin):
         except:
             stars = 0
         accent = self._accent_color_for_key(f"reg-{gid}")
-        thumb = self._build_gift_thumb(ctx, accent, emoji, size_dp=92)
+        try:
+            reg_doc = self._resolve_regular_gift_document(regular)
+        except:
+            reg_doc = None
+        thumb = self._build_gift_thumb(ctx, accent, emoji, size_dp=92, document=reg_doc)
         if stars > 0:
             try:
                 badge = TextView(ctx)
@@ -12641,13 +12663,41 @@ class NftClonerPlugin(BasePlugin):
             self._my_gifts_dialog = dialog
             self._my_gifts_container = container
 
-            try:
-                run_on_ui_thread(JRunnable(dialog.show))
-            except:
+            def _force_opaque():
+                try:
+                    w2 = dialog.getWindow()
+                    if w2 is not None:
+                        try:
+                            w2.setBackgroundDrawable(ColorDrawable(int(bg_color)))
+                        except:
+                            pass
+                        try:
+                            decor = w2.getDecorView()
+                            decor.setAlpha(1.0)
+                            decor.setBackgroundColor(int(bg_color))
+                        except:
+                            pass
+                except:
+                    pass
+                try:
+                    container.setAlpha(1.0)
+                except:
+                    pass
+
+            def _show():
                 try:
                     dialog.show()
                 except:
                     pass
+                try:
+                    AndroidUtilities.runOnUIThread(JRunnable(_force_opaque), 0)
+                except:
+                    _force_opaque()
+
+            try:
+                run_on_ui_thread(JRunnable(_show))
+            except:
+                _show()
             return True
         except Exception as e:
             try:
@@ -12733,6 +12783,96 @@ class NftClonerPlugin(BasePlugin):
                     return g
             except:
                 continue
+        return None
+
+    def _add_catalog_gift_as_regular(self, gift):
+        """Add a catalog gift to self.regular_gifts (not gift_library).
+
+        Stores enough to render a real preview later: title, optional stars
+        cost (from upgrade_stars / stars), document_id (so we can re-resolve
+        the sticker via DocumentObject) and a base_gift_id pointer to look
+        the gift up again from the cached catalog.
+        """
+        try:
+            title = self._ui_text(get_val(gift, "title", "Подарок"), "Подарок") or "Подарок"
+        except:
+            title = "Подарок"
+        try:
+            stars = int(self._to_int(get_val(gift, "stars", 0), 0) or 0)
+        except:
+            stars = 0
+        try:
+            base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+        except:
+            base_id = 0
+        doc_id = 0
+        try:
+            doc = find_document_recursive(gift)
+            if doc is not None:
+                doc_id = int(get_val(doc, "id", 0) or 0)
+        except:
+            doc_id = 0
+        try:
+            self._regular_gifts_seq = int(getattr(self, "_regular_gifts_seq", 0) or 0) + 1
+            gid = int(self._regular_gifts_seq)
+            try:
+                today = time.strftime("%d.%m.%Y", time.localtime())
+            except:
+                today = ""
+            entry = {
+                "id": gid,
+                "title": title,
+                "emoji": "",
+                "stars": stars,
+                "from_name": "",
+                "date": today,
+                "comment": "",
+                "base_gift_id": base_id,
+                "document_id": doc_id,
+                "created_at": int(time.time()),
+            }
+            if not isinstance(self.regular_gifts, list):
+                self.regular_gifts = []
+            self.regular_gifts.append(entry)
+            self._save_cache()
+            BulletinHelper.show_success(f"Подарок «{title}» добавлен")
+            return entry
+        except Exception as e:
+            BulletinHelper.show_error(f"Ошибка: {e}")
+            return None
+
+    def _resolve_regular_gift_document(self, regular):
+        """Try to recover the original sticker document for a regular gift."""
+        if not isinstance(regular, dict):
+            return None
+        base_id = 0
+        doc_id = 0
+        try:
+            base_id = int(regular.get("base_gift_id", 0) or 0)
+        except:
+            base_id = 0
+        try:
+            doc_id = int(regular.get("document_id", 0) or 0)
+        except:
+            doc_id = 0
+        # Look up the gift from the catalog cache by base_gift_id and pull
+        # its document.
+        try:
+            if base_id > 0:
+                catalog = self._get_catalog_nft_gifts() or []
+                for g in catalog:
+                    try:
+                        gid = int(self._get_gift_base_id(g, fallback=int(get_val(g, "id", 0) or 0)) or 0)
+                    except:
+                        gid = 0
+                    if gid == base_id:
+                        doc = find_document_recursive(g)
+                        if doc is not None:
+                            return doc
+        except:
+            pass
+        # Could try DocumentObject.loadDocument by doc_id, but that requires
+        # a download chain — skip for now.
         return None
 
     def _add_default_regular_gift(self):
@@ -28668,12 +28808,40 @@ class ResaleGridController:
         self.filtered_items = []
         has_filters = bool(self.filter_model or self.filter_pattern or self.filter_backdrop)
 
+        mode = getattr(self, "mode", "default") or "default"
+
         for gift in list(self.items or []):
+            # mode filter — gifts must match the catalog's role:
+            # nft_only     -> only show gifts with an upgrade flow available
+            #                 (upgrade_stars > 0) or already-unique entries
+            # regular_only -> only show base / non-upgradable gifts
+            try:
+                upg = int(self._to_int_safe(get_val(gift, "upgrade_stars", 0)) or 0)
+            except:
+                upg = 0
+            try:
+                is_unique = bool(self.plugin._looks_like_unique_gift(gift))
+            except:
+                is_unique = False
+            if mode == "nft_only" and not (upg > 0 or is_unique):
+                continue
+            if mode == "regular_only" and (upg > 0 or is_unique):
+                continue
+
             m_match = self.filter_model is None or self._extract_attr_name(gift, "model") == self.filter_model
             p_match = self.filter_pattern is None or self._extract_attr_name(gift, "pattern") == self.filter_pattern
             b_match = self.filter_backdrop is None or self._extract_attr_name(gift, "backdrop") == self.filter_backdrop
             if m_match and p_match and b_match:
                 self.filtered_items.append(gift)
+
+    def _to_int_safe(self, v):
+        try:
+            return int(v or 0)
+        except:
+            try:
+                return int(v)
+            except:
+                return 0
 
         try:
             String = jclass("java.lang.String")
@@ -28758,15 +28926,11 @@ class ResaleGridController:
 
             mode = getattr(self, "mode", "default") or "default"
 
-            # "regular_only": every click adds the gift as a regular gift —
-            # no popup, no upgrade option.
+            # "regular_only": add to the simple self.regular_gifts list
+            # (with from / date / comment), NOT to the NFT gift_library.
             if mode == "regular_only":
                 try:
-                    self.plugin._import_gift_to_library(
-                        gift=gift, wrapper=None, inject=True,
-                        official_import=False, gift_kind=GIFT_KIND_NORMAL,
-                        local_only=False,
-                    )
+                    self.plugin._add_catalog_gift_as_regular(gift)
                 except Exception as ie:
                     BulletinHelper.show_error(f"Ошибка добавления: {ie}")
                 try:
