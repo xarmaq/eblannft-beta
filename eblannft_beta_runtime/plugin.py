@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.52"
+__version__ = "1.0.53"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11684,7 +11684,7 @@ class NftClonerPlugin(BasePlugin):
             try:
                 pat = BackupImageView(ctx)
                 try:
-                    pat.setAlpha(0.2)
+                    pat.setAlpha(0.18)
                 except:
                     pass
                 try:
@@ -11697,6 +11697,10 @@ class NftClonerPlugin(BasePlugin):
                                 pat.setImage(pat_loc, f"{int(size_dp)}_{int(size_dp)}", None, None, 0)
                             except:
                                 pass
+                        try:
+                            self._enable_welcome_sticker_animation(pat)
+                        except:
+                            pass
                         try:
                             wrap.addView(pat, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.95)), AndroidUtilities.dp(int(size_dp * 0.95)), Gravity.CENTER))
                         except:
@@ -11720,6 +11724,10 @@ class NftClonerPlugin(BasePlugin):
                                 iv.setImage(loc, f"{int(size_dp)}_{int(size_dp)}", None, None, 0)
                             except:
                                 pass
+                        try:
+                            self._enable_welcome_sticker_animation(iv)
+                        except:
+                            pass
                         try:
                             wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.74)), AndroidUtilities.dp(int(size_dp * 0.74)), Gravity.CENTER))
                             sticker_set = True
@@ -12511,30 +12519,30 @@ class NftClonerPlugin(BasePlugin):
 
             bg_color = int(self._my_gifts_palette()["bg"])
 
+            try:
+                screen_h = 0
+                ds = getattr(AndroidUtilities, "displaySize", None)
+                if ds is not None:
+                    try:
+                        screen_h = int(ds.y or 0)
+                    except:
+                        screen_h = 0
+                if screen_h <= 0:
+                    dm = ctx.getResources().getDisplayMetrics()
+                    screen_h = int(dm.heightPixels or 0)
+            except:
+                screen_h = 0
+            if screen_h <= 0:
+                screen_h = 2400
+
             sheet = BottomSheet(ctx, True)
             try:
                 sheet.setApplyTopPadding(False)
                 sheet.setApplyBottomPadding(False)
             except:
                 pass
-            # Telegram's BottomSheet paints its background drawable on top of
-            # the customView with an animated alpha, which is what was
-            # washing-out our text and icons in 1.0.49/1.0.50. Make the
-            # sheet itself transparent and own the bg from our container.
-            try:
-                sheet.setBackgroundColor(0)
-            except:
-                pass
             try:
                 sheet.fullHeight = True
-            except:
-                pass
-            try:
-                sheet.useLightStatusBar = False
-            except:
-                pass
-            try:
-                sheet.useLightNavBar = False
             except:
                 pass
 
@@ -12543,18 +12551,6 @@ class NftClonerPlugin(BasePlugin):
                 container.setBackgroundColor(bg_color)
             except:
                 pass
-            try:
-                screen_h = int(getattr(AndroidUtilities, "displaySize", None).y) if getattr(AndroidUtilities, "displaySize", None) is not None else 0
-            except:
-                screen_h = 0
-            try:
-                if screen_h <= 0:
-                    dm = ctx.getResources().getDisplayMetrics()
-                    screen_h = int(dm.heightPixels or 0)
-            except:
-                pass
-            if screen_h <= 0:
-                screen_h = 2400
             try:
                 container.setMinimumHeight(int(screen_h))
             except:
@@ -12571,10 +12567,21 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
+            # Strip every layer of sheet's own background so only our opaque
+            # FrameLayout paints. Mirrors _style_install_welcome_sheet_surface
+            # but keeps the dim behind so the activity is visually pushed back.
+            try:
+                self._strip_sheet_chrome(sheet, keep_dim=True, set_bg_color=bg_color)
+            except Exception as e:
+                try:
+                    _log(f"strip sheet chrome failed: {e}")
+                except:
+                    pass
+
             try:
                 lp = container.getLayoutParams()
                 if lp is not None:
-                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    lp.height = int(screen_h)
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT
                     container.setLayoutParams(lp)
             except:
@@ -12583,14 +12590,50 @@ class NftClonerPlugin(BasePlugin):
             self._my_gifts_ctx = ctx
             self._my_gifts_sheet = sheet
             self._my_gifts_container = container
+            self._my_gifts_screen_h = int(screen_h)
 
-            try:
-                run_on_ui_thread(JRunnable(sheet.show))
-            except:
+            def _post_show():
+                try:
+                    self._strip_sheet_chrome(sheet, keep_dim=True, set_bg_color=bg_color)
+                except:
+                    pass
+                try:
+                    lp2 = container.getLayoutParams()
+                    if lp2 is not None:
+                        lp2.height = int(screen_h)
+                        lp2.width = ViewGroup.LayoutParams.MATCH_PARENT
+                        container.setLayoutParams(lp2)
+                except:
+                    pass
+                try:
+                    parent = container.getParent()
+                    if parent is not None:
+                        try:
+                            parent.setBackgroundColor(int(bg_color))
+                        except:
+                            pass
+                        try:
+                            parent.setBackground(None)
+                            parent.setBackgroundColor(int(bg_color))
+                        except:
+                            pass
+                except:
+                    pass
+
+            def _show_then_style():
                 try:
                     sheet.show()
                 except:
                     pass
+                try:
+                    AndroidUtilities.runOnUIThread(JRunnable(_post_show), 0)
+                except:
+                    _post_show()
+
+            try:
+                run_on_ui_thread(JRunnable(_show_then_style))
+            except:
+                _show_then_style()
             return True
         except Exception as e:
             try:
@@ -12602,6 +12645,66 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
             return False
+
+    def _strip_sheet_chrome(self, sheet, keep_dim=True, set_bg_color=None):
+        if sheet is None:
+            return
+        targets = []
+        try:
+            c = sheet.getContainer()
+            if c is not None and c not in targets:
+                targets.append(c)
+        except:
+            pass
+        for fname in ("containerView", "container", "sheetContainer", "sheetView", "bottomSheet"):
+            try:
+                v = getattr(sheet, fname, None)
+            except:
+                v = None
+            if v is not None and v not in targets:
+                targets.append(v)
+        for v in targets:
+            try:
+                v.setBackground(None)
+            except:
+                pass
+            try:
+                if set_bg_color is not None:
+                    v.setBackgroundColor(int(set_bg_color))
+                else:
+                    v.setBackgroundColor(0x00000000)
+            except:
+                pass
+            try:
+                v.setPadding(0, 0, 0, 0)
+            except:
+                pass
+        try:
+            sheet.setBackgroundColor(int(set_bg_color) if set_bg_color is not None else 0)
+        except:
+            pass
+        try:
+            w = sheet.getWindow()
+        except:
+            w = None
+        if w is not None:
+            if not keep_dim:
+                try:
+                    w.setDimAmount(0.0)
+                except:
+                    pass
+                try:
+                    w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                except:
+                    pass
+            try:
+                w.setStatusBarColor(int(set_bg_color) if set_bg_color is not None else 0xFF000000)
+            except:
+                pass
+            try:
+                w.setNavigationBarColor(int(set_bg_color) if set_bg_color is not None else 0xFF000000)
+            except:
+                pass
 
     def _regular_gift_find(self, gid):
         try:

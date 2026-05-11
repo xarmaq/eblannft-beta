@@ -1,6 +1,6 @@
 {
-  "version": "1.0.52",
-  "notes": "Beta 1.0.52 — кнопка «+» в шапке экрана «Мои подарки» теперь открывает action-menu с двумя пунктами: «Выбрать NFT из каталога» (открывает существующий NFT-каталог через _open_catalog_nft_sheet) и «Добавить обычный подарок» (создаёт обычный Heart с дефолтами). Click-листенеры на back/+ перенесены с FrameLayout на сам ImageView/TextView и переведены на безопасный плагин-self capture, чтобы не терять контекст внутри dynamic_proxy. Карточка обычного подарка: лейблы стали полные (От кого / Дата / Комментарий, ширина 104dp), пустые значения отображаются как «Не указано»/«Нажмите, чтобы добавить» серым тоном (placeholder), у тапаемых строк появился chevron-индикатор и ripple-подсветка при нажатии.",
+  "version": "1.0.53",
+  "notes": "Beta 1.0.53 — добиваем «прозрачный фон» и «тусклые кнопки». Новый хелпер _strip_sheet_chrome перебирает все внутренние контейнеры BottomSheet (containerView / container / sheetContainer / sheetView / bottomSheet / getContainer()), снимает их собственные drawable-фоны и красит в наш bg_color, плюс выставляет statusBar/navigationBar в тот же цвет — теперь экран действительно сплошной. Стайлинг повторно прогоняется после sheet.show() через runOnUIThread, потому что часть внутренних view'ев у Telegram создаётся именно в момент show. Анимация стикеров включается через ImageReceiver.setAllowStartAnimation/setAutoRepeat/startAnimation — model и pattern теперь анимируются, как в Telegram-апгрейде.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
