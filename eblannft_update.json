@@ -1,6 +1,6 @@
 {
-  "version": "1.0.53",
-  "notes": "Beta 1.0.53 — добиваем «прозрачный фон» и «тусклые кнопки». Новый хелпер _strip_sheet_chrome перебирает все внутренние контейнеры BottomSheet (containerView / container / sheetContainer / sheetView / bottomSheet / getContainer()), снимает их собственные drawable-фоны и красит в наш bg_color, плюс выставляет statusBar/navigationBar в тот же цвет — теперь экран действительно сплошной. Стайлинг повторно прогоняется после sheet.show() через runOnUIThread, потому что часть внутренних view'ев у Telegram создаётся именно в момент show. Анимация стикеров включается через ImageReceiver.setAllowStartAnimation/setAutoRepeat/startAnimation — model и pattern теперь анимируются, как в Telegram-апгрейде.",
+  "version": "1.0.54",
+  "notes": "Beta 1.0.54 — фикс краша «Cannot convert bool object to void» при тапе по NFT в профиле. (1) В _gen (фабрика JRunnable из java.lang.Runnable) ранее было `return instance._fn(...)`; теперь return снят, потому что Runnable.run объявлен void и Chaquopy кидает ClassCastException, если Python возвращает bool. (2) Новый помощник _voidify(fn) оборачивает любую callable так, чтобы она гарантированно вернула None. (3) Все run_on_ui_thread(lambda...) которые целились в bool-возвращающие методы (_open_constructor_for_library_key, _delete_library_gift_key, _import_gift_from_sheet, _install_local_upgrade_button_override, _apply_welcome_sticker_document) теперь идут через _voidify.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",

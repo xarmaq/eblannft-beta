@@ -60,8 +60,13 @@ except Exception:
 
 def _gen(java_class, method_name):
     def _run(instance, *java_args):
+        # Always discard the Python return value. _gen is only used to build
+        # JRunnable (java.lang.Runnable.run, which is void). If the wrapped
+        # callable happens to return e.g. bool from _open_constructor_for_library_key,
+        # Chaquopy would otherwise throw
+        #   ClassCastException: Cannot convert bool object to void.
         try:
-            return instance._fn(*java_args)
+            instance._fn(*java_args)
         except:
             pass
     def __init__(self, fn, *args, **kwargs):
@@ -73,11 +78,31 @@ def _gen(java_class, method_name):
 
 JRunnable = _gen(jclass("java.lang.Runnable"), "run")
 
+
+def _voidify(fn):
+    """Return a 0-arg callable that invokes *fn* and forces a None return.
+
+    Use this to wrap any lambda/method passed to ``run_on_ui_thread`` whose
+    target may return a non-None value (e.g. ``_open_constructor_for_library_key``
+    returns bool). Without this, Chaquopy throws
+    ``ClassCastException: Cannot convert bool object to void`` because
+    ``Runnable.run`` is declared ``void``.
+    """
+    def _wrapper():
+        try:
+            fn()
+        except Exception as _e:
+            try:
+                logcat(f"[NFT_ARCH] _voidify: {_e}")
+            except Exception:
+                pass
+    return _wrapper
+
 __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.53"
+__version__ = "1.0.54"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -16390,7 +16415,7 @@ class NftClonerPlugin(BasePlugin):
                         if result and result.documents and result.documents.size() > EBLANNFT_WELCOME_STICKER_INDEX:
                             doc = result.documents.get(EBLANNFT_WELCOME_STICKER_INDEX)
                             try:
-                                run_on_ui_thread(lambda: plugin_self._apply_welcome_sticker_document(target_view, doc))
+                                run_on_ui_thread(_voidify(lambda: plugin_self._apply_welcome_sticker_document(target_view, doc)))
                             except:
                                 plugin_self._apply_welcome_sticker_document(target_view, doc)
                     except Exception as inner_e:
@@ -25776,7 +25801,7 @@ class GiftSheetLocalValueHook(MethodHook):
         except Exception as e:
             _log(f"GiftSheetLocalValueHook value-row error: {e}")
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
             AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook upgrade-button error: {e}")
@@ -25840,7 +25865,7 @@ class GiftSheetSavedSetHook(MethodHook):
         except:
             sheet = None
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
             AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
         except Exception as e:
             try:
@@ -25898,7 +25923,7 @@ class GiftSheetSlugSetHook(MethodHook):
         except:
             sheet = None
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
             AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
         except Exception as e:
             try:
@@ -26098,19 +26123,19 @@ class GiftItemOptionsShowHook(MethodHook):
                 icon_edit, icon_delete, icon_add, icon_upgrade = 0, 0, 0, 0
 
             def _on_edit():
-                run_on_ui_thread(lambda: self.plugin._open_constructor_for_library_key(key))
+                run_on_ui_thread(_voidify(lambda: self.plugin._open_constructor_for_library_key(key)))
 
             def _on_delete():
-                run_on_ui_thread(lambda: self.plugin._delete_library_gift_key(key))
+                run_on_ui_thread(_voidify(lambda: self.plugin._delete_library_gift_key(key)))
 
             def _on_add():
-                run_on_ui_thread(lambda: self.plugin._import_gift_from_sheet(sheet))
+                run_on_ui_thread(_voidify(lambda: self.plugin._import_gift_from_sheet(sheet)))
 
             def _on_local_upgrade():
                 if key:
-                    run_on_ui_thread(lambda: self.plugin._local_upgrade_entry_runnable(key))
+                    run_on_ui_thread(_voidify(lambda: self.plugin._local_upgrade_entry_runnable(key)))
                 elif importable_gift is not None:
-                    run_on_ui_thread(lambda: self.plugin._local_upgrade_gift_runnable(importable_gift))
+                    run_on_ui_thread(_voidify(lambda: self.plugin._local_upgrade_gift_runnable(importable_gift)))
 
             try:
                 if key:
