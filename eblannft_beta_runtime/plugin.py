@@ -102,7 +102,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.54"
+__version__ = "1.0.55"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11291,19 +11291,20 @@ class NftClonerPlugin(BasePlugin):
     #   \u2013 Regular gifts:   From / Date / Comment (tap-to-edit) + Delete
     # \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     def _dismiss_my_gifts_sheet(self):
-        try:
-            sheet = getattr(self, "_my_gifts_sheet", None)
-        except:
-            sheet = None
-        if sheet is not None:
+        for attr in ("_my_gifts_sheet", "_my_gifts_dialog"):
             try:
-                sheet.dismiss()
+                obj = getattr(self, attr, None)
+            except:
+                obj = None
+            if obj is not None:
+                try:
+                    obj.dismiss()
+                except:
+                    pass
+            try:
+                setattr(self, attr, None)
             except:
                 pass
-        try:
-            self._my_gifts_sheet = None
-        except:
-            pass
 
     def _my_gifts_palette(self):
         return {
@@ -12390,8 +12391,8 @@ class NftClonerPlugin(BasePlugin):
     def _open_my_gifts_add_menu(self):
         try:
             actions = [
-                ("\u0412\u044b\u0431\u0440\u0430\u0442\u044c NFT \u0438\u0437 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430", lambda: self._add_menu_open_catalog()),
-                ("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u043f\u043e\u0434\u0430\u0440\u043e\u043a", lambda: self._add_default_regular_gift()),
+                ("NFT-\u043f\u043e\u0434\u0430\u0440\u043e\u043a (\u0441 \u0443\u043b\u0443\u0447\u0448\u0435\u043d\u0438\u044f\u043c\u0438)", lambda: self._add_menu_open_catalog(mode="nft_only")),
+                ("\u041e\u0431\u044b\u0447\u043d\u044b\u0439 \u043f\u043e\u0434\u0430\u0440\u043e\u043a (\u0431\u0435\u0437 \u0443\u043b\u0443\u0447\u0448\u0435\u043d\u0438\u0439)", lambda: self._add_menu_open_catalog(mode="regular_only")),
             ]
             self._show_action_menu("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0430\u0440\u043e\u043a", actions, negative_text="\u041e\u0442\u043c\u0435\u043d\u0430")
         except Exception as e:
@@ -12400,13 +12401,13 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
-    def _add_menu_open_catalog(self):
+    def _add_menu_open_catalog(self, mode="default"):
         try:
             self._dismiss_my_gifts_sheet()
         except:
             pass
         try:
-            self._open_catalog_nft_sheet()
+            self._open_catalog_nft_sheet(mode=mode)
         except Exception as e:
             try:
                 BulletinHelper.show_error(f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 \u043d\u0435 \u043e\u0442\u043a\u0440\u044b\u043b\u0441\u044f: {e}")
@@ -12544,40 +12545,42 @@ class NftClonerPlugin(BasePlugin):
 
             bg_color = int(self._my_gifts_palette()["bg"])
 
-            try:
-                screen_h = 0
-                ds = getattr(AndroidUtilities, "displaySize", None)
-                if ds is not None:
-                    try:
-                        screen_h = int(ds.y or 0)
-                    except:
-                        screen_h = 0
-                if screen_h <= 0:
-                    dm = ctx.getResources().getDisplayMetrics()
-                    screen_h = int(dm.heightPixels or 0)
-            except:
-                screen_h = 0
-            if screen_h <= 0:
-                screen_h = 2400
+            # Use a fullscreen android.app.Dialog instead of BottomSheet \u2014
+            # BottomSheet has multiple internal containers that paint their
+            # own backgrounds with alpha, which kept washing out our screen
+            # no matter how many we tried to strip. A Dialog gives us our
+            # own Window where setBackgroundDrawable + setLayout MATCH_PARENT
+            # produce a true opaque full-screen overlay.
+            Dialog = jclass("android.app.Dialog")
+            ColorDrawable = jclass("android.graphics.drawable.ColorDrawable")
 
-            sheet = BottomSheet(ctx, True)
+            theme_id = 0
             try:
-                sheet.setApplyTopPadding(False)
-                sheet.setApplyBottomPadding(False)
+                android_R_style = jclass("android.R$style")
+                for theme_name in (
+                    "Theme_DeviceDefault_NoActionBar",
+                    "Theme_Material_NoActionBar",
+                    "Theme_Holo_NoActionBar",
+                ):
+                    try:
+                        v = int(getattr(android_R_style, theme_name, 0) or 0)
+                        if v:
+                            theme_id = v
+                            break
+                    except:
+                        continue
             except:
-                pass
+                theme_id = 0
+
+            dialog = Dialog(ctx, theme_id) if theme_id else Dialog(ctx)
             try:
-                sheet.fullHeight = True
+                dialog.requestWindowFeature(1)  # Window.FEATURE_NO_TITLE
             except:
                 pass
 
             container = FrameLayout(ctx)
             try:
                 container.setBackgroundColor(bg_color)
-            except:
-                pass
-            try:
-                container.setMinimumHeight(int(screen_h))
             except:
                 pass
 
@@ -12588,77 +12591,63 @@ class NftClonerPlugin(BasePlugin):
                 container.addView(root)
 
             try:
-                sheet.setCustomView(container)
-            except:
-                pass
-
-            # Strip every layer of sheet's own background so only our opaque
-            # FrameLayout paints. Mirrors _style_install_welcome_sheet_surface
-            # but keeps the dim behind so the activity is visually pushed back.
-            try:
-                self._strip_sheet_chrome(sheet, keep_dim=True, set_bg_color=bg_color)
+                dialog.setContentView(container)
             except Exception as e:
                 try:
-                    _log(f"strip sheet chrome failed: {e}")
+                    _log(f"dialog.setContentView fail: {e}")
                 except:
                     pass
 
             try:
-                lp = container.getLayoutParams()
-                if lp is not None:
-                    lp.height = int(screen_h)
-                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-                    container.setLayoutParams(lp)
+                w = dialog.getWindow()
+                if w is not None:
+                    try:
+                        w.setBackgroundDrawable(ColorDrawable(int(bg_color)))
+                    except:
+                        pass
+                    try:
+                        w.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                    except:
+                        pass
+                    try:
+                        w.setStatusBarColor(int(bg_color))
+                    except:
+                        pass
+                    try:
+                        w.setNavigationBarColor(int(bg_color))
+                    except:
+                        pass
+                    try:
+                        w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                    except:
+                        pass
+                    try:
+                        w.setDimAmount(0.0)
+                    except:
+                        pass
+            except Exception as e:
+                try:
+                    _log(f"dialog window style fail: {e}")
+                except:
+                    pass
+
+            try:
+                dialog.setCancelable(True)
+                dialog.setCanceledOnTouchOutside(False)
             except:
                 pass
 
             self._my_gifts_ctx = ctx
-            self._my_gifts_sheet = sheet
+            self._my_gifts_dialog = dialog
             self._my_gifts_container = container
-            self._my_gifts_screen_h = int(screen_h)
-
-            def _post_show():
-                try:
-                    self._strip_sheet_chrome(sheet, keep_dim=True, set_bg_color=bg_color)
-                except:
-                    pass
-                try:
-                    lp2 = container.getLayoutParams()
-                    if lp2 is not None:
-                        lp2.height = int(screen_h)
-                        lp2.width = ViewGroup.LayoutParams.MATCH_PARENT
-                        container.setLayoutParams(lp2)
-                except:
-                    pass
-                try:
-                    parent = container.getParent()
-                    if parent is not None:
-                        try:
-                            parent.setBackgroundColor(int(bg_color))
-                        except:
-                            pass
-                        try:
-                            parent.setBackground(None)
-                            parent.setBackgroundColor(int(bg_color))
-                        except:
-                            pass
-                except:
-                    pass
-
-            def _show_then_style():
-                try:
-                    sheet.show()
-                except:
-                    pass
-                try:
-                    AndroidUtilities.runOnUIThread(JRunnable(_post_show), 0)
-                except:
-                    _post_show()
 
             try:
-                run_on_ui_thread(JRunnable(_show_then_style))
+                run_on_ui_thread(JRunnable(dialog.show))
             except:
-                _show_then_style()
+                try:
+                    dialog.show()
+                except:
+                    pass
             return True
         except Exception as e:
             try:
@@ -14417,9 +14406,9 @@ class NftClonerPlugin(BasePlugin):
             self.cls_unique = None
         return bool(self.cls_saved and self.cls_unique)
 
-    def _open_catalog_nft_sheet(self):
-        _log("Catalog: opening ResaleGridController")
-        ResaleGridController(self, is_catalog=True).show()
+    def _open_catalog_nft_sheet(self, mode="default"):
+        _log(f"Catalog: opening ResaleGridController mode={mode}")
+        ResaleGridController(self, is_catalog=True, mode=str(mode or "default")).show()
 
     def _open_gift_actions_menu(self, key):
         e = self._library_find_entry(key)
@@ -28502,9 +28491,17 @@ class AttrLoader:
         run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
 
 class ResaleGridController:
-    def __init__(self, plugin, is_catalog=False):
+    # mode values:
+    #   "default"     – classic flow: unique gift -> constructor,
+    #                                normal gift -> "Обычный подарок" popup
+    #   "nft_only"    – only show gifts that look unique / upgradable;
+    #                                click goes straight to constructor (no popup)
+    #   "regular_only"– show every gift; click adds it as a regular gift
+    #                                (no popup, no upgrade option)
+    def __init__(self, plugin, is_catalog=False, mode="default"):
         self.plugin = plugin
         self.is_catalog = is_catalog
+        self.mode = str(mode or "default")
         self.fragment = None
         self.my_adapter = None
         self.items = []
@@ -28758,6 +28755,49 @@ class ResaleGridController:
                 is_unique = bool(self.plugin._looks_like_unique_gift(gift))
             except:
                 is_unique = False
+
+            mode = getattr(self, "mode", "default") or "default"
+
+            # "regular_only": every click adds the gift as a regular gift —
+            # no popup, no upgrade option.
+            if mode == "regular_only":
+                try:
+                    self.plugin._import_gift_to_library(
+                        gift=gift, wrapper=None, inject=True,
+                        official_import=False, gift_kind=GIFT_KIND_NORMAL,
+                        local_only=False,
+                    )
+                except Exception as ie:
+                    BulletinHelper.show_error(f"Ошибка добавления: {ie}")
+                try:
+                    self.fragment.finishFragment()
+                except:
+                    pass
+                self._release()
+                return
+
+            # "nft_only": skip the "Обычный подарок" popup. Click always
+            # opens the constructor for the tapped gift (works for any gift
+            # the catalog already shows — including UFC Box / Khabib hat
+            # which are not unique but DO have an upgrade flow).
+            if mode == "nft_only":
+                try:
+                    self.plugin.cached_gift_id = int(self.plugin._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+                except:
+                    self.plugin.cached_gift_id = 0
+                if int(self.plugin.cached_gift_id or 0) <= 0:
+                    BulletinHelper.show_error("Не удалось определить gift_id")
+                    return
+                self.plugin.stolen_gift_inner = gift
+                try:
+                    self.fragment.finishFragment()
+                except:
+                    pass
+                self._release()
+                AttrLoader(self.plugin, self.plugin.cached_gift_id, allow_generic_fallback=True).start()
+                return
+
+            # Default flow.
             if not is_unique:
                 self.plugin._show_action_menu(
                     "Обычный подарок",

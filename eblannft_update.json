@@ -1,6 +1,6 @@
 {
-  "version": "1.0.54",
-  "notes": "Beta 1.0.54 — фикс краша «Cannot convert bool object to void» при тапе по NFT в профиле. (1) В _gen (фабрика JRunnable из java.lang.Runnable) ранее было `return instance._fn(...)`; теперь return снят, потому что Runnable.run объявлен void и Chaquopy кидает ClassCastException, если Python возвращает bool. (2) Новый помощник _voidify(fn) оборачивает любую callable так, чтобы она гарантированно вернула None. (3) Все run_on_ui_thread(lambda...) которые целились в bool-возвращающие методы (_open_constructor_for_library_key, _delete_library_gift_key, _import_gift_from_sheet, _install_local_upgrade_button_override, _apply_welcome_sticker_document) теперь идут через _voidify.",
+  "version": "1.0.55",
+  "notes": "Beta 1.0.55 — три больших изменения: (1) Экран «Мои подарки» переехал с BottomSheet на полноэкранный android.app.Dialog с собственным Window: setBackgroundDrawable(ColorDrawable), setLayout(MATCH_PARENT, MATCH_PARENT), statusBar/navBar в bg_color, dim снят. Это полностью убирает «прозрачный фон» и «тусклый текст» — у Dialog нет внутренних alpha-overlays как у BottomSheet. (2) Каталог теперь умеет два режима. По «+» в шапке «Мои подарки» открывается выбор: NFT-подарок (с улучшениями) и Обычный подарок. NFT-режим (mode=nft_only) сразу открывает конструктор по тапу — никакого «Обычный подарок?» popup'а. Обычный режим (mode=regular_only) импортирует подарок как regular (gift_kind=NORMAL) сразу и закрывает каталог. (3) Превью продолжает рисоваться: радиальный градиент бэкдропа + pattern alpha 0.18 + анимированный model-стикер.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
