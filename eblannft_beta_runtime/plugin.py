@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.48"
+__version__ = "1.0.49"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -12285,21 +12285,21 @@ class NftClonerPlugin(BasePlugin):
                 sheet.setApplyTopPadding(False)
                 sheet.setApplyBottomPadding(False)
                 try:
-                    sheet.setBackgroundColor(0x00000000)
-                except:
-                    pass
-                try:
                     sheet.fullHeight = True
                 except:
                     pass
             except:
                 pass
 
+            bg_color = int(self._my_gifts_palette()["bg"])
+
             container = FrameLayout(ctx)
             try:
-                container.setBackground(self._create_round_rect(int(self._my_gifts_palette()["bg"]), radius_dp=18))
-                container.setClipToOutline(True)
-                container.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+                container.setBackgroundColor(bg_color)
+            except:
+                pass
+            try:
+                container.setLayoutParams(FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             except:
                 pass
 
@@ -12311,6 +12311,10 @@ class NftClonerPlugin(BasePlugin):
 
             try:
                 sheet.setCustomView(container)
+            except:
+                pass
+            try:
+                sheet.setBackgroundColor(bg_color)
             except:
                 pass
 
