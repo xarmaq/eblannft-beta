@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.46"
+__version__ = "1.0.47"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -820,6 +820,8 @@ class NftClonerPlugin(BasePlugin):
         self.inject_active = False
 
         self.gift_library = []
+        self.regular_gifts = []
+        self._regular_gifts_seq = 0
         self.gift_objects = {}
         self._gift_objects_order = []
         self._gift_objects_max = 12
@@ -9208,6 +9210,8 @@ class NftClonerPlugin(BasePlugin):
             self.injection_payloads = []
             self.inject_active = False
             self.gift_library = []
+            self.regular_gifts = []
+            self._regular_gifts_seq = 0
             self.gift_objects = {}
             self._gift_objects_order = []
             self.editing_gift_key = None
@@ -11223,6 +11227,14 @@ class NftClonerPlugin(BasePlugin):
 
     def _open_gift_library_menu(self, context=None):
         try:
+            if self._open_my_gifts_screen(context=context):
+                return
+        except Exception as e:
+            try:
+                _log(f"My Gifts screen failed, fallback to legacy menu: {e}")
+            except:
+                pass
+        try:
             entries = list(self.gift_library or [])
             try:
                 entries.sort(key=lambda e: (
@@ -11246,6 +11258,1044 @@ class NftClonerPlugin(BasePlugin):
             self._show_action_menu(title, actions, negative_text="\u0417\u0430\u043a\u0440\u044b\u0442\u044c", context=context)
         except Exception as e:
             BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0431\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0438: {e}")
+
+    # \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    # My Gifts screen (Material 3 Expressive)
+    # Full-screen card list mirroring the iOS-style "Gifts" prototype:
+    #   \u2013 NFT gifts:       Model / Symbol / Backdrop + rarity %, Edit + Delete
+    #   \u2013 Regular gifts:   From / Date / Comment (tap-to-edit) + Delete
+    # \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    def _dismiss_my_gifts_sheet(self):
+        try:
+            sheet = getattr(self, "_my_gifts_sheet", None)
+        except:
+            sheet = None
+        if sheet is not None:
+            try:
+                sheet.dismiss()
+            except:
+                pass
+        try:
+            self._my_gifts_sheet = None
+        except:
+            pass
+
+    def _my_gifts_palette(self):
+        return {
+            "bg":          self._theme_color("key_dialogBackground",                 0xFF0E1316),
+            "card":        self._theme_color("key_windowBackgroundGray",             0xFF161D24),
+            "card_inner":  self._theme_color("key_dialogBackground",                 0xFF0E1316),
+            "stroke":      0x14FFFFFF,
+            "text":        self._theme_color("key_windowBackgroundWhiteBlackText",   0xFFFFFFFF),
+            "secondary":   self._theme_color("key_windowBackgroundWhiteGrayText",    0xFFB4BCC4),
+            "tertiary":    self._theme_color("key_windowBackgroundWhiteGrayText2",   0xFF7E8893),
+            "primary":     self._theme_color("key_featuredStickers_addButton",       0xFF5B95FF),
+            "primary_bg":  0x331A4FFF,
+            "danger":      0xFFFF6B6B,
+            "danger_bg":   0x33FF6B6B,
+            "accent_text": self._theme_color("key_featuredStickers_buttonText",      0xFFFFFFFF),
+        }
+
+    def _resolve_library_entry_attrs(self, entry):
+        out = {"model": ("\u2014", ""), "pattern": ("\u2014", ""), "backdrop": ("\u2014", "")}
+        try:
+            pool = getattr(self, "_upgrade_attr_pool", None)
+            if not isinstance(pool, dict):
+                pool = {}
+            cfg = entry.get("build_config") if isinstance(entry, dict) else None
+            if not isinstance(cfg, dict):
+                cfg = {}
+            for group, key in (("model", "model"), ("pattern", "pattern"), ("backdrop", "backdrop")):
+                arr = pool.get(group) or []
+                try:
+                    idx = int(cfg.get(key, 0) or 0)
+                except:
+                    idx = 0
+                if not arr:
+                    continue
+                try:
+                    obj = arr[idx % len(arr)]
+                except:
+                    obj = None
+                if obj is None:
+                    continue
+                name = ""
+                try:
+                    name = str(get_val(obj, "name", "") or "")
+                except:
+                    name = ""
+                rarity_text = ""
+                try:
+                    raw_rarity = get_val(obj, "rarity_permille", 0)
+                    rp = int(raw_rarity or 0)
+                    if rp > 0:
+                        rarity_text = self._format_rarity_permille(rp)
+                except:
+                    rarity_text = ""
+                out[group] = (self._ui_text(name, "\u2014") or "\u2014", rarity_text)
+        except Exception as e:
+            try:
+                _log(f"_resolve_library_entry_attrs: {e}")
+            except:
+                pass
+        return out
+
+    def _format_rarity_permille(self, rp):
+        try:
+            rp = int(rp or 0)
+        except:
+            rp = 0
+        if rp <= 0:
+            return ""
+        pct = rp / 10.0
+        if pct >= 1.0:
+            return f"{int(round(pct))}%"
+        if pct >= 0.1:
+            return f"{pct:.1f}%"
+        s = f"{pct:.2f}"
+        s = s.rstrip("0").rstrip(".") if "." in s else s
+        return f"{s or '0'}%"
+
+    def _m3_state_list(self, base, pressed_overlay=0x33FFFFFF):
+        try:
+            from android.graphics.drawable import RippleDrawable, ColorDrawable
+            from android.content.res import ColorStateList
+            mask = ColorDrawable(0xFFFFFFFF)
+            tint = ColorStateList.valueOf(int(pressed_overlay))
+            return RippleDrawable(tint, base, mask)
+        except:
+            return base
+
+    def _m3_button(self, ctx, text, bg_color, text_color, on_click, icon_emoji="", height_dp=44, full_width=True, radius_dp=22):
+        wrap = LinearLayout(ctx)
+        try:
+            wrap.setOrientation(LinearLayout.HORIZONTAL)
+            wrap.setGravity(Gravity.CENTER)
+            wrap.setClickable(True)
+            wrap.setFocusable(True)
+            base = self._create_round_rect(int(bg_color), radius_dp=radius_dp)
+            try:
+                wrap.setBackground(self._m3_state_list(base, 0x33FFFFFF))
+            except:
+                wrap.setBackground(base)
+            wrap.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(10), AndroidUtilities.dp(18), AndroidUtilities.dp(10))
+        except:
+            pass
+        if icon_emoji:
+            ic = TextView(ctx)
+            try:
+                ic.setText(str(icon_emoji))
+                ic.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
+                ic.setTextColor(int(text_color))
+            except:
+                pass
+            try:
+                lp_ic = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp_ic.rightMargin = AndroidUtilities.dp(8)
+                wrap.addView(ic, lp_ic)
+            except:
+                wrap.addView(ic)
+        label = TextView(ctx)
+        try:
+            label.setText(str(text or ""))
+            label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.0)
+            label.setTextColor(int(text_color))
+            try:
+                label.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+        except:
+            pass
+        try:
+            wrap.addView(label, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            pass
+        if on_click is not None:
+            class _Click(dynamic_proxy(View.OnClickListener)):
+                def onClick(self_obj, v):
+                    try:
+                        on_click()
+                    except Exception as e:
+                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+            try:
+                wrap.setOnClickListener(_Click())
+            except:
+                pass
+
+        if full_width:
+            lp_outer = LinearLayout.LayoutParams(0, AndroidUtilities.dp(int(height_dp)), 1.0)
+        else:
+            lp_outer = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, AndroidUtilities.dp(int(height_dp)))
+        try:
+            wrap.setLayoutParams(lp_outer)
+        except:
+            pass
+        return wrap
+
+    def _m3_prop_row(self, ctx, label_text, value_text, trailing_text, on_click=None):
+        pal = self._my_gifts_palette()
+        row = LinearLayout(ctx)
+        try:
+            row.setOrientation(LinearLayout.HORIZONTAL)
+            row.setGravity(Gravity.CENTER_VERTICAL)
+            row.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10))
+        except:
+            pass
+        label = TextView(ctx)
+        try:
+            label.setText(str(label_text or ""))
+            label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
+            label.setTextColor(int(pal["secondary"]))
+        except:
+            pass
+        try:
+            row.addView(label, LinearLayout.LayoutParams(AndroidUtilities.dp(96), LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            row.addView(label)
+        value = TextView(ctx)
+        try:
+            value.setText(str(value_text or ""))
+            value.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
+            value.setTextColor(int(pal["text"]))
+            value.setSingleLine(True)
+            try:
+                from android.text import TextUtils as _TU
+                value.setEllipsize(_TU.TruncateAt.END)
+            except:
+                pass
+        except:
+            pass
+        try:
+            lp_val = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
+            row.addView(value, lp_val)
+        except:
+            row.addView(value)
+        if trailing_text:
+            trail = TextView(ctx)
+            try:
+                trail.setText(str(trailing_text))
+                trail.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
+                trail.setTextColor(int(pal["tertiary"]))
+            except:
+                pass
+            try:
+                lp_tr = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                lp_tr.leftMargin = AndroidUtilities.dp(8)
+                row.addView(trail, lp_tr)
+            except:
+                row.addView(trail)
+        if on_click is not None:
+            try:
+                row.setClickable(True)
+                row.setFocusable(True)
+            except:
+                pass
+            class _RowClick(dynamic_proxy(View.OnClickListener)):
+                def onClick(self_obj, v):
+                    try:
+                        on_click()
+                    except Exception as e:
+                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+            try:
+                row.setOnClickListener(_RowClick())
+            except:
+                pass
+        return row
+
+    def _m3_inner_props_container(self, ctx, rows):
+        pal = self._my_gifts_palette()
+        host = LinearLayout(ctx)
+        try:
+            host.setOrientation(LinearLayout.VERTICAL)
+            host.setBackground(self._create_round_rect(int(pal["card_inner"]), radius_dp=14))
+        except:
+            pass
+        for i, row in enumerate(rows):
+            try:
+                host.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            except:
+                pass
+            if i + 1 < len(rows):
+                sep = View(ctx)
+                try:
+                    sep.setBackgroundColor(0x14FFFFFF)
+                except:
+                    pass
+                try:
+                    lp_sep = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, max(1, AndroidUtilities.dp(0.5)))
+                    lp_sep.leftMargin = AndroidUtilities.dp(12)
+                    lp_sep.rightMargin = AndroidUtilities.dp(12)
+                    host.addView(sep, lp_sep)
+                except:
+                    host.addView(sep)
+        return host
+
+    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92):
+        wrap = FrameLayout(ctx)
+        try:
+            bg = self._create_round_rect(int(accent_color), radius_dp=20)
+            wrap.setBackground(bg)
+            wrap.setClipToOutline(True)
+            wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        except:
+            pass
+        try:
+            wrap.setLayoutParams(LinearLayout.LayoutParams(AndroidUtilities.dp(int(size_dp)), AndroidUtilities.dp(int(size_dp))))
+        except:
+            pass
+        try:
+            inner = TextView(ctx)
+            inner.setText(str(label_text or ""))
+            inner.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 34.0)
+            inner.setGravity(Gravity.CENTER)
+            try:
+                inner.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+            inner.setTextColor(0xFFFFFFFF)
+            wrap.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+        except:
+            pass
+        return wrap
+
+    def _accent_color_for_key(self, key):
+        try:
+            h = abs(hash(str(key or "x"))) & 0xFFFFFF
+            palette = [
+                0xFF6E5DFF, 0xFF2DA3FF, 0xFF12B985, 0xFFE5A93B,
+                0xFFE85A78, 0xFF7C5CFF, 0xFF31AFC4, 0xFFFF8A48,
+                0xFF8A4CE0, 0xFF4C8E50,
+            ]
+            return palette[h % len(palette)]
+        except:
+            return 0xFF6E5DFF
+
+    def _build_my_gifts_nft_card(self, ctx, entry):
+        pal = self._my_gifts_palette()
+        key = entry.get("key") if isinstance(entry, dict) else None
+
+        card = LinearLayout(ctx)
+        try:
+            card.setOrientation(LinearLayout.VERTICAL)
+            card.setBackground(self._create_round_rect(int(pal["card"]), radius_dp=24, stroke_color=int(pal["stroke"]), stroke_dp=1))
+            card.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14))
+        except:
+            pass
+
+        top = LinearLayout(ctx)
+        try:
+            top.setOrientation(LinearLayout.HORIZONTAL)
+            top.setGravity(Gravity.CENTER_VERTICAL)
+        except:
+            pass
+
+        title_raw = self._ui_text(entry.get("title", "NFT"), "NFT")
+        try:
+            num = int(entry.get("num", 0) or 0)
+        except:
+            num = 0
+        thumb_letter = (title_raw[:1] or "\u2605").upper()
+        accent = self._accent_color_for_key(key)
+        thumb = self._build_gift_thumb(ctx, accent, thumb_letter, size_dp=92)
+        try:
+            top.addView(thumb)
+        except:
+            pass
+
+        right = LinearLayout(ctx)
+        try:
+            right.setOrientation(LinearLayout.VERTICAL)
+            right.setPadding(AndroidUtilities.dp(14), 0, 0, 0)
+        except:
+            pass
+
+        title_view = TextView(ctx)
+        try:
+            tt = f"{title_raw} #{num}" if num > 0 else title_raw
+            title_view.setText(tt)
+            title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17.0)
+            title_view.setTextColor(int(pal["text"]))
+            try:
+                title_view.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+            title_view.setSingleLine(True)
+            try:
+                from android.text import TextUtils as _TU
+                title_view.setEllipsize(_TU.TruncateAt.END)
+            except:
+                pass
+        except:
+            pass
+        try:
+            right.addView(title_view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            right.addView(title_view)
+
+        attrs = self._resolve_library_entry_attrs(entry)
+        m_name, m_rar = attrs["model"]
+        p_name, p_rar = attrs["pattern"]
+        b_name, b_rar = attrs["backdrop"]
+        rows = [
+            self._m3_prop_row(ctx, "Model",   m_name, m_rar),
+            self._m3_prop_row(ctx, "Symbol",  p_name, p_rar),
+            self._m3_prop_row(ctx, "Backdrop", b_name, b_rar),
+        ]
+        try:
+            lp_inner = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_inner.topMargin = AndroidUtilities.dp(10)
+            right.addView(self._m3_inner_props_container(ctx, rows), lp_inner)
+        except:
+            right.addView(self._m3_inner_props_container(ctx, rows))
+
+        try:
+            lp_right = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
+            top.addView(right, lp_right)
+        except:
+            top.addView(right)
+
+        try:
+            card.addView(top, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            card.addView(top)
+
+        btn_row = LinearLayout(ctx)
+        try:
+            btn_row.setOrientation(LinearLayout.HORIZONTAL)
+        except:
+            pass
+        def _do_edit():
+            try:
+                self._dismiss_my_gifts_sheet()
+            except:
+                pass
+            try:
+                self._open_constructor_for_library_key(key)
+            except Exception as e:
+                BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+        def _do_delete():
+            try:
+                self._delete_library_gift_key(key)
+            except Exception as e:
+                BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+            try:
+                self._refresh_my_gifts_sheet()
+            except:
+                pass
+        edit_btn = self._m3_button(
+            ctx,
+            "\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c",
+            int(pal["primary_bg"]),
+            int(pal["primary"]),
+            _do_edit,
+            icon_emoji="\u270e",
+            height_dp=44,
+            full_width=True,
+            radius_dp=22,
+        )
+        del_btn = self._m3_button(
+            ctx,
+            "\u0423\u0434\u0430\u043b\u0438\u0442\u044c",
+            int(pal["danger_bg"]),
+            int(pal["danger"]),
+            _do_delete,
+            icon_emoji="\U0001F5D1",
+            height_dp=44,
+            full_width=True,
+            radius_dp=22,
+        )
+        try:
+            btn_row.addView(edit_btn)
+            spacer = View(ctx)
+            sp_lp = LinearLayout.LayoutParams(AndroidUtilities.dp(10), AndroidUtilities.dp(10))
+            btn_row.addView(spacer, sp_lp)
+            btn_row.addView(del_btn)
+        except:
+            pass
+        try:
+            lp_br = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_br.topMargin = AndroidUtilities.dp(14)
+            card.addView(btn_row, lp_br)
+        except:
+            card.addView(btn_row)
+
+        return card
+
+    def _build_my_gifts_regular_card(self, ctx, regular):
+        pal = self._my_gifts_palette()
+        gid = regular.get("id") if isinstance(regular, dict) else 0
+
+        card = LinearLayout(ctx)
+        try:
+            card.setOrientation(LinearLayout.VERTICAL)
+            card.setBackground(self._create_round_rect(int(pal["card"]), radius_dp=24, stroke_color=int(pal["stroke"]), stroke_dp=1))
+            card.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14), AndroidUtilities.dp(14))
+        except:
+            pass
+
+        top = LinearLayout(ctx)
+        try:
+            top.setOrientation(LinearLayout.HORIZONTAL)
+            top.setGravity(Gravity.CENTER_VERTICAL)
+        except:
+            pass
+
+        title_raw = self._ui_text(regular.get("title", "\u041f\u043e\u0434\u0430\u0440\u043e\u043a"), "\u041f\u043e\u0434\u0430\u0440\u043e\u043a")
+        emoji = str(regular.get("emoji", "") or "\U0001F381")
+        try:
+            stars = int(regular.get("stars", 0) or 0)
+        except:
+            stars = 0
+        accent = self._accent_color_for_key(f"reg-{gid}")
+        thumb = self._build_gift_thumb(ctx, accent, emoji, size_dp=92)
+        if stars > 0:
+            try:
+                badge = TextView(ctx)
+                badge.setText(f"\u2b50 {stars}")
+                badge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 11.0)
+                badge.setTextColor(0xFFFFD56B)
+                badge.setBackground(self._create_round_rect(0xC8000000, radius_dp=10))
+                badge.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(3), AndroidUtilities.dp(8), AndroidUtilities.dp(3))
+                lp_badge = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+                lp_badge.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                lp_badge.bottomMargin = AndroidUtilities.dp(6)
+                thumb.addView(badge, lp_badge)
+            except:
+                pass
+        try:
+            top.addView(thumb)
+        except:
+            pass
+
+        right = LinearLayout(ctx)
+        try:
+            right.setOrientation(LinearLayout.VERTICAL)
+            right.setPadding(AndroidUtilities.dp(14), 0, 0, 0)
+        except:
+            pass
+
+        title_view = TextView(ctx)
+        try:
+            title_view.setText(title_raw)
+            title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17.0)
+            title_view.setTextColor(int(pal["text"]))
+            try:
+                title_view.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+            title_view.setSingleLine(True)
+            try:
+                from android.text import TextUtils as _TU
+                title_view.setEllipsize(_TU.TruncateAt.END)
+            except:
+                pass
+            title_view.setClickable(True)
+            title_view.setFocusable(True)
+        except:
+            pass
+        def _edit_title():
+            self._show_text_input_dialog(
+                "\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435",
+                str(regular.get("title", "") or ""),
+                lambda txt: self._update_regular_gift_field(gid, "title", txt),
+            )
+        class _TitleClick(dynamic_proxy(View.OnClickListener)):
+            def onClick(self_obj, v):
+                try: _edit_title()
+                except: pass
+        try:
+            title_view.setOnClickListener(_TitleClick())
+        except:
+            pass
+        try:
+            right.addView(title_view, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            right.addView(title_view)
+
+        from_name = self._ui_text(regular.get("from_name", "") or "\u2014", "\u2014")
+        date_val = self._ui_text(regular.get("date", "") or "\u2014", "\u2014")
+        comment_val = self._ui_text(regular.get("comment", "") or "\u2014", "\u2014")
+        def _edit_from():
+            self._show_text_input_dialog(
+                "\u041e\u0442 \u043a\u043e\u0433\u043e",
+                str(regular.get("from_name", "") or ""),
+                lambda txt: self._update_regular_gift_field(gid, "from_name", txt),
+            )
+        def _edit_date():
+            self._show_text_input_dialog(
+                "\u0414\u0430\u0442\u0430",
+                str(regular.get("date", "") or ""),
+                lambda txt: self._update_regular_gift_field(gid, "date", txt),
+            )
+        def _edit_comment():
+            self._show_text_input_dialog(
+                "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439",
+                str(regular.get("comment", "") or ""),
+                lambda txt: self._update_regular_gift_field(gid, "comment", txt),
+            )
+
+        rows = [
+            self._m3_prop_row(ctx, "\u041e\u0442",          from_name,   "", _edit_from),
+            self._m3_prop_row(ctx, "\u0414\u0430\u0442\u0430", date_val,   "", _edit_date),
+            self._m3_prop_row(ctx, "\u041a\u043e\u043c\u043c.", comment_val, "", _edit_comment),
+        ]
+        try:
+            lp_inner = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_inner.topMargin = AndroidUtilities.dp(10)
+            right.addView(self._m3_inner_props_container(ctx, rows), lp_inner)
+        except:
+            right.addView(self._m3_inner_props_container(ctx, rows))
+
+        try:
+            lp_right = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
+            top.addView(right, lp_right)
+        except:
+            top.addView(right)
+
+        try:
+            card.addView(top, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            card.addView(top)
+
+        def _do_delete():
+            try:
+                self._delete_regular_gift(gid)
+            except Exception as e:
+                BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+        del_btn = self._m3_button(
+            ctx,
+            "\u0423\u0434\u0430\u043b\u0438\u0442\u044c",
+            int(pal["danger_bg"]),
+            int(pal["danger"]),
+            _do_delete,
+            icon_emoji="\U0001F5D1",
+            height_dp=44,
+            full_width=True,
+            radius_dp=22,
+        )
+        try:
+            lp_br = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_br.topMargin = AndroidUtilities.dp(14)
+            card.addView(del_btn, lp_br)
+        except:
+            card.addView(del_btn)
+        return card
+
+    def _build_my_gifts_empty_footer(self, ctx):
+        pal = self._my_gifts_palette()
+        wrap = LinearLayout(ctx)
+        try:
+            wrap.setOrientation(LinearLayout.VERTICAL)
+            wrap.setGravity(Gravity.CENTER_HORIZONTAL)
+            wrap.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(20), AndroidUtilities.dp(16), AndroidUtilities.dp(16))
+        except:
+            pass
+        title = TextView(ctx)
+        try:
+            title.setText("\u041f\u043e\u0434\u0430\u0440\u043a\u043e\u0432 \u0431\u043e\u043b\u044c\u0448\u0435 \u043d\u0435\u0442\u2026")
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.0)
+            title.setGravity(Gravity.CENTER)
+            title.setTextColor(int(pal["secondary"]))
+        except:
+            pass
+        sub = TextView(ctx)
+        try:
+            sub.setText("\u041f\u043e\u043b\u0443\u0447\u0435\u043d\u043d\u044b\u0435 \u043f\u043e\u0434\u0430\u0440\u043a\u0438 \u043f\u043e\u044f\u0432\u044f\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c.")
+            sub.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
+            sub.setGravity(Gravity.CENTER)
+            sub.setTextColor(int(pal["tertiary"]))
+        except:
+            pass
+        try:
+            wrap.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            lp_sub = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_sub.topMargin = AndroidUtilities.dp(4)
+            wrap.addView(sub, lp_sub)
+        except:
+            wrap.addView(title)
+            wrap.addView(sub)
+        return wrap
+
+    def _build_my_gifts_top_bar(self, ctx, total):
+        pal = self._my_gifts_palette()
+        bar = FrameLayout(ctx)
+        try:
+            bar.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(6), AndroidUtilities.dp(8), AndroidUtilities.dp(6))
+        except:
+            pass
+
+        back = TextView(ctx)
+        try:
+            back.setText("\u2190")
+            back.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+            back.setGravity(Gravity.CENTER)
+            back.setTextColor(int(pal["text"]))
+            back.setClickable(True)
+            back.setFocusable(True)
+            try:
+                back.setBackground(self._create_round_rect(0x14FFFFFF, radius_dp=22))
+            except:
+                pass
+            back.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(4), AndroidUtilities.dp(8), AndroidUtilities.dp(4))
+        except:
+            pass
+        class _BackClick(dynamic_proxy(View.OnClickListener)):
+            def onClick(self_obj, v):
+                try: self._dismiss_my_gifts_sheet()
+                except: pass
+        try:
+            back.setOnClickListener(_BackClick())
+        except:
+            pass
+        try:
+            lp_back = FrameLayout.LayoutParams(AndroidUtilities.dp(44), AndroidUtilities.dp(44), Gravity.LEFT | Gravity.CENTER_VERTICAL)
+            lp_back.leftMargin = AndroidUtilities.dp(4)
+            bar.addView(back, lp_back)
+        except:
+            bar.addView(back)
+
+        title = TextView(ctx)
+        try:
+            title.setText("\u041f\u043e\u0434\u0430\u0440\u043a\u0438")
+            title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+            title.setTextColor(int(pal["text"]))
+            try:
+                title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+        except:
+            pass
+        try:
+            lp_title = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.LEFT | Gravity.CENTER_VERTICAL)
+            lp_title.leftMargin = AndroidUtilities.dp(56)
+            bar.addView(title, lp_title)
+        except:
+            bar.addView(title)
+
+        add_btn = TextView(ctx)
+        try:
+            add_btn.setText("+ \u041f\u043e\u0434\u0430\u0440\u043e\u043a")
+            add_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
+            add_btn.setTextColor(int(pal["primary"]))
+            try:
+                add_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+            add_btn.setClickable(True)
+            add_btn.setFocusable(True)
+            try:
+                add_btn.setBackground(self._m3_state_list(self._create_round_rect(int(pal["primary_bg"]), radius_dp=18), 0x33FFFFFF))
+            except:
+                add_btn.setBackground(self._create_round_rect(int(pal["primary_bg"]), radius_dp=18))
+            add_btn.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8), AndroidUtilities.dp(12), AndroidUtilities.dp(8))
+            add_btn.setGravity(Gravity.CENTER)
+        except:
+            pass
+        class _AddClick(dynamic_proxy(View.OnClickListener)):
+            def onClick(self_obj, v):
+                try:
+                    self._add_default_regular_gift()
+                except Exception as e:
+                    BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+        try:
+            add_btn.setOnClickListener(_AddClick())
+        except:
+            pass
+        try:
+            lp_add = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT | Gravity.CENTER_VERTICAL)
+            lp_add.rightMargin = AndroidUtilities.dp(8)
+            bar.addView(add_btn, lp_add)
+        except:
+            bar.addView(add_btn)
+
+        return bar
+
+    def _build_my_gifts_root(self, ctx):
+        pal = self._my_gifts_palette()
+        outer = LinearLayout(ctx)
+        try:
+            outer.setOrientation(LinearLayout.VERTICAL)
+            outer.setBackgroundColor(int(pal["bg"]))
+        except:
+            pass
+
+        entries = list(self.gift_library or [])
+        try:
+            entries.sort(key=lambda e: (
+                0 if bool(e.get("inject", False)) else 1,
+                0 if (self.wear_active and int(e.get("unique_id", 0) or 0) == int(self.wear_collectible_id or 0)) else 1,
+                -int(e.get("created_at", 0) or 0)
+            ))
+        except:
+            pass
+        regulars = list(self.regular_gifts or [])
+        total = len(entries) + len(regulars)
+
+        try:
+            outer.addView(self._build_my_gifts_top_bar(ctx, total), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        except:
+            outer.addView(self._build_my_gifts_top_bar(ctx, total))
+
+        try:
+            sep = View(ctx)
+            sep.setBackgroundColor(0x14FFFFFF)
+            outer.addView(sep, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, max(1, AndroidUtilities.dp(0.5))))
+        except:
+            pass
+
+        scroll = ScrollView(ctx)
+        try:
+            scroll.setFillViewport(True)
+            scroll.setVerticalScrollBarEnabled(False)
+        except:
+            pass
+
+        body = LinearLayout(ctx)
+        try:
+            body.setOrientation(LinearLayout.VERTICAL)
+            body.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(20))
+        except:
+            pass
+
+        first_card = True
+        for entry in entries:
+            try:
+                card = self._build_my_gifts_nft_card(ctx, entry)
+                lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                if not first_card:
+                    lp.topMargin = AndroidUtilities.dp(12)
+                first_card = False
+                body.addView(card, lp)
+            except Exception as e:
+                try:
+                    _log(f"NFT card render error: {e}")
+                except:
+                    pass
+
+        for regular in regulars:
+            try:
+                card = self._build_my_gifts_regular_card(ctx, regular)
+                lp = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                if not first_card:
+                    lp.topMargin = AndroidUtilities.dp(12)
+                first_card = False
+                body.addView(card, lp)
+            except Exception as e:
+                try:
+                    _log(f"Regular card render error: {e}")
+                except:
+                    pass
+
+        try:
+            footer = self._build_my_gifts_empty_footer(ctx)
+            lp_f = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            lp_f.topMargin = AndroidUtilities.dp(12 if (entries or regulars) else 32)
+            body.addView(footer, lp_f)
+        except:
+            pass
+
+        try:
+            scroll.addView(body, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        except:
+            pass
+        try:
+            outer.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0))
+        except:
+            outer.addView(scroll)
+        return outer
+
+    def _refresh_my_gifts_sheet(self):
+        try:
+            ctx = getattr(self, "_my_gifts_ctx", None)
+            sheet = getattr(self, "_my_gifts_sheet", None)
+            container = getattr(self, "_my_gifts_container", None)
+            if ctx is None or sheet is None or container is None:
+                return False
+            def _do():
+                try:
+                    container.removeAllViews()
+                    new_root = self._build_my_gifts_root(ctx)
+                    container.addView(new_root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+                except Exception as e:
+                    try:
+                        _log(f"refresh_my_gifts: {e}")
+                    except:
+                        pass
+            run_on_ui_thread(JRunnable(_do))
+            return True
+        except Exception as e:
+            try:
+                _log(f"_refresh_my_gifts_sheet error: {e}")
+            except:
+                pass
+            return False
+
+    def _open_my_gifts_screen(self, context=None):
+        try:
+            ctx = self._get_menu_activity(context)
+            if not ctx:
+                return False
+
+            self._dismiss_main_menu_sheet()
+            self._dismiss_my_gifts_sheet()
+
+            sheet = BottomSheet(ctx, True)
+            try:
+                sheet.setApplyTopPadding(False)
+                sheet.setApplyBottomPadding(False)
+                try:
+                    sheet.setBackgroundColor(0x00000000)
+                except:
+                    pass
+                try:
+                    sheet.fullHeight = True
+                except:
+                    pass
+            except:
+                pass
+
+            container = FrameLayout(ctx)
+            try:
+                container.setBackground(self._create_round_rect(int(self._my_gifts_palette()["bg"]), radius_dp=18))
+                container.setClipToOutline(True)
+                container.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+            except:
+                pass
+
+            root = self._build_my_gifts_root(ctx)
+            try:
+                container.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            except:
+                container.addView(root)
+
+            try:
+                sheet.setCustomView(container)
+            except:
+                pass
+
+            self._my_gifts_ctx = ctx
+            self._my_gifts_sheet = sheet
+            self._my_gifts_container = container
+
+            try:
+                run_on_ui_thread(JRunnable(sheet.show))
+            except:
+                try:
+                    sheet.show()
+                except:
+                    pass
+            return True
+        except Exception as e:
+            try:
+                _log(f"_open_my_gifts_screen error: {e}")
+            except:
+                pass
+            try:
+                BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u044d\u043a\u0440\u0430\u043d\u0430: {e}")
+            except:
+                pass
+            return False
+
+    def _regular_gift_find(self, gid):
+        try:
+            gid = int(gid or 0)
+        except:
+            gid = 0
+        if gid <= 0:
+            return None
+        for g in list(self.regular_gifts or []):
+            try:
+                if int(g.get("id", 0) or 0) == gid:
+                    return g
+            except:
+                continue
+        return None
+
+    def _add_default_regular_gift(self):
+        try:
+            self._regular_gifts_seq = int(getattr(self, "_regular_gifts_seq", 0) or 0) + 1
+            gid = int(self._regular_gifts_seq)
+            try:
+                today = time.strftime("%d.%m.%Y", time.localtime())
+            except:
+                today = ""
+            gift = {
+                "id": gid,
+                "title": "Heart",
+                "emoji": "\u2764\ufe0f",
+                "stars": 15,
+                "from_name": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c",
+                "date": today,
+                "comment": "",
+                "created_at": int(time.time()),
+            }
+            if not isinstance(self.regular_gifts, list):
+                self.regular_gifts = []
+            self.regular_gifts.append(gift)
+            self._save_cache()
+            self._refresh_my_gifts_sheet()
+            BulletinHelper.show_success("\u041f\u043e\u0434\u0430\u0440\u043e\u043a \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d")
+            return gift
+        except Exception as e:
+            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+            return None
+
+    def _update_regular_gift_field(self, gid, field, value):
+        g = self._regular_gift_find(gid)
+        if not g:
+            return False
+        try:
+            if field == "title":
+                g["title"] = self._ui_text(value, "\u041f\u043e\u0434\u0430\u0440\u043e\u043a") or "\u041f\u043e\u0434\u0430\u0440\u043e\u043a"
+            elif field == "from_name":
+                g["from_name"] = self._ui_text(value, "")
+            elif field == "date":
+                g["date"] = str(value or "")[:32]
+            elif field == "comment":
+                g["comment"] = str(value or "")[:512]
+            elif field == "emoji":
+                g["emoji"] = str(value or "\U0001F381")[:8]
+            elif field == "stars":
+                try:
+                    g["stars"] = max(0, int(value or 0))
+                except:
+                    g["stars"] = 0
+            else:
+                return False
+        except Exception as e:
+            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+            return False
+        try:
+            self._save_cache()
+        except:
+            pass
+        try:
+            self._refresh_my_gifts_sheet()
+        except:
+            pass
+        return True
+
+    def _delete_regular_gift(self, gid):
+        try:
+            gid = int(gid or 0)
+        except:
+            gid = 0
+        if gid <= 0:
+            return False
+        before = len(self.regular_gifts or [])
+        self.regular_gifts = [g for g in (self.regular_gifts or []) if int(g.get("id", 0) or 0) != gid]
+        changed = before != len(self.regular_gifts or [])
+        if changed:
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                self._refresh_my_gifts_sheet()
+            except:
+                pass
+            BulletinHelper.show_success("\u041f\u043e\u0434\u0430\u0440\u043e\u043a \u0443\u0434\u0430\u043b\u0451\u043d")
+        return changed
 
     def _force_load_catalog(self):
         try:
@@ -15673,6 +16723,14 @@ class NftClonerPlugin(BasePlugin):
             data["local_stars_balance_value"] = int(self._get_local_stars_balance_value() or 0)
             data["hide_official_gifts_local"] = bool(getattr(self, "hide_official_gifts_local", False))
             data["gift_library"] = self.gift_library or []
+            try:
+                data["regular_gifts"] = list(getattr(self, "regular_gifts", None) or [])
+            except:
+                data["regular_gifts"] = []
+            try:
+                data["_regular_gifts_seq"] = int(getattr(self, "_regular_gifts_seq", 0) or 0)
+            except:
+                data["_regular_gifts_seq"] = 0
 
             try:
                 self._cache_pending = (uid, data)
@@ -15914,6 +16972,15 @@ class NftClonerPlugin(BasePlugin):
                     self.gift_library = lib
                 else:
                     self.gift_library = []
+                try:
+                    rg = data.get("regular_gifts", [])
+                    self.regular_gifts = [dict(x) for x in rg if isinstance(x, dict)]
+                except:
+                    self.regular_gifts = []
+                try:
+                    self._regular_gifts_seq = int(data.get("_regular_gifts_seq", 0) or 0)
+                except:
+                    self._regular_gifts_seq = 0
                 self.gift_objects = {}
                 self._gift_objects_order = []
                 self._profile_saved_lists = []

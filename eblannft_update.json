@@ -1,6 +1,6 @@
 {
-  "version": "1.0.46",
-  "notes": "Beta 1.0.46 - fix client crash 'Cannot convert bool object to void' on local upgrade: lambdas passed to run_on_ui_thread now go through void runnables instead of returning bool from _open_local_upgrade_for_entry/_gift. Network-level UpgradeStarGiftDelegate also hardened to never call the original RequestDelegate with synthesized null response and to always return void.",
+  "version": "1.0.47",
+  "notes": "Beta 1.0.47 — новый экран «Мои подарки» в стиле Material 3 Expressive: карточки с округлёнными контейнерами и пилюлеобразными кнопками. Для NFT-подарков теперь показываются атрибуты Model / Symbol / Backdrop с редкостью в процентах, плюс кнопки «Настроить» и «Удалить». Для обычных подарков можно тапнуть по полям «От», «Дата» и «Комм.» и ввести свои значения; новые обычные подарки добавляются кнопкой «+ Подарок» в шапке. Старое меню-список остаётся доступным как fallback, если новый экран не открылся.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
