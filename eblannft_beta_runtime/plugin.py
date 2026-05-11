@@ -102,7 +102,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.56"
+__version__ = "1.0.57"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28810,38 +28810,57 @@ class ResaleGridController:
 
         mode = getattr(self, "mode", "default") or "default"
 
-        for gift in list(self.items or []):
-            # mode filter — gifts must match the catalog's role:
-            # nft_only     -> only show gifts with an upgrade flow available
-            #                 (upgrade_stars > 0) or already-unique entries
-            # regular_only -> only show base / non-upgradable gifts
+        def _gift_has_upgrade(g):
+            # Try several field-name spellings — exteraGram forks sometimes
+            # rename upgrade_stars.
+            for fname in ("upgrade_stars", "upgradeStars"):
+                try:
+                    v = get_val(g, fname, 0)
+                except:
+                    v = 0
+                try:
+                    iv = int(v or 0)
+                except:
+                    iv = 0
+                if iv > 0:
+                    return True
             try:
-                upg = int(self._to_int_safe(get_val(gift, "upgrade_stars", 0)) or 0)
+                if bool(self.plugin._looks_like_unique_gift(g)):
+                    return True
             except:
-                upg = 0
-            try:
-                is_unique = bool(self.plugin._looks_like_unique_gift(gift))
-            except:
-                is_unique = False
-            if mode == "nft_only" and not (upg > 0 or is_unique):
-                continue
-            if mode == "regular_only" and (upg > 0 or is_unique):
-                continue
+                pass
+            return False
+
+        items_iter = list(self.items or [])
+
+        # First pass — count upgrade-having items to decide if the filter
+        # is informative or if we should keep the whole list.
+        upg_count = 0
+        if mode in ("nft_only", "regular_only"):
+            for g in items_iter:
+                try:
+                    if _gift_has_upgrade(g):
+                        upg_count += 1
+                except:
+                    pass
+        apply_mode_filter = (mode in ("nft_only", "regular_only")) and (0 < upg_count < len(items_iter))
+
+        for gift in items_iter:
+            if apply_mode_filter:
+                try:
+                    has_upg = _gift_has_upgrade(gift)
+                except:
+                    has_upg = False
+                if mode == "nft_only" and not has_upg:
+                    continue
+                if mode == "regular_only" and has_upg:
+                    continue
 
             m_match = self.filter_model is None or self._extract_attr_name(gift, "model") == self.filter_model
             p_match = self.filter_pattern is None or self._extract_attr_name(gift, "pattern") == self.filter_pattern
             b_match = self.filter_backdrop is None or self._extract_attr_name(gift, "backdrop") == self.filter_backdrop
             if m_match and p_match and b_match:
                 self.filtered_items.append(gift)
-
-    def _to_int_safe(self, v):
-        try:
-            return int(v or 0)
-        except:
-            try:
-                return int(v)
-            except:
-                return 0
 
         try:
             String = jclass("java.lang.String")

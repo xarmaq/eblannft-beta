@@ -1,6 +1,6 @@
 {
-  "version": "1.0.56",
-  "notes": "Beta 1.0.56 — большая порция фиксов: (1) Каталог в режиме nft_only ТЕПЕРЬ показывает только подарки с upgrade_stars > 0 (или уже unique). Подарки без upgrade-флоу из этого каталога убраны. (2) Каталог в режиме regular_only показывает только подарки БЕЗ upgrade-флоу. Тап → подарок добавляется в self.regular_gifts (не в gift_library!) с реальным title из gift, document_id для последующего рендера превью, base_gift_id для ресолва документа. (3) Карточка обычного подарка теперь использует _resolve_regular_gift_document, чтобы найти документ через base_gift_id в кешированном каталоге и передать его в _build_gift_thumb — превью теперь рисуется реальным стикером, а не дефолтным эмодзи. (4) Палитра экрана стала theme-adaptive через Theme.getColor(key_windowBackgroundWhite, key_windowBackgroundWhiteBlackText, key_dialogTextRed и т.п.) — цвета адаптируются к активной теме клиента. (5) После dialog.show() декорвью и контейнер принудительно получают setAlpha(1.0) и setBackgroundDrawable(ColorDrawable(bg)) на случай если унаследованная Dialog-тема накатила alpha-multiplier.",
+  "version": "1.0.57",
+  "notes": "Beta 1.0.57 — фикс пустого каталога в режимах nft_only/regular_only. Если детектор upgrade_stars не находит ни одного апгрейдабельного подарка ИЛИ наоборот все подарки апгрейдабельные, mode-фильтр пропускается и показывается полный каталог (раньше получалось «Ничего не найдено»). Фильтр применяется только когда каталог реально смешанный — есть и upgradable, и non-upgradable. Click-поведение по-прежнему mode-specific: nft_only → конструктор, regular_only → добавляем в self.regular_gifts.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
