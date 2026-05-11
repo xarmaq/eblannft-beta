@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.51"
+__version__ = "1.0.52"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11494,12 +11494,16 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         if on_click is not None:
+            cb = on_click
             class _Click(dynamic_proxy(View.OnClickListener)):
                 def onClick(self_obj, v):
                     try:
-                        on_click()
+                        cb()
                     except Exception as e:
-                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                        try:
+                            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                        except:
+                            pass
             try:
                 wrap.setOnClickListener(_Click())
             except:
@@ -11515,15 +11519,21 @@ class NftClonerPlugin(BasePlugin):
             pass
         return wrap
 
-    def _m3_prop_row(self, ctx, label_text, value_text, trailing_text, on_click=None):
+    def _m3_prop_row(self, ctx, label_text, value_text, trailing_text, on_click=None, value_is_placeholder=False, label_width_dp=96):
         pal = self._my_gifts_palette()
         row = LinearLayout(ctx)
         try:
             row.setOrientation(LinearLayout.HORIZONTAL)
             row.setGravity(Gravity.CENTER_VERTICAL)
-            row.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10))
+            row.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(11), AndroidUtilities.dp(12), AndroidUtilities.dp(11))
         except:
             pass
+        if on_click is not None:
+            try:
+                ripple_base = self._create_round_rect(0x00000000, radius_dp=10)
+                row.setBackground(self._m3_state_list(ripple_base, 0x22FFFFFF))
+            except:
+                pass
         label = TextView(ctx)
         try:
             label.setText(str(label_text or ""))
@@ -11532,14 +11542,14 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            row.addView(label, LinearLayout.LayoutParams(AndroidUtilities.dp(96), LinearLayout.LayoutParams.WRAP_CONTENT))
+            row.addView(label, LinearLayout.LayoutParams(AndroidUtilities.dp(int(label_width_dp)), LinearLayout.LayoutParams.WRAP_CONTENT))
         except:
             row.addView(label)
         value = TextView(ctx)
         try:
             value.setText(str(value_text or ""))
             value.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
-            value.setTextColor(int(pal["text"]))
+            value.setTextColor(int(pal["tertiary"] if value_is_placeholder else pal["text"]))
             value.setSingleLine(True)
             try:
                 from android.text import TextUtils as _TU
@@ -11568,17 +11578,41 @@ class NftClonerPlugin(BasePlugin):
             except:
                 row.addView(trail)
         if on_click is not None:
+            chev_res = self._resolve_drawable_res("arrow_more", "msg_arrow_forward", "msg_arrow_avatar_forward")
+            if chev_res:
+                try:
+                    chev = self._make_tinted_icon_view(ctx, int(chev_res), int(pal["tertiary"]), size_dp=14)
+                    lp_chev = LinearLayout.LayoutParams(AndroidUtilities.dp(14), AndroidUtilities.dp(14))
+                    lp_chev.leftMargin = AndroidUtilities.dp(6)
+                    row.addView(chev, lp_chev)
+                except:
+                    pass
+            else:
+                try:
+                    chev = TextView(ctx)
+                    chev.setText("\u203a")
+                    chev.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18.0)
+                    chev.setTextColor(int(pal["tertiary"]))
+                    lp_chev = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                    lp_chev.leftMargin = AndroidUtilities.dp(4)
+                    row.addView(chev, lp_chev)
+                except:
+                    pass
             try:
                 row.setClickable(True)
                 row.setFocusable(True)
             except:
                 pass
+            cb = on_click
             class _RowClick(dynamic_proxy(View.OnClickListener)):
                 def onClick(self_obj, v):
                     try:
-                        on_click()
+                        cb()
                     except Exception as e:
-                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                        try:
+                            BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                        except:
+                            pass
             try:
                 row.setOnClickListener(_RowClick())
             except:
@@ -12075,32 +12109,35 @@ class NftClonerPlugin(BasePlugin):
         except:
             right.addView(title_view)
 
-        from_name = self._ui_text(regular.get("from_name", "") or "\u2014", "\u2014")
-        date_val = self._ui_text(regular.get("date", "") or "\u2014", "\u2014")
-        comment_val = self._ui_text(regular.get("comment", "") or "\u2014", "\u2014")
+        raw_from = str(regular.get("from_name", "") or "")
+        raw_date = str(regular.get("date", "") or "")
+        raw_comment = str(regular.get("comment", "") or "")
+        from_name = self._ui_text(raw_from, "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e") if raw_from else "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u043e"
+        date_val = self._ui_text(raw_date, "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430") if raw_date else "\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430"
+        comment_val = self._ui_text(raw_comment, "\u041d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c") if raw_comment else "\u041d\u0430\u0436\u043c\u0438\u0442\u0435, \u0447\u0442\u043e\u0431\u044b \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c"
         def _edit_from():
             self._show_text_input_dialog(
                 "\u041e\u0442 \u043a\u043e\u0433\u043e",
-                str(regular.get("from_name", "") or ""),
+                raw_from,
                 lambda txt: self._update_regular_gift_field(gid, "from_name", txt),
             )
         def _edit_date():
             self._show_text_input_dialog(
                 "\u0414\u0430\u0442\u0430",
-                str(regular.get("date", "") or ""),
+                raw_date,
                 lambda txt: self._update_regular_gift_field(gid, "date", txt),
             )
         def _edit_comment():
             self._show_text_input_dialog(
                 "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439",
-                str(regular.get("comment", "") or ""),
+                raw_comment,
                 lambda txt: self._update_regular_gift_field(gid, "comment", txt),
             )
 
         rows = [
-            self._m3_prop_row(ctx, "\u041e\u0442",          from_name,   "", _edit_from),
-            self._m3_prop_row(ctx, "\u0414\u0430\u0442\u0430", date_val,   "", _edit_date),
-            self._m3_prop_row(ctx, "\u041a\u043e\u043c\u043c.", comment_val, "", _edit_comment),
+            self._m3_prop_row(ctx, "\u041e\u0442 \u043a\u043e\u0433\u043e",      from_name,    "", _edit_from,    value_is_placeholder=not raw_from,    label_width_dp=104),
+            self._m3_prop_row(ctx, "\u0414\u0430\u0442\u0430",         date_val,     "", _edit_date,    value_is_placeholder=not raw_date,    label_width_dp=104),
+            self._m3_prop_row(ctx, "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439",  comment_val,  "", _edit_comment, value_is_placeholder=not raw_comment, label_width_dp=104),
         ]
         try:
             lp_inner = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
@@ -12202,7 +12239,23 @@ class NftClonerPlugin(BasePlugin):
             pass
 
         back_res = self._resolve_drawable_res("ic_ab_back", "msg_arrow_back", "ic_arrow_back")
-        back = FrameLayout(ctx)
+        if back_res:
+            back = ImageView(ctx)
+            try:
+                back.setImageResource(int(back_res))
+                back.setColorFilter(int(pal["text"]))
+                back.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+            except:
+                pass
+        else:
+            back = TextView(ctx)
+            try:
+                back.setText("\u2190")
+                back.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+                back.setGravity(Gravity.CENTER)
+                back.setTextColor(int(pal["text"]))
+            except:
+                pass
         try:
             back.setClickable(True)
             back.setFocusable(True)
@@ -12210,27 +12263,13 @@ class NftClonerPlugin(BasePlugin):
                 back.setBackground(self._m3_state_list(self._create_round_rect(0x22FFFFFF, radius_dp=22), 0x33FFFFFF))
             except:
                 back.setBackground(self._create_round_rect(0x22FFFFFF, radius_dp=22))
+            back.setPadding(AndroidUtilities.dp(9), AndroidUtilities.dp(9), AndroidUtilities.dp(9), AndroidUtilities.dp(9))
         except:
             pass
-        if back_res:
-            try:
-                back_iv = self._make_tinted_icon_view(ctx, back_res, int(pal["text"]), size_dp=22)
-                back.addView(back_iv, FrameLayout.LayoutParams(AndroidUtilities.dp(22), AndroidUtilities.dp(22), Gravity.CENTER))
-            except:
-                back_res = 0
-        if not back_res:
-            try:
-                back_tv = TextView(ctx)
-                back_tv.setText("\u2190")
-                back_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
-                back_tv.setGravity(Gravity.CENTER)
-                back_tv.setTextColor(int(pal["text"]))
-                back.addView(back_tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-            except:
-                pass
+        plugin_self = self
         class _BackClick(dynamic_proxy(View.OnClickListener)):
             def onClick(self_obj, v):
-                try: self._dismiss_my_gifts_sheet()
+                try: plugin_self._dismiss_my_gifts_sheet()
                 except: pass
         try:
             back.setOnClickListener(_BackClick())
@@ -12261,7 +12300,27 @@ class NftClonerPlugin(BasePlugin):
             bar.addView(title)
 
         add_res = self._resolve_drawable_res("msg_add", "ic_add", "menu_add")
-        add_btn = FrameLayout(ctx)
+        if add_res:
+            add_btn = ImageView(ctx)
+            try:
+                add_btn.setImageResource(int(add_res))
+                add_btn.setColorFilter(0xFFFFFFFF)
+                add_btn.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+            except:
+                pass
+        else:
+            add_btn = TextView(ctx)
+            try:
+                add_btn.setText("+")
+                add_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+                add_btn.setTextColor(0xFFFFFFFF)
+                add_btn.setGravity(Gravity.CENTER)
+                try:
+                    add_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except:
+                    pass
+            except:
+                pass
         try:
             add_btn.setClickable(True)
             add_btn.setFocusable(True)
@@ -12269,30 +12328,19 @@ class NftClonerPlugin(BasePlugin):
                 add_btn.setBackground(self._m3_state_list(self._create_round_rect(0xFF2F70FF, radius_dp=20), 0x33FFFFFF))
             except:
                 add_btn.setBackground(self._create_round_rect(0xFF2F70FF, radius_dp=20))
+            add_btn.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8))
         except:
             pass
-        if add_res:
-            try:
-                add_iv = self._make_tinted_icon_view(ctx, add_res, 0xFFFFFFFF, size_dp=22)
-                add_btn.addView(add_iv, FrameLayout.LayoutParams(AndroidUtilities.dp(22), AndroidUtilities.dp(22), Gravity.CENTER))
-            except:
-                add_res = 0
-        if not add_res:
-            try:
-                add_tv = TextView(ctx)
-                add_tv.setText("+")
-                add_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
-                add_tv.setTextColor(0xFFFFFFFF)
-                add_tv.setGravity(Gravity.CENTER)
-                add_btn.addView(add_tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-            except:
-                pass
+        plugin_self = self
         class _AddClick(dynamic_proxy(View.OnClickListener)):
             def onClick(self_obj, v):
                 try:
-                    self._add_default_regular_gift()
+                    plugin_self._open_my_gifts_add_menu()
                 except Exception as e:
-                    BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                    try:
+                        BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+                    except:
+                        pass
         try:
             add_btn.setOnClickListener(_AddClick())
         except:
@@ -12305,6 +12353,32 @@ class NftClonerPlugin(BasePlugin):
             bar.addView(add_btn)
 
         return bar
+
+    def _open_my_gifts_add_menu(self):
+        try:
+            actions = [
+                ("\u0412\u044b\u0431\u0440\u0430\u0442\u044c NFT \u0438\u0437 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430", lambda: self._add_menu_open_catalog()),
+                ("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u044b\u0447\u043d\u044b\u0439 \u043f\u043e\u0434\u0430\u0440\u043e\u043a", lambda: self._add_default_regular_gift()),
+            ]
+            self._show_action_menu("\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u0434\u0430\u0440\u043e\u043a", actions, negative_text="\u041e\u0442\u043c\u0435\u043d\u0430")
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u043c\u0435\u043d\u044e: {e}")
+            except:
+                pass
+
+    def _add_menu_open_catalog(self):
+        try:
+            self._dismiss_my_gifts_sheet()
+        except:
+            pass
+        try:
+            self._open_catalog_nft_sheet()
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 \u043d\u0435 \u043e\u0442\u043a\u0440\u044b\u043b\u0441\u044f: {e}")
+            except:
+                pass
 
     def _build_my_gifts_root(self, ctx):
         pal = self._my_gifts_palette()
