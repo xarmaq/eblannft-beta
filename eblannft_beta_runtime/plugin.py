@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.47"
+__version__ = "1.0.48"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11282,62 +11282,105 @@ class NftClonerPlugin(BasePlugin):
 
     def _my_gifts_palette(self):
         return {
-            "bg":          self._theme_color("key_dialogBackground",                 0xFF0E1316),
-            "card":        self._theme_color("key_windowBackgroundGray",             0xFF161D24),
-            "card_inner":  self._theme_color("key_dialogBackground",                 0xFF0E1316),
-            "stroke":      0x14FFFFFF,
-            "text":        self._theme_color("key_windowBackgroundWhiteBlackText",   0xFFFFFFFF),
-            "secondary":   self._theme_color("key_windowBackgroundWhiteGrayText",    0xFFB4BCC4),
-            "tertiary":    self._theme_color("key_windowBackgroundWhiteGrayText2",   0xFF7E8893),
-            "primary":     self._theme_color("key_featuredStickers_addButton",       0xFF5B95FF),
-            "primary_bg":  0x331A4FFF,
+            "bg":          0xFF0E1316,
+            "card":        0xFF161D24,
+            "card_inner":  0xFF0A0F13,
+            "stroke":      0x1FFFFFFF,
+            "text":        0xFFFFFFFF,
+            "secondary":   0xFFB4BCC4,
+            "tertiary":    0xFF7E8893,
+            "primary":     0xFF6FA3FF,
+            "primary_bg":  0xFF1B2854,
             "danger":      0xFFFF6B6B,
-            "danger_bg":   0x33FF6B6B,
-            "accent_text": self._theme_color("key_featuredStickers_buttonText",      0xFFFFFFFF),
+            "danger_bg":   0xFF3F2024,
+            "accent_text": 0xFFFFFFFF,
         }
 
     def _resolve_library_entry_attrs(self, entry):
         out = {"model": ("\u2014", ""), "pattern": ("\u2014", ""), "backdrop": ("\u2014", "")}
+        if not isinstance(entry, dict):
+            return out
+        key = entry.get("key")
+        gift = None
+        try:
+            wrapper = self._library_get_wrapper(key) if key else None
+            if wrapper is not None:
+                gift = self._extract_wrapper_gift(wrapper)
+        except:
+            gift = None
+
+        def _set_from_attr_obj(group, obj):
+            if obj is None:
+                return False
+            name = ""
+            try:
+                name = str(get_val(obj, "name", "") or "")
+            except:
+                name = ""
+            rarity_text = ""
+            try:
+                rp = int(get_val(obj, "rarity_permille", 0) or 0)
+                if rp > 0:
+                    rarity_text = self._format_rarity_permille(rp)
+            except:
+                rarity_text = ""
+            if name:
+                out[group] = (self._ui_text(name, "\u2014") or "\u2014", rarity_text)
+                return True
+            return False
+
+        if gift is not None:
+            try:
+                attrs = get_val(gift, "attributes", None)
+                if attrs is not None:
+                    try:
+                        n = int(attrs.size() or 0)
+                    except:
+                        n = 0
+                    for i in range(n):
+                        try:
+                            a = attrs.get(i)
+                        except:
+                            continue
+                        try:
+                            cls_name = str(a.getClass().getSimpleName() or "").lower()
+                        except:
+                            cls_name = ""
+                        group = None
+                        if "model" in cls_name:
+                            group = "model"
+                        elif "pattern" in cls_name:
+                            group = "pattern"
+                        elif "backdrop" in cls_name:
+                            group = "backdrop"
+                        if not group:
+                            continue
+                        _set_from_attr_obj(group, a)
+            except Exception as e:
+                try:
+                    _log(f"_resolve_library_entry_attrs (wrapper): {e}")
+                except:
+                    pass
+
         try:
             pool = getattr(self, "_upgrade_attr_pool", None)
-            if not isinstance(pool, dict):
-                pool = {}
-            cfg = entry.get("build_config") if isinstance(entry, dict) else None
-            if not isinstance(cfg, dict):
-                cfg = {}
-            for group, key in (("model", "model"), ("pattern", "pattern"), ("backdrop", "backdrop")):
-                arr = pool.get(group) or []
-                try:
-                    idx = int(cfg.get(key, 0) or 0)
-                except:
-                    idx = 0
-                if not arr:
-                    continue
-                try:
-                    obj = arr[idx % len(arr)]
-                except:
-                    obj = None
-                if obj is None:
-                    continue
-                name = ""
-                try:
-                    name = str(get_val(obj, "name", "") or "")
-                except:
-                    name = ""
-                rarity_text = ""
-                try:
-                    raw_rarity = get_val(obj, "rarity_permille", 0)
-                    rp = int(raw_rarity or 0)
-                    if rp > 0:
-                        rarity_text = self._format_rarity_permille(rp)
-                except:
-                    rarity_text = ""
-                out[group] = (self._ui_text(name, "\u2014") or "\u2014", rarity_text)
-        except Exception as e:
-            try:
-                _log(f"_resolve_library_entry_attrs: {e}")
-            except:
-                pass
+            if isinstance(pool, dict):
+                cfg = entry.get("build_config") if isinstance(entry.get("build_config"), dict) else {}
+                for group, key_name in (("model", "model"), ("pattern", "pattern"), ("backdrop", "backdrop")):
+                    if out[group][0] != "\u2014":
+                        continue
+                    arr = pool.get(group) or []
+                    if not arr:
+                        continue
+                    try:
+                        idx = int(cfg.get(key_name, 0) or 0)
+                        obj = arr[idx % len(arr)]
+                    except:
+                        obj = None
+                    _set_from_attr_obj(group, obj)
+        except:
+            pass
+
         return out
 
     def _format_rarity_permille(self, rp):
@@ -11530,10 +11573,18 @@ class NftClonerPlugin(BasePlugin):
                     host.addView(sep)
         return host
 
-    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92):
+    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92, document=None, backdrop_colors=None):
         wrap = FrameLayout(ctx)
         try:
-            bg = self._create_round_rect(int(accent_color), radius_dp=20)
+            bg_color = int(accent_color)
+            if isinstance(backdrop_colors, dict):
+                try:
+                    c = int(backdrop_colors.get("center", 0) or 0)
+                    if c:
+                        bg_color = (0xFF << 24) | (c & 0xFFFFFF)
+                except:
+                    pass
+            bg = self._create_round_rect(bg_color, radius_dp=20)
             wrap.setBackground(bg)
             wrap.setClipToOutline(True)
             wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
@@ -11543,20 +11594,100 @@ class NftClonerPlugin(BasePlugin):
             wrap.setLayoutParams(LinearLayout.LayoutParams(AndroidUtilities.dp(int(size_dp)), AndroidUtilities.dp(int(size_dp))))
         except:
             pass
-        try:
-            inner = TextView(ctx)
-            inner.setText(str(label_text or ""))
-            inner.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 34.0)
-            inner.setGravity(Gravity.CENTER)
+
+        sticker_set = False
+        if document is not None:
             try:
-                inner.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                iv = BackupImageView(ctx)
+                try:
+                    iv.setRoundRadius(AndroidUtilities.dp(20))
+                except:
+                    pass
+                try:
+                    loc = ImageLocation.getForDocument(document)
+                    if loc is not None:
+                        try:
+                            iv.setImage(loc, f"{int(size_dp)}_{int(size_dp)}", None, 0, document)
+                        except:
+                            try:
+                                iv.setImage(loc, f"{int(size_dp)}_{int(size_dp)}", None, None, 0)
+                            except:
+                                pass
+                        try:
+                            wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.78)), AndroidUtilities.dp(int(size_dp * 0.78)), Gravity.CENTER))
+                            sticker_set = True
+                        except:
+                            pass
+                except:
+                    pass
+            except Exception as e:
+                try:
+                    _log(f"thumb sticker bind fail: {e}")
+                except:
+                    pass
+
+        if not sticker_set:
+            try:
+                inner = TextView(ctx)
+                inner.setText(str(label_text or "★"))
+                inner.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 34.0)
+                inner.setGravity(Gravity.CENTER)
+                try:
+                    inner.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except:
+                    pass
+                inner.setTextColor(0xFFFFFFFF)
+                wrap.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
             except:
                 pass
-            inner.setTextColor(0xFFFFFFFF)
-            wrap.addView(inner, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-        except:
-            pass
         return wrap
+
+    def _entry_document_and_backdrop(self, entry):
+        document = None
+        backdrop = None
+        if not isinstance(entry, dict):
+            return document, backdrop
+        try:
+            wrapper = self._library_get_wrapper(entry.get("key"))
+            gift = self._extract_wrapper_gift(wrapper) if wrapper is not None else None
+        except:
+            gift = None
+        if gift is not None:
+            try:
+                document = find_document_recursive(gift)
+            except:
+                document = None
+            try:
+                attrs = get_val(gift, "attributes", None)
+                if attrs is not None:
+                    n = 0
+                    try:
+                        n = int(attrs.size() or 0)
+                    except:
+                        n = 0
+                    for i in range(n):
+                        try:
+                            a = attrs.get(i)
+                        except:
+                            continue
+                        try:
+                            cls_name = str(a.getClass().getSimpleName() or "").lower()
+                        except:
+                            cls_name = ""
+                        if "backdrop" in cls_name:
+                            try:
+                                backdrop = {
+                                    "center": int(get_val(a, "center_color", 0) or 0),
+                                    "edge":   int(get_val(a, "edge_color", 0) or 0),
+                                    "pattern":int(get_val(a, "pattern_color", 0) or 0),
+                                    "text":   int(get_val(a, "text_color", 0) or 0),
+                                }
+                            except:
+                                backdrop = None
+                            break
+            except:
+                pass
+        return document, backdrop
 
     def _accent_color_for_key(self, key):
         try:
@@ -11596,7 +11727,8 @@ class NftClonerPlugin(BasePlugin):
             num = 0
         thumb_letter = (title_raw[:1] or "\u2605").upper()
         accent = self._accent_color_for_key(key)
-        thumb = self._build_gift_thumb(ctx, accent, thumb_letter, size_dp=92)
+        document, backdrop = self._entry_document_and_backdrop(entry)
+        thumb = self._build_gift_thumb(ctx, accent, thumb_letter, size_dp=92, document=document, backdrop_colors=backdrop)
         try:
             top.addView(thumb)
         except:
@@ -11916,11 +12048,23 @@ class NftClonerPlugin(BasePlugin):
             wrap.addView(sub)
         return wrap
 
+    def _status_bar_top_padding_dp(self):
+        try:
+            sbh_px = int(getattr(AndroidUtilities, "statusBarHeight", 0) or 0)
+            if sbh_px > 0:
+                density = float(getattr(AndroidUtilities, "density", 0.0) or 0.0)
+                if density > 0:
+                    return int(round(sbh_px / density))
+        except:
+            pass
+        return 28
+
     def _build_my_gifts_top_bar(self, ctx, total):
         pal = self._my_gifts_palette()
         bar = FrameLayout(ctx)
         try:
-            bar.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(6), AndroidUtilities.dp(8), AndroidUtilities.dp(6))
+            top_pad = max(8, self._status_bar_top_padding_dp() + 6)
+            bar.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(top_pad), AndroidUtilities.dp(8), AndroidUtilities.dp(8))
         except:
             pass
 
@@ -11933,10 +12077,9 @@ class NftClonerPlugin(BasePlugin):
             back.setClickable(True)
             back.setFocusable(True)
             try:
-                back.setBackground(self._create_round_rect(0x14FFFFFF, radius_dp=22))
+                back.setBackground(self._m3_state_list(self._create_round_rect(0x22FFFFFF, radius_dp=22), 0x33FFFFFF))
             except:
-                pass
-            back.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(4), AndroidUtilities.dp(8), AndroidUtilities.dp(4))
+                back.setBackground(self._create_round_rect(0x22FFFFFF, radius_dp=22))
         except:
             pass
         class _BackClick(dynamic_proxy(View.OnClickListener)):
@@ -11948,8 +12091,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            lp_back = FrameLayout.LayoutParams(AndroidUtilities.dp(44), AndroidUtilities.dp(44), Gravity.LEFT | Gravity.CENTER_VERTICAL)
-            lp_back.leftMargin = AndroidUtilities.dp(4)
+            lp_back = FrameLayout.LayoutParams(AndroidUtilities.dp(40), AndroidUtilities.dp(40), Gravity.LEFT | Gravity.CENTER_VERTICAL)
             bar.addView(back, lp_back)
         except:
             bar.addView(back)
@@ -11974,9 +12116,9 @@ class NftClonerPlugin(BasePlugin):
 
         add_btn = TextView(ctx)
         try:
-            add_btn.setText("+ \u041f\u043e\u0434\u0430\u0440\u043e\u043a")
-            add_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
-            add_btn.setTextColor(int(pal["primary"]))
+            add_btn.setText("+")
+            add_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+            add_btn.setTextColor(0xFFFFFFFF)
             try:
                 add_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
             except:
@@ -11984,10 +12126,9 @@ class NftClonerPlugin(BasePlugin):
             add_btn.setClickable(True)
             add_btn.setFocusable(True)
             try:
-                add_btn.setBackground(self._m3_state_list(self._create_round_rect(int(pal["primary_bg"]), radius_dp=18), 0x33FFFFFF))
+                add_btn.setBackground(self._m3_state_list(self._create_round_rect(0xFF2F70FF, radius_dp=20), 0x33FFFFFF))
             except:
-                add_btn.setBackground(self._create_round_rect(int(pal["primary_bg"]), radius_dp=18))
-            add_btn.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8), AndroidUtilities.dp(12), AndroidUtilities.dp(8))
+                add_btn.setBackground(self._create_round_rect(0xFF2F70FF, radius_dp=20))
             add_btn.setGravity(Gravity.CENTER)
         except:
             pass
@@ -12002,8 +12143,8 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            lp_add = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT | Gravity.CENTER_VERTICAL)
-            lp_add.rightMargin = AndroidUtilities.dp(8)
+            lp_add = FrameLayout.LayoutParams(AndroidUtilities.dp(40), AndroidUtilities.dp(40), Gravity.RIGHT | Gravity.CENTER_VERTICAL)
+            lp_add.rightMargin = AndroidUtilities.dp(4)
             bar.addView(add_btn, lp_add)
         except:
             bar.addView(add_btn)
