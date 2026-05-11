@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.49"
+__version__ = "1.0.50"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11409,7 +11409,37 @@ class NftClonerPlugin(BasePlugin):
         except:
             return base
 
-    def _m3_button(self, ctx, text, bg_color, text_color, on_click, icon_emoji="", height_dp=44, full_width=True, radius_dp=22):
+    def _resolve_drawable_res(self, *names):
+        try:
+            R_drawable = jclass("org.telegram.messenger.R$drawable")
+        except:
+            return 0
+        for name in names:
+            try:
+                rid = int(getattr(R_drawable, str(name), 0) or 0)
+                if rid:
+                    return rid
+            except:
+                continue
+        return 0
+
+    def _make_tinted_icon_view(self, ctx, drawable_res, tint_color, size_dp=18):
+        iv = ImageView(ctx)
+        try:
+            iv.setImageResource(int(drawable_res))
+        except:
+            pass
+        try:
+            iv.setColorFilter(int(tint_color))
+        except:
+            pass
+        try:
+            iv.setLayoutParams(LinearLayout.LayoutParams(AndroidUtilities.dp(int(size_dp)), AndroidUtilities.dp(int(size_dp))))
+        except:
+            pass
+        return iv
+
+    def _m3_button(self, ctx, text, bg_color, text_color, on_click, icon_drawable_res=0, icon_emoji_fallback="", height_dp=44, full_width=True, radius_dp=22):
         wrap = LinearLayout(ctx)
         try:
             wrap.setOrientation(LinearLayout.HORIZONTAL)
@@ -11424,10 +11454,20 @@ class NftClonerPlugin(BasePlugin):
             wrap.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(10), AndroidUtilities.dp(18), AndroidUtilities.dp(10))
         except:
             pass
-        if icon_emoji:
+        used_drawable = False
+        if int(icon_drawable_res or 0) > 0:
+            try:
+                ic = self._make_tinted_icon_view(ctx, int(icon_drawable_res), int(text_color), size_dp=18)
+                lp_ic = LinearLayout.LayoutParams(AndroidUtilities.dp(18), AndroidUtilities.dp(18))
+                lp_ic.rightMargin = AndroidUtilities.dp(8)
+                wrap.addView(ic, lp_ic)
+                used_drawable = True
+            except:
+                used_drawable = False
+        if not used_drawable and icon_emoji_fallback:
             ic = TextView(ctx)
             try:
-                ic.setText(str(icon_emoji))
+                ic.setText(str(icon_emoji_fallback))
                 ic.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0)
                 ic.setTextColor(int(text_color))
             except:
@@ -11573,19 +11613,30 @@ class NftClonerPlugin(BasePlugin):
                     host.addView(sep)
         return host
 
-    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92, document=None, backdrop_colors=None):
+    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92, document=None, backdrop_colors=None, pattern_document=None):
         wrap = FrameLayout(ctx)
+        applied_radial = False
         try:
-            bg_color = int(accent_color)
-            if isinstance(backdrop_colors, dict):
-                try:
-                    c = int(backdrop_colors.get("center", 0) or 0)
-                    if c:
-                        bg_color = (0xFF << 24) | (c & 0xFFFFFF)
-                except:
-                    pass
-            bg = self._create_round_rect(bg_color, radius_dp=20)
-            wrap.setBackground(bg)
+            bg_drawable = self._build_radial_backdrop(ctx, backdrop_colors, radius_dp=20)
+            if bg_drawable is not None:
+                wrap.setBackground(bg_drawable)
+                applied_radial = True
+        except:
+            applied_radial = False
+        if not applied_radial:
+            try:
+                bg_color = int(accent_color)
+                if isinstance(backdrop_colors, dict):
+                    try:
+                        c = int(backdrop_colors.get("center", 0) or 0)
+                        if c:
+                            bg_color = (0xFF << 24) | (c & 0xFFFFFF)
+                    except:
+                        pass
+                wrap.setBackground(self._create_round_rect(bg_color, radius_dp=20))
+            except:
+                pass
+        try:
             wrap.setClipToOutline(True)
             wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
         except:
@@ -11595,14 +11646,36 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
+        if pattern_document is not None:
+            try:
+                pat = BackupImageView(ctx)
+                try:
+                    pat.setAlpha(0.2)
+                except:
+                    pass
+                try:
+                    pat_loc = ImageLocation.getForDocument(pattern_document)
+                    if pat_loc is not None:
+                        try:
+                            pat.setImage(pat_loc, f"{int(size_dp)}_{int(size_dp)}", None, 0, pattern_document)
+                        except:
+                            try:
+                                pat.setImage(pat_loc, f"{int(size_dp)}_{int(size_dp)}", None, None, 0)
+                            except:
+                                pass
+                        try:
+                            wrap.addView(pat, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.95)), AndroidUtilities.dp(int(size_dp * 0.95)), Gravity.CENTER))
+                        except:
+                            pass
+                except:
+                    pass
+            except:
+                pass
+
         sticker_set = False
         if document is not None:
             try:
                 iv = BackupImageView(ctx)
-                try:
-                    iv.setRoundRadius(AndroidUtilities.dp(20))
-                except:
-                    pass
                 try:
                     loc = ImageLocation.getForDocument(document)
                     if loc is not None:
@@ -11614,7 +11687,7 @@ class NftClonerPlugin(BasePlugin):
                             except:
                                 pass
                         try:
-                            wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.78)), AndroidUtilities.dp(int(size_dp * 0.78)), Gravity.CENTER))
+                            wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.74)), AndroidUtilities.dp(int(size_dp * 0.74)), Gravity.CENTER))
                             sticker_set = True
                         except:
                             pass
@@ -11644,19 +11717,16 @@ class NftClonerPlugin(BasePlugin):
 
     def _entry_document_and_backdrop(self, entry):
         document = None
+        pattern_document = None
         backdrop = None
         if not isinstance(entry, dict):
-            return document, backdrop
+            return document, backdrop, pattern_document
         try:
             wrapper = self._library_get_wrapper(entry.get("key"))
             gift = self._extract_wrapper_gift(wrapper) if wrapper is not None else None
         except:
             gift = None
         if gift is not None:
-            try:
-                document = find_document_recursive(gift)
-            except:
-                document = None
             try:
                 attrs = get_val(gift, "attributes", None)
                 if attrs is not None:
@@ -11674,7 +11744,25 @@ class NftClonerPlugin(BasePlugin):
                             cls_name = str(a.getClass().getSimpleName() or "").lower()
                         except:
                             cls_name = ""
-                        if "backdrop" in cls_name:
+                        if "model" in cls_name and document is None:
+                            try:
+                                doc = get_val(a, "document", None)
+                                if doc is None:
+                                    doc = find_document_recursive(a)
+                                if doc is not None:
+                                    document = doc
+                            except:
+                                pass
+                        elif "pattern" in cls_name and pattern_document is None:
+                            try:
+                                doc = get_val(a, "document", None)
+                                if doc is None:
+                                    doc = find_document_recursive(a)
+                                if doc is not None:
+                                    pattern_document = doc
+                            except:
+                                pass
+                        elif "backdrop" in cls_name and backdrop is None:
                             try:
                                 backdrop = {
                                     "center": int(get_val(a, "center_color", 0) or 0),
@@ -11684,10 +11772,46 @@ class NftClonerPlugin(BasePlugin):
                                 }
                             except:
                                 backdrop = None
-                            break
             except:
                 pass
-        return document, backdrop
+            if document is None:
+                try:
+                    document = find_document_recursive(gift)
+                except:
+                    document = None
+        return document, backdrop, pattern_document
+
+    def _build_radial_backdrop(self, ctx, backdrop, radius_dp=20):
+        if not isinstance(backdrop, dict):
+            return None
+        try:
+            center = int(backdrop.get("center", 0) or 0)
+            edge = int(backdrop.get("edge", 0) or 0)
+            if not center and not edge:
+                return None
+            if not center:
+                center = edge
+            if not edge:
+                edge = center
+            c_argb = (0xFF << 24) | (center & 0xFFFFFF)
+            e_argb = (0xFF << 24) | (edge & 0xFFFFFF)
+            gd = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, [int(c_argb), int(e_argb)])
+            try:
+                gd.setGradientType(GradientDrawable.RADIAL_GRADIENT)
+                gd.setGradientRadius(float(AndroidUtilities.dp(int(radius_dp) * 3)))
+            except:
+                pass
+            try:
+                gd.setCornerRadius(float(AndroidUtilities.dp(int(radius_dp))))
+            except:
+                pass
+            return gd
+        except Exception as e:
+            try:
+                _log(f"_build_radial_backdrop: {e}")
+            except:
+                pass
+            return None
 
     def _accent_color_for_key(self, key):
         try:
@@ -11727,8 +11851,11 @@ class NftClonerPlugin(BasePlugin):
             num = 0
         thumb_letter = (title_raw[:1] or "\u2605").upper()
         accent = self._accent_color_for_key(key)
-        document, backdrop = self._entry_document_and_backdrop(entry)
-        thumb = self._build_gift_thumb(ctx, accent, thumb_letter, size_dp=92, document=document, backdrop_colors=backdrop)
+        document, backdrop, pattern_doc = self._entry_document_and_backdrop(entry)
+        thumb = self._build_gift_thumb(
+            ctx, accent, thumb_letter, size_dp=92,
+            document=document, backdrop_colors=backdrop, pattern_document=pattern_doc,
+        )
         try:
             top.addView(thumb)
         except:
@@ -11814,13 +11941,16 @@ class NftClonerPlugin(BasePlugin):
                 self._refresh_my_gifts_sheet()
             except:
                 pass
+        edit_res = self._resolve_drawable_res("msg_edit", "msg_customize", "menu_edit")
+        del_res = self._resolve_drawable_res("msg_delete", "msg_clear", "menu_delete")
         edit_btn = self._m3_button(
             ctx,
             "\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c",
             int(pal["primary_bg"]),
             int(pal["primary"]),
             _do_edit,
-            icon_emoji="\u270e",
+            icon_drawable_res=edit_res,
+            icon_emoji_fallback="\u270e",
             height_dp=44,
             full_width=True,
             radius_dp=22,
@@ -11831,7 +11961,8 @@ class NftClonerPlugin(BasePlugin):
             int(pal["danger_bg"]),
             int(pal["danger"]),
             _do_delete,
-            icon_emoji="\U0001F5D1",
+            icon_drawable_res=del_res,
+            icon_emoji_fallback="\U0001F5D1",
             height_dp=44,
             full_width=True,
             radius_dp=22,
@@ -11994,13 +12125,15 @@ class NftClonerPlugin(BasePlugin):
                 self._delete_regular_gift(gid)
             except Exception as e:
                 BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430: {e}")
+        del_res = self._resolve_drawable_res("msg_delete", "msg_clear", "menu_delete")
         del_btn = self._m3_button(
             ctx,
             "\u0423\u0434\u0430\u043b\u0438\u0442\u044c",
             int(pal["danger_bg"]),
             int(pal["danger"]),
             _do_delete,
-            icon_emoji="\U0001F5D1",
+            icon_drawable_res=del_res,
+            icon_emoji_fallback="\U0001F5D1",
             height_dp=44,
             full_width=True,
             radius_dp=22,
@@ -12068,12 +12201,9 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
-        back = TextView(ctx)
+        back_res = self._resolve_drawable_res("ic_ab_back", "msg_arrow_back", "ic_arrow_back")
+        back = FrameLayout(ctx)
         try:
-            back.setText("\u2190")
-            back.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
-            back.setGravity(Gravity.CENTER)
-            back.setTextColor(int(pal["text"]))
             back.setClickable(True)
             back.setFocusable(True)
             try:
@@ -12082,6 +12212,22 @@ class NftClonerPlugin(BasePlugin):
                 back.setBackground(self._create_round_rect(0x22FFFFFF, radius_dp=22))
         except:
             pass
+        if back_res:
+            try:
+                back_iv = self._make_tinted_icon_view(ctx, back_res, int(pal["text"]), size_dp=22)
+                back.addView(back_iv, FrameLayout.LayoutParams(AndroidUtilities.dp(22), AndroidUtilities.dp(22), Gravity.CENTER))
+            except:
+                back_res = 0
+        if not back_res:
+            try:
+                back_tv = TextView(ctx)
+                back_tv.setText("\u2190")
+                back_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+                back_tv.setGravity(Gravity.CENTER)
+                back_tv.setTextColor(int(pal["text"]))
+                back.addView(back_tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            except:
+                pass
         class _BackClick(dynamic_proxy(View.OnClickListener)):
             def onClick(self_obj, v):
                 try: self._dismiss_my_gifts_sheet()
@@ -12114,24 +12260,33 @@ class NftClonerPlugin(BasePlugin):
         except:
             bar.addView(title)
 
-        add_btn = TextView(ctx)
+        add_res = self._resolve_drawable_res("msg_add", "ic_add", "menu_add")
+        add_btn = FrameLayout(ctx)
         try:
-            add_btn.setText("+")
-            add_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
-            add_btn.setTextColor(0xFFFFFFFF)
-            try:
-                add_btn.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-            except:
-                pass
             add_btn.setClickable(True)
             add_btn.setFocusable(True)
             try:
                 add_btn.setBackground(self._m3_state_list(self._create_round_rect(0xFF2F70FF, radius_dp=20), 0x33FFFFFF))
             except:
                 add_btn.setBackground(self._create_round_rect(0xFF2F70FF, radius_dp=20))
-            add_btn.setGravity(Gravity.CENTER)
         except:
             pass
+        if add_res:
+            try:
+                add_iv = self._make_tinted_icon_view(ctx, add_res, 0xFFFFFFFF, size_dp=22)
+                add_btn.addView(add_iv, FrameLayout.LayoutParams(AndroidUtilities.dp(22), AndroidUtilities.dp(22), Gravity.CENTER))
+            except:
+                add_res = 0
+        if not add_res:
+            try:
+                add_tv = TextView(ctx)
+                add_tv.setText("+")
+                add_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22.0)
+                add_tv.setTextColor(0xFFFFFFFF)
+                add_tv.setGravity(Gravity.CENTER)
+                add_btn.addView(add_tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            except:
+                pass
         class _AddClick(dynamic_proxy(View.OnClickListener)):
             def onClick(self_obj, v):
                 try:
@@ -12280,29 +12435,24 @@ class NftClonerPlugin(BasePlugin):
             self._dismiss_main_menu_sheet()
             self._dismiss_my_gifts_sheet()
 
+            bg_color = int(self._my_gifts_palette()["bg"])
+
             sheet = BottomSheet(ctx, True)
             try:
                 sheet.setApplyTopPadding(False)
                 sheet.setApplyBottomPadding(False)
-                try:
-                    sheet.fullHeight = True
-                except:
-                    pass
             except:
                 pass
-
-            bg_color = int(self._my_gifts_palette()["bg"])
+            try:
+                sheet.fullHeight = True
+            except:
+                pass
 
             container = FrameLayout(ctx)
             try:
                 container.setBackgroundColor(bg_color)
             except:
                 pass
-            try:
-                container.setLayoutParams(FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            except:
-                pass
-
             root = self._build_my_gifts_root(ctx)
             try:
                 container.addView(root, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -12313,8 +12463,14 @@ class NftClonerPlugin(BasePlugin):
                 sheet.setCustomView(container)
             except:
                 pass
+
             try:
-                sheet.setBackgroundColor(bg_color)
+                cv = container
+                lp = cv.getLayoutParams()
+                if lp is not None:
+                    lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+                    lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+                    cv.setLayoutParams(lp)
             except:
                 pass
 
