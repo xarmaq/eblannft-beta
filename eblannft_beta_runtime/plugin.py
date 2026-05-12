@@ -102,7 +102,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.57"
+__version__ = "1.0.58"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -11691,11 +11691,11 @@ class NftClonerPlugin(BasePlugin):
                     host.addView(sep)
         return host
 
-    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=92, document=None, backdrop_colors=None, pattern_document=None):
+    def _build_gift_thumb(self, ctx, accent_color, label_text, size_dp=100, document=None, backdrop_colors=None, pattern_document=None):
         wrap = FrameLayout(ctx)
         applied_radial = False
         try:
-            bg_drawable = self._build_radial_backdrop(ctx, backdrop_colors, radius_dp=20)
+            bg_drawable = self._build_radial_backdrop(ctx, backdrop_colors, radius_dp=18)
             if bg_drawable is not None:
                 wrap.setBackground(bg_drawable)
                 applied_radial = True
@@ -11711,7 +11711,7 @@ class NftClonerPlugin(BasePlugin):
                             bg_color = (0xFF << 24) | (c & 0xFFFFFF)
                     except:
                         pass
-                wrap.setBackground(self._create_round_rect(bg_color, radius_dp=20))
+                wrap.setBackground(self._create_round_rect(bg_color, radius_dp=18))
             except:
                 pass
         try:
@@ -11725,20 +11725,35 @@ class NftClonerPlugin(BasePlugin):
             pass
 
         if pattern_document is not None:
+            # Scatter 5 pattern instances (4 corners + center-ish) at low
+            # alpha, mirroring the way Telegram's profile grid cells render
+            # backdrops with sprinkled symbols.
+            pat_loc = None
             try:
-                pat = BackupImageView(ctx)
-                try:
-                    pat.setAlpha(0.18)
-                except:
-                    pass
-                try:
-                    pat_loc = ImageLocation.getForDocument(pattern_document)
-                    if pat_loc is not None:
+                pat_loc = ImageLocation.getForDocument(pattern_document)
+            except:
+                pat_loc = None
+            if pat_loc is not None:
+                pat_size_dp = int(size_dp * 0.32)
+                positions = [
+                    (Gravity.TOP    | Gravity.LEFT,   0.12, 0.12, 0.18),
+                    (Gravity.TOP    | Gravity.RIGHT,  0.12, 0.12, 0.18),
+                    (Gravity.BOTTOM | Gravity.LEFT,   0.12, 0.12, 0.18),
+                    (Gravity.BOTTOM | Gravity.RIGHT,  0.12, 0.12, 0.18),
+                    (Gravity.CENTER,                  0.00, 0.00, 0.10),
+                ]
+                for (grav, fx, fy, alpha) in positions:
+                    try:
+                        pat = BackupImageView(ctx)
                         try:
-                            pat.setImage(pat_loc, f"{int(size_dp)}_{int(size_dp)}", None, 0, pattern_document)
+                            pat.setAlpha(float(alpha))
+                        except:
+                            pass
+                        try:
+                            pat.setImage(pat_loc, f"{pat_size_dp}_{pat_size_dp}", None, 0, pattern_document)
                         except:
                             try:
-                                pat.setImage(pat_loc, f"{int(size_dp)}_{int(size_dp)}", None, None, 0)
+                                pat.setImage(pat_loc, f"{pat_size_dp}_{pat_size_dp}", None, None, 0)
                             except:
                                 pass
                         try:
@@ -11746,13 +11761,19 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                         try:
-                            wrap.addView(pat, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.95)), AndroidUtilities.dp(int(size_dp * 0.95)), Gravity.CENTER))
+                            lp = FrameLayout.LayoutParams(AndroidUtilities.dp(pat_size_dp), AndroidUtilities.dp(pat_size_dp), grav)
+                            try:
+                                lp.leftMargin = AndroidUtilities.dp(int(size_dp * fx))
+                                lp.topMargin = AndroidUtilities.dp(int(size_dp * fy))
+                                lp.rightMargin = AndroidUtilities.dp(int(size_dp * fx))
+                                lp.bottomMargin = AndroidUtilities.dp(int(size_dp * fy))
+                            except:
+                                pass
+                            wrap.addView(pat, lp)
                         except:
                             pass
-                except:
-                    pass
-            except:
-                pass
+                    except:
+                        pass
 
         sticker_set = False
         if document is not None:
@@ -11773,7 +11794,8 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                         try:
-                            wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(int(size_dp * 0.74)), AndroidUtilities.dp(int(size_dp * 0.74)), Gravity.CENTER))
+                            model_size = int(size_dp * 0.88)
+                            wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(model_size), AndroidUtilities.dp(model_size), Gravity.CENTER))
                             sticker_set = True
                         except:
                             pass
@@ -28948,8 +28970,9 @@ class ResaleGridController:
             # "regular_only": add to the simple self.regular_gifts list
             # (with from / date / comment), NOT to the NFT gift_library.
             if mode == "regular_only":
+                added = None
                 try:
-                    self.plugin._add_catalog_gift_as_regular(gift)
+                    added = self.plugin._add_catalog_gift_as_regular(gift)
                 except Exception as ie:
                     BulletinHelper.show_error(f"Ошибка добавления: {ie}")
                 try:
@@ -28957,6 +28980,23 @@ class ResaleGridController:
                 except:
                     pass
                 self._release()
+                if added is not None:
+                    plugin = self.plugin
+                    def _reopen():
+                        try:
+                            plugin._open_my_gifts_screen()
+                        except Exception as oe:
+                            try:
+                                _log(f"reopen My Gifts after add fail: {oe}")
+                            except:
+                                pass
+                    try:
+                        AndroidUtilities.runOnUIThread(JRunnable(_reopen), 250)
+                    except:
+                        try:
+                            _reopen()
+                        except:
+                            pass
                 return
 
             # "nft_only": skip the "Обычный подарок" popup. Click always
