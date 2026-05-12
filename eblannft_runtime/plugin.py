@@ -81,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.3"
+__version__ = "1.2.0"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -5681,6 +5681,110 @@ class NftClonerPlugin(BasePlugin):
         if addr:
             return addr
         return self._build_visual_ton_address(entry)
+
+    def _apply_local_overrides_to_wrapper(self, wrapper):
+        """Mutate a TL_savedStarGift wrapper BEFORE StarGiftSheet.set() reads it,
+        so the native sheet renders our local from / date / comment values and
+        hides the Upgrade button on plain plugin-added entries.
+        Reads overrides from the matching gift_library entry. No-op if no entry."""
+        if wrapper is None:
+            return False
+        try:
+            saved_id = int(self._extract_saved_id_from_wrapper(wrapper) or 0)
+        except:
+            saved_id = 0
+        entry = None
+        if saved_id > 0:
+            try:
+                entry = self._library_find_entry_by_saved_id(saved_id)
+            except:
+                entry = None
+        if entry is None:
+            try:
+                inner = get_val(wrapper, "gift", None)
+                if inner is not None:
+                    slug = str(get_val(inner, "slug", "") or "")
+                    if slug:
+                        entry = self._library_find_entry_by_slug(slug)
+                    if entry is None:
+                        uid = int(get_val(inner, "id", 0) or 0)
+                        if uid > 0:
+                            entry = self._library_find_entry_by_unique_id(uid)
+            except:
+                pass
+        if not isinstance(entry, dict):
+            return False
+
+        try:
+            kind = self._classify_gift_kind(entry=entry)
+        except:
+            kind = ""
+        is_nft = kind in (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
+
+        patched = False
+
+        # Hide Upgrade button for plain plugin-added entries (NORMAL / LEGACY).
+        if not is_nft:
+            try:
+                if self._set_field(wrapper, "can_upgrade", False):
+                    patched = True
+            except:
+                pass
+
+        # Date override.
+        try:
+            ep = int(entry.get("date_epoch", 0) or 0)
+        except:
+            ep = 0
+        if ep > 0:
+            try:
+                if self._set_field(wrapper, "date", int(ep)):
+                    patched = True
+            except:
+                pass
+
+        # From-user override.
+        try:
+            from_uid = int(entry.get("from_user_id", 0) or 0)
+        except:
+            from_uid = 0
+        if from_uid > 0:
+            try:
+                peer = self._build_peer_user(from_uid)
+                if peer is not None:
+                    if self._set_field(wrapper, "from_id", peer):
+                        patched = True
+                    # Drop name_hidden so TG renders the real user row.
+                    try:
+                        self._set_field(wrapper, "name_hidden", False)
+                    except:
+                        pass
+            except Exception as e:
+                _log(f"override from_id fail: {e}")
+
+        # Comment / message override.
+        try:
+            comment = str(entry.get("comment_text", "") or "").strip()
+        except:
+            comment = ""
+        if comment:
+            try:
+                TextWithEntities = jclass("org.telegram.tgnet.TLRPC$TL_textWithEntities")
+                twe = TextWithEntities()
+                try:
+                    twe.text = str(comment)
+                except:
+                    pass
+                try:
+                    twe.entities = ArrayList()
+                except:
+                    pass
+                if self._set_field(wrapper, "message", twe):
+                    patched = True
+            except Exception as e:
+                _log(f"override message fail: {e}")
+
+        return patched
 
     def _apply_local_ton_display_to_gift(self, gift):
         if gift is None:
@@ -13526,6 +13630,12 @@ class NftClonerPlugin(BasePlugin):
                 self._set_field(wrapper, "saved_id", random.randint(1000, 9999))
             except:
                 pass
+            # Plain plugin-added gifts never have a real upgrade path —
+            # stamp can_upgrade=False so the native sheet hides the Upgrade button.
+            try:
+                self._set_field(wrapper, "can_upgrade", False)
+            except:
+                pass
 
             try:
                 self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True)
@@ -20295,7 +20405,10 @@ class NftClonerPlugin(BasePlugin):
                     p1 = str(params[1].getName() or "").lower()
                 except:
                     continue
-                if "TL_stars$TL_starGiftUnique" not in p0:
+                # Hook both: unique-gift path (TL_starGiftUnique) and saved-gift path (TL_savedStarGift).
+                is_unique = "TL_stars$TL_starGiftUnique" in p0
+                is_saved = "TL_stars$TL_savedStarGift" in p0
+                if not (is_unique or is_saved):
                     continue
                 if "boolean" not in p1:
                     continue
@@ -24061,7 +24174,27 @@ class GiftSheetLocalValueHook(MethodHook):
                     gift = param.args[0]
             except:
                 gift = None
-            if gift is not None:
+            if gift is None:
+                return
+            # Detect overload: TL_starGiftUnique (inner gift) vs TL_savedStarGift (wrapper).
+            try:
+                cls_name = str(gift.getClass().getName() or "")
+            except:
+                cls_name = ""
+            is_wrapper = "TL_savedStarGift" in cls_name
+            if is_wrapper:
+                try:
+                    self.plugin._apply_local_overrides_to_wrapper(gift)
+                except Exception as e:
+                    _log(f"GiftSheetLocalValueHook wrapper override error: {e}")
+                # Also forward to TON-display hook in case inner gift wants it.
+                try:
+                    inner = get_val(gift, "gift", None)
+                    if inner is not None:
+                        self.plugin._apply_local_ton_display_to_gift(inner)
+                except:
+                    pass
+            else:
                 self.plugin._apply_local_ton_display_to_gift(gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook before error: {e}")
