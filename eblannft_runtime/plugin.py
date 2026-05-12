@@ -81,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -5681,6 +5681,50 @@ class NftClonerPlugin(BasePlugin):
         if addr:
             return addr
         return self._build_visual_ton_address(entry)
+
+    def _apply_overrides_to_entry_wrapper(self, key):
+        """Proactively mutate the cached wrapper for this entry AND re-serialize to b64.
+        Call after creating a plain gift and after editing any of the override fields.
+        This way TG sees the overrides regardless of which set() overload it uses."""
+        try:
+            entry = self._library_find_entry(key)
+            if not isinstance(entry, dict):
+                return False
+            wrapper = self._library_get_wrapper(key)
+            if wrapper is None:
+                return False
+            patched = self._apply_local_overrides_to_wrapper(wrapper)
+            if not patched:
+                return False
+            try:
+                new_b64 = serialize_tl_object(wrapper)
+                if new_b64:
+                    entry["b64"] = str(new_b64)
+                    try:
+                        self._library_dirty = True
+                    except:
+                        pass
+                    try:
+                        self._save_cache()
+                    except:
+                        pass
+                    try:
+                        self._save_injection_cache()
+                    except:
+                        pass
+                    try:
+                        self._refresh_local_profile_gifts_section(reason="override_applied")
+                    except:
+                        pass
+            except Exception as ex:
+                _log(f"override re-serialize fail: {ex}")
+            return True
+        except Exception as ex:
+            try:
+                _log(f"_apply_overrides_to_entry_wrapper fail: {ex}")
+            except:
+                pass
+            return False
 
     def _apply_local_overrides_to_wrapper(self, wrapper):
         """Mutate a TL_savedStarGift wrapper BEFORE StarGiftSheet.set() reads it,
@@ -13316,6 +13360,10 @@ class NftClonerPlugin(BasePlugin):
                         except:
                             pass
                         try:
+                            plugin_self._apply_overrides_to_entry_wrapper(target_key)
+                        except:
+                            pass
+                        try:
                             BulletinHelper.show_success("Дата сохранена")
                         except:
                             pass
@@ -13469,6 +13517,10 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
             try:
+                self._apply_overrides_to_entry_wrapper(key)
+            except:
+                pass
+            try:
                 BulletinHelper.show_success("Отправитель сохранён")
             except:
                 pass
@@ -13511,6 +13563,10 @@ class NftClonerPlugin(BasePlugin):
                 pass
             try:
                 self._save_cache()
+            except:
+                pass
+            try:
+                self._apply_overrides_to_entry_wrapper(key)
             except:
                 pass
             try:
@@ -13668,6 +13724,11 @@ class NftClonerPlugin(BasePlugin):
                 self._refresh_local_profile_gifts_section(reason="plain_catalog_add")
             except Exception as ex:
                 _log(f"Plain catalog refresh error: {ex}")
+            # Stamp our overrides (can_upgrade=False at minimum) right after creation.
+            try:
+                self._apply_overrides_to_entry_wrapper(key)
+            except Exception as ex:
+                _log(f"plain catalog override stamp fail: {ex}")
 
             try:
                 e = self._library_find_entry(key) if key else None
