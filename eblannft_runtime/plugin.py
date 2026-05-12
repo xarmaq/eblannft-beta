@@ -81,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -5723,15 +5723,25 @@ class NftClonerPlugin(BasePlugin):
 
         patched = []
 
+        # Read current flags. TG checks bits at runtime (flags & 2 for from_id, flags & 4 for message,
+        # flags & 1024 for can_upgrade etc) — boolean fields alone are not enough.
+        try:
+            cur_flags = int(get_val(wrapper, "flags", 0) or 0)
+        except:
+            cur_flags = 0
+        new_flags = cur_flags
+
         # Hide Upgrade button for plain plugin-added entries (NORMAL / LEGACY).
+        # Clear both the boolean field AND flag bit 10 (1024) which TL_savedStarGift uses.
         if not is_nft:
             try:
                 if self._set_field(wrapper, "can_upgrade", False):
                     patched.append("can_upgrade=False")
             except Exception as ex:
                 _log(f"override can_upgrade fail: {ex}")
+            new_flags &= ~1024
 
-        # Date override.
+        # Date override (always present, no flag).
         try:
             ep = int(entry.get("date_epoch", 0) or 0)
         except:
@@ -5744,6 +5754,8 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"override date fail: {ex}")
 
         # From-user override.
+        # TG reads: (savedStarGift.flags & 2) != 0 ? from_id : ANONYMOUS.
+        # So we must raise flag bit 1 (=2) AND clear name_hidden (bit 0 / =1).
         try:
             from_uid = int(entry.get("from_user_id", 0) or 0)
         except:
@@ -5754,6 +5766,8 @@ class NftClonerPlugin(BasePlugin):
                 if peer is not None:
                     if self._set_field(wrapper, "from_id", peer):
                         patched.append(f"from_id={from_uid}")
+                    new_flags |= 2           # has from_id
+                    new_flags &= ~1          # clear name_hidden
                     try:
                         self._set_field(wrapper, "name_hidden", False)
                     except:
@@ -5763,7 +5777,7 @@ class NftClonerPlugin(BasePlugin):
             except Exception as ex:
                 _log(f"override from_id fail: {ex}")
 
-        # Comment / message override.
+        # Comment / message override. Flag bit 2 (=4) gates message presence.
         try:
             comment = str(entry.get("comment_text", "") or "").strip()
         except:
@@ -5782,8 +5796,16 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 if self._set_field(wrapper, "message", twe):
                     patched.append(f"message={len(comment)}c")
+                new_flags |= 4
             except Exception as ex:
                 _log(f"override message fail: {ex}")
+
+        if new_flags != cur_flags:
+            try:
+                if self._set_field(wrapper, "flags", int(new_flags)):
+                    patched.append(f"flags={cur_flags:#x}->{new_flags:#x}")
+            except Exception as ex:
+                _log(f"override flags fail: {ex}")
 
         try:
             kkey = str(entry.get("key", "") or "?")
@@ -12997,10 +13019,13 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
             title_tv = TextView(ctx)
+            safe_title = str(title_text) if title_text is not None else ""
+            if not safe_title.strip() or safe_title.strip().lower() == "none":
+                safe_title = "Подарок"
             try:
-                title_tv.setText(self._ui_text(title_text, str(title_text)))
+                title_tv.setText(self._ui_text(safe_title, safe_title))
             except:
-                title_tv.setText(str(title_text or ""))
+                title_tv.setText(safe_title)
             try:
                 title_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.0)
             except:
@@ -13066,7 +13091,11 @@ class NftClonerPlugin(BasePlugin):
             return []
         rows = []
         key = entry.get("key")
-        title = self._ui_text(entry.get("title", "NFT"), "NFT")
+        raw_title = entry.get("title")
+        if raw_title is None or str(raw_title).strip() == "" or str(raw_title).strip().lower() == "none":
+            slug = str(entry.get("slug", "") or "").strip()
+            raw_title = slug or "Подарок"
+        title = self._ui_text(str(raw_title), "Подарок")
         try:
             num = int(entry.get("num", 0) or 0)
         except:
@@ -20368,15 +20397,15 @@ class NftClonerPlugin(BasePlugin):
                     continue
                 try:
                     p0 = str(params[0].getName() or "")
-                    p1 = str(params[1].getName() or "").lower()
+                    p1 = str(params[1].getName() or "")
                 except:
                     continue
-                # Hook both: unique-gift path (TL_starGiftUnique) and saved-gift path (TL_savedStarGift).
-                is_unique = "TL_stars$TL_starGiftUnique" in p0
-                is_saved = "TL_stars$TL_savedStarGift" in p0
+                # Hook two gift-entry overloads on StarGiftSheet:
+                #  - set(TL_starGiftUnique, boolean)                   — upgraded gift path (existing)
+                #  - set(SavedStarGift,    StarsController$IGiftsList) — saved (plain) path (NEW in 1.2.2)
+                is_unique = ("TL_stars$TL_starGiftUnique" in p0) and ("boolean" in p1.lower())
+                is_saved = ("TL_stars$SavedStarGift" in p0) and ("IGiftsList" in p1)
                 if not (is_unique or is_saved):
-                    continue
-                if "boolean" not in p1:
                     continue
                 try:
                     m.setAccessible(True)
@@ -20384,6 +20413,10 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
                 hooked += 1
+                try:
+                    _log(f"Hooked StarGiftSheet.set({p0.split('.')[-1].split('$')[-1]}, {p1.split('.')[-1].split('$')[-1]})")
+                except:
+                    pass
         except Exception as e:
             _log(f"Local gift value hook error: {e}")
             return
