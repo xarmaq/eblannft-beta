@@ -6,7 +6,7 @@ import types
 import zlib
 import base64
 
-__id__ = "eblannft"
+__id__ = "eblannft_beta"
 __name__ = "eblanNFT"
 __description__ = "Local runtime-loader for eblanNFT.\n\nUpdates and main logic are loaded from the embedded runtime."
 __author__ = "@xarmaq"
