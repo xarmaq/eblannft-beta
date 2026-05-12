@@ -20,6 +20,10 @@ from org.telegram.tgnet import TLRPC
 from ui.bulletin import BulletinHelper
 from ui.alert import AlertDialogBuilder
 from ui.settings import Header, Text, Divider, Switch
+try:
+    from ui.settings import Custom as _UISettingsCustom
+except Exception:
+    _UISettingsCustom = None
 from file_utils import write_file, read_file, get_plugins_dir, ensure_dir_exists
 from hook_utils import find_class
 
@@ -77,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -12812,6 +12816,138 @@ class NftClonerPlugin(BasePlugin):
         ))
         return items
 
+    def _build_my_gift_header_view(self, entry, title_text, subtext_text):
+        """Native header for a 'Мои подарки' card: thumbnail + title + subtitle.
+        Returns an Android View suitable for ui.settings.Custom(view=...), or None on failure."""
+        try:
+            fragment = get_last_fragment()
+            if not fragment:
+                return None
+            ctx = fragment.getParentActivity()
+            if not ctx:
+                return None
+
+            row = LinearLayout(ctx)
+            row.setOrientation(LinearLayout.HORIZONTAL)
+            try:
+                row.setGravity(Gravity.CENTER_VERTICAL)
+            except:
+                pass
+            try:
+                hpad = AndroidUtilities.dp(16)
+                vpad = AndroidUtilities.dp(10)
+                row.setPadding(hpad, vpad, hpad, vpad)
+            except:
+                pass
+            try:
+                row.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
+            except:
+                pass
+
+            thumb = BackupImageView(ctx)
+            thumb_size = AndroidUtilities.dp(56)
+            try:
+                thumb.setRoundRadius(AndroidUtilities.dp(12))
+            except:
+                pass
+            try:
+                lp_thumb = LinearLayout.LayoutParams(thumb_size, thumb_size)
+                lp_thumb.rightMargin = AndroidUtilities.dp(14)
+                row.addView(thumb, lp_thumb)
+            except:
+                row.addView(thumb)
+
+            try:
+                key = entry.get("key") if isinstance(entry, dict) else None
+                w = self._library_get_wrapper(key) if key else None
+                g = self._extract_wrapper_gift(w) if w is not None else None
+                doc = None
+                if g is not None:
+                    doc = get_val(g, "sticker", None)
+                    if doc is None:
+                        doc = get_val(g, "document", None)
+                if doc is not None:
+                    il = ImageLocation.getForDocument(doc)
+                    if il is not None:
+                        thumb.setImage(il, "80_80", None, 0, doc)
+            except Exception as ex:
+                try:
+                    _log(f"my-gift thumb load fail: {ex}")
+                except:
+                    pass
+
+            text_col = LinearLayout(ctx)
+            text_col.setOrientation(LinearLayout.VERTICAL)
+            try:
+                text_col.setGravity(Gravity.CENTER_VERTICAL)
+            except:
+                pass
+
+            title_tv = TextView(ctx)
+            try:
+                title_tv.setText(self._ui_text(title_text, str(title_text)))
+            except:
+                title_tv.setText(str(title_text or ""))
+            try:
+                title_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.0)
+            except:
+                pass
+            try:
+                title_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            except:
+                pass
+            try:
+                title_tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+            except:
+                pass
+            try:
+                title_tv.setMaxLines(1)
+                title_tv.setEllipsize(jclass("android.text.TextUtils$TruncateAt").END)
+            except:
+                pass
+            try:
+                text_col.addView(title_tv, LinearLayout.LayoutParams(-2, -2))
+            except:
+                text_col.addView(title_tv)
+
+            if subtext_text:
+                sub_tv = TextView(ctx)
+                try:
+                    sub_tv.setText(self._ui_text(subtext_text, str(subtext_text)))
+                except:
+                    sub_tv.setText(str(subtext_text or ""))
+                try:
+                    sub_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
+                except:
+                    pass
+                try:
+                    sub_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+                except:
+                    pass
+                try:
+                    sub_tv.setMaxLines(1)
+                    sub_tv.setEllipsize(jclass("android.text.TextUtils$TruncateAt").END)
+                except:
+                    pass
+                try:
+                    sp = LinearLayout.LayoutParams(-2, -2)
+                    sp.topMargin = AndroidUtilities.dp(2)
+                    text_col.addView(sub_tv, sp)
+                except:
+                    text_col.addView(sub_tv)
+
+            try:
+                row.addView(text_col, LinearLayout.LayoutParams(-1, -2))
+            except:
+                row.addView(text_col)
+            return row
+        except Exception as ex:
+            try:
+                _log(f"_build_my_gift_header_view fail: {ex}")
+            except:
+                pass
+            return None
+
     def _render_my_gift_card_rows(self, entry):
         if not isinstance(entry, dict):
             return []
@@ -12835,11 +12971,24 @@ class NftClonerPlugin(BasePlugin):
             kind_label = ""
 
         rows.append(Divider())
-        rows.append(Text(
-            text=header,
-            subtext=kind_label or ("NFT подарок" if is_nft else "Обычный подарок"),
-            icon="msg_emoji_gem",
-        ))
+        header_subtext = kind_label or ("NFT подарок" if is_nft else "Обычный подарок")
+        _header_view = None
+        if _UISettingsCustom is not None:
+            try:
+                _header_view = self._build_my_gift_header_view(entry, header, header_subtext)
+            except:
+                _header_view = None
+        if _header_view is not None:
+            try:
+                rows.append(_UISettingsCustom(view=_header_view))
+            except Exception as ex:
+                try:
+                    _log(f"Custom header row fail: {ex}")
+                except:
+                    pass
+                rows.append(Text(text=header, subtext=header_subtext, icon="msg_emoji_gem"))
+        else:
+            rows.append(Text(text=header, subtext=header_subtext, icon="msg_emoji_gem"))
 
         if is_nft:
             for label, group in (("Модель", "model"), ("Символ", "pattern"), ("Фон", "backdrop")):
