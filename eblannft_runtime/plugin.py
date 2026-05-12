@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -12985,18 +12985,124 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
     def _open_catalog_plain_sheet(self):
-        """Каталог обычных подарков без улучшений. Phase 3 — пока заглушка, открывает общий каталог."""
+        """Каталог обычных подарков — без визуальных улучшений.
+        Использует тот же CatalogNftSheet, но с флагом is_plain=True;
+        тап по подарку добавляет его в библиотеку как обычный (без build_config).
+        """
         try:
-            BulletinHelper.show_info("Каталог обычных подарков появится в следующей версии. Открываю текущий каталог.")
-        except:
-            pass
-        try:
-            self._open_catalog_nft_sheet()
+            sheet = CatalogNftSheet(self)
+            try:
+                sheet.is_plain = True
+            except:
+                pass
+            sheet.show()
         except Exception as ex:
             try:
                 BulletinHelper.show_error(f"Каталог недоступен: {ex}")
             except:
                 pass
+
+    def _add_plain_gift_from_catalog(self, gift, gift_id):
+        """Создаёт TL_savedStarGift-обёртку из каталожного подарка и добавляет в библиотеку
+        как обычный (без build_config / без upgrade-флоу). Используется из CatalogNftSheet
+        в plain-режиме."""
+        try:
+            try:
+                self._ensure_gift_classes()
+            except:
+                pass
+            cls_saved = getattr(self, "cls_saved", None)
+            if cls_saved is None:
+                try:
+                    cls_saved = jclass("org.telegram.tgnet.tl.TL_stars$TL_savedStarGift")
+                    self.cls_saved = cls_saved
+                except:
+                    cls_saved = None
+            if cls_saved is None:
+                BulletinHelper.show_error("Не удалось создать обёртку подарка")
+                return False
+
+            wrapper = self._new_java_instance(cls_saved)
+            if not wrapper:
+                BulletinHelper.show_error("Не удалось создать TL_savedStarGift")
+                return False
+
+            try:
+                self._set_field(wrapper, "gift", gift)
+                self._set_field(wrapper, "date", int(time.time()))
+                self._set_field(wrapper, "pinned_to_top", True)
+            except Exception as ex:
+                _log(f"Plain wrap set fields error: {ex}")
+            try:
+                self._set_field(wrapper, "unsaved", False)
+            except:
+                pass
+            try:
+                self._set_field(wrapper, "saved_id", random.randint(1000, 9999))
+            except:
+                pass
+
+            try:
+                self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True)
+            except Exception as ex:
+                _log(f"Plain wrap normalize error: {ex}")
+
+            try:
+                base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+            except:
+                base_id = int(gift_id or 0)
+            if base_id <= 0:
+                base_id = int(gift_id or 0)
+
+            key = self._library_upsert_wrapper(
+                wrapper,
+                base_gift_id=base_id,
+                key=None,
+                inject=True,
+                make_active=False,
+                build_config=None,
+                identity_config=None,
+                value_config=None,
+                gift_stars_config=None,
+            )
+
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                self._save_injection_cache()
+            except:
+                pass
+            try:
+                self._refresh_local_profile_gifts_section(reason="plain_catalog_add")
+            except Exception as ex:
+                _log(f"Plain catalog refresh error: {ex}")
+
+            try:
+                e = self._library_find_entry(key) if key else None
+                label = self._ui_text(e.get("title", "подарок"), "подарок") if isinstance(e, dict) else "подарок"
+            except:
+                label = "подарок"
+            try:
+                BulletinHelper.show_success(f"«{label}» добавлен как обычный")
+            except:
+                pass
+            try:
+                self.reload_settings()
+            except:
+                pass
+            return True
+        except Exception as ex:
+            try:
+                BulletinHelper.show_error(f"Ошибка добавления: {ex}")
+            except:
+                pass
+            try:
+                _log(f"_add_plain_gift_from_catalog error: {ex}")
+            except:
+                pass
+            return False
 
     def _create_username_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_username_tokens()
@@ -30551,6 +30657,14 @@ def _catalog_sheet_on_click_clean(self, item, view, pos, x, y):
 
         if self.sheet:
             self.sheet.dismiss()
+
+        # Plain mode: skip upgrade flow, add catalog gift as-is to library.
+        if bool(getattr(self, "is_plain", False)):
+            try:
+                self.plugin._add_plain_gift_from_catalog(g, gift_id)
+            except Exception as ex:
+                BulletinHelper.show_error(f"\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c: {ex}")
+            return
 
         self.plugin.stolen_gift_inner = g
         self.plugin.stolen_gift_wrapper = None
