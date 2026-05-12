@@ -81,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -13015,27 +13015,34 @@ class NftClonerPlugin(BasePlugin):
                 on_click=lambda _, k=key: self._confirm_delete_my_gift(k),
             ))
         else:
-            from_value = str(entry.get("from_text", "") or "").strip()
-            date_value = str(entry.get("date_text", "") or "").strip()
+            from_value = self._format_my_gift_from(entry)
+            date_value = self._format_my_gift_date(entry)
             comment_value = str(entry.get("comment_text", "") or "").strip()
             rows.append(Text(
                 text="От кого",
                 subtext=(from_value or "не задано"),
                 icon="msg_link",
-                on_click=lambda _, k=key: self._edit_my_gift_field(k, "from_text", "От кого"),
+                on_click=lambda _, k=key: self._edit_my_gift_from(k),
             ))
             rows.append(Text(
                 text="Дата",
                 subtext=(date_value or "не задано"),
                 icon="msg_stats_solar",
-                on_click=lambda _, k=key: self._edit_my_gift_field(k, "date_text", "Дата (например, 23.03.2026)"),
+                on_click=lambda _, k=key: self._edit_my_gift_date(k),
             ))
-            rows.append(Text(
-                text="Комментарий",
-                subtext=(comment_value or "не задано"),
-                icon="msg_edit",
-                on_click=lambda _, k=key: self._edit_my_gift_field(k, "comment_text", "Комментарий"),
-            ))
+            if comment_value:
+                rows.append(Text(
+                    text="Комментарий",
+                    subtext=comment_value,
+                    icon="msg_edit",
+                    on_click=lambda _, k=key: self._edit_my_gift_field(k, "comment_text", "Комментарий"),
+                ))
+            else:
+                rows.append(Text(
+                    text="+ Добавить комментарий",
+                    icon="msg_edit",
+                    on_click=lambda _, k=key: self._edit_my_gift_field(k, "comment_text", "Комментарий"),
+                ))
             rows.append(Text(
                 text="Удалить",
                 subtext="Убрать из коллекции",
@@ -13044,6 +13051,335 @@ class NftClonerPlugin(BasePlugin):
                 on_click=lambda _, k=key: self._confirm_delete_my_gift(k),
             ))
         return rows
+
+    def _format_my_gift_from(self, entry):
+        """Display string for the 'From' field of a plain gift card.
+        Prefers cached resolved user (first+last name); falls back to @username or plain text."""
+        if not isinstance(entry, dict):
+            return ""
+        try:
+            uname = str(entry.get("from_username", "") or "").strip().lstrip("@")
+        except:
+            uname = ""
+        try:
+            first = str(entry.get("from_first_name", "") or "").strip()
+            last = str(entry.get("from_last_name", "") or "").strip()
+            full = (first + " " + last).strip()
+        except:
+            full = ""
+        if full and uname:
+            return f"{full}  •  @{uname}"
+        if full:
+            return full
+        if uname:
+            return f"@{uname}"
+        try:
+            return str(entry.get("from_text", "") or "").strip()
+        except:
+            return ""
+
+    def _format_my_gift_date(self, entry):
+        """Display string for the 'Date' field of a plain gift card.
+        Prefers date_epoch (int seconds) formatted dd.mm.yyyy; falls back to legacy date_text."""
+        if not isinstance(entry, dict):
+            return ""
+        epoch = 0
+        try:
+            epoch = int(entry.get("date_epoch", 0) or 0)
+        except:
+            epoch = 0
+        if epoch > 0:
+            try:
+                t = time.localtime(epoch)
+                return time.strftime("%d.%m.%Y", t)
+            except:
+                pass
+        try:
+            return str(entry.get("date_text", "") or "").strip()
+        except:
+            return ""
+
+    def _edit_my_gift_date(self, key):
+        """Open Android DatePickerDialog and persist the picked date as date_epoch."""
+        e = self._library_find_entry(key)
+        if not e:
+            try:
+                BulletinHelper.show_error("Подарок не найден")
+            except:
+                pass
+            return
+        try:
+            fragment = get_last_fragment()
+            ctx = fragment.getParentActivity() if fragment else None
+            if not ctx:
+                try:
+                    BulletinHelper.show_error("Окно недоступно")
+                except:
+                    pass
+                return
+
+            Calendar = jclass("java.util.Calendar")
+            cal = Calendar.getInstance()
+            init_epoch = 0
+            try:
+                init_epoch = int(e.get("date_epoch", 0) or 0)
+            except:
+                init_epoch = 0
+            if init_epoch > 0:
+                try:
+                    cal.setTimeInMillis(int(init_epoch) * 1000)
+                except:
+                    pass
+            y = cal.get(Calendar.YEAR)
+            m = cal.get(Calendar.MONTH)
+            d = cal.get(Calendar.DAY_OF_MONTH)
+
+            plugin_self = self
+            target_key = str(key)
+
+            DatePickerDialog = jclass("android.app.DatePickerDialog")
+            OnDateSetListener = jclass("android.app.DatePickerDialog$OnDateSetListener")
+
+            class _OnDateSet(dynamic_proxy(OnDateSetListener)):
+                def onDateSet(self_obj, view, year, month, day):
+                    try:
+                        ent = plugin_self._library_find_entry(target_key)
+                        if not ent:
+                            return
+                        cal2 = Calendar.getInstance()
+                        try:
+                            cal2.set(int(year), int(month), int(day), 0, 0, 0)
+                        except:
+                            cal2.set(int(year), int(month), int(day))
+                        try:
+                            cal2.set(Calendar.MILLISECOND, 0)
+                        except:
+                            pass
+                        epoch_s = int(cal2.getTimeInMillis() // 1000)
+                        ent["date_epoch"] = int(epoch_s)
+                        try:
+                            ent["date_text"] = time.strftime("%d.%m.%Y", time.localtime(epoch_s))
+                        except:
+                            pass
+                        try:
+                            ent["updated_at"] = int(time.time())
+                        except:
+                            pass
+                        try:
+                            plugin_self._library_dirty = True
+                        except:
+                            pass
+                        try:
+                            plugin_self._save_cache()
+                        except:
+                            pass
+                        try:
+                            BulletinHelper.show_success("Дата сохранена")
+                        except:
+                            pass
+                        try:
+                            plugin_self.reload_settings()
+                        except:
+                            pass
+                    except Exception as ex:
+                        try:
+                            BulletinHelper.show_error(f"Ошибка сохранения даты: {ex}")
+                        except:
+                            pass
+
+            def _open():
+                try:
+                    dlg = DatePickerDialog(ctx, _OnDateSet(), int(y), int(m), int(d))
+                    dlg.show()
+                except Exception as ex:
+                    try:
+                        BulletinHelper.show_error(f"Не открыть выбор даты: {ex}")
+                    except:
+                        pass
+
+            run_on_ui_thread(_open)
+        except Exception as ex:
+            try:
+                BulletinHelper.show_error(f"Ошибка даты: {ex}")
+            except:
+                pass
+
+    def _edit_my_gift_from(self, key):
+        """Ask user for a @username, resolve via MessagesController, persist user_id + display."""
+        e = self._library_find_entry(key)
+        if not e:
+            try:
+                BulletinHelper.show_error("Подарок не найден")
+            except:
+                pass
+            return
+        prefill = ""
+        try:
+            uname = str(e.get("from_username", "") or "").strip().lstrip("@")
+            prefill = ("@" + uname) if uname else str(e.get("from_text", "") or "")
+        except:
+            prefill = ""
+
+        def _save(text):
+            raw = str(text or "").strip()
+            ent = self._library_find_entry(key)
+            if not ent:
+                return
+            if not raw:
+                ent.pop("from_username", None)
+                ent.pop("from_user_id", None)
+                ent.pop("from_first_name", None)
+                ent.pop("from_last_name", None)
+                ent["from_text"] = ""
+                try:
+                    self._save_cache()
+                except:
+                    pass
+                try:
+                    self.reload_settings()
+                except:
+                    pass
+                try:
+                    BulletinHelper.show_success("Очищено")
+                except:
+                    pass
+                return
+
+            username = raw.lstrip("@").strip()
+            ent["from_text"] = raw
+            try:
+                ent["updated_at"] = int(time.time())
+            except:
+                pass
+            try:
+                self._library_dirty = True
+            except:
+                pass
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                self.reload_settings()
+            except:
+                pass
+
+            if not username:
+                return
+            try:
+                account = int(UserConfig.selectedAccount)
+            except:
+                account = 0
+            try:
+                mc = MessagesController.getInstance(account)
+            except:
+                mc = None
+            if mc is None or not hasattr(mc, "resolveUsername"):
+                try:
+                    BulletinHelper.show_info(f"Сохранено как «{raw}»")
+                except:
+                    pass
+                return
+
+            plugin_self = self
+            target_key = str(key)
+
+            try:
+                callback_class = jclass("org.telegram.messenger.Utilities$Callback")
+            except:
+                callback_class = None
+            if callback_class is None:
+                return
+
+            class _FromResolved(dynamic_proxy(callback_class)):
+                def run(self_obj, result):
+                    user_obj = None
+                    try:
+                        if result is not None and hasattr(result, "users") and result.users is not None and result.users.size() > 0:
+                            user_obj = result.users.get(0)
+                    except:
+                        user_obj = None
+
+                    def _apply():
+                        try:
+                            ent2 = plugin_self._library_find_entry(target_key)
+                            if not ent2:
+                                return
+                            if user_obj is None:
+                                try:
+                                    BulletinHelper.show_info(f"Юзер @{username} не найден — сохранено как текст")
+                                except:
+                                    pass
+                                return
+                            try:
+                                uid = int(get_val(user_obj, "id", 0) or 0)
+                            except:
+                                uid = 0
+                            first = ""
+                            last = ""
+                            try:
+                                first = str(get_val(user_obj, "first_name", "") or "")
+                            except:
+                                pass
+                            try:
+                                last = str(get_val(user_obj, "last_name", "") or "")
+                            except:
+                                pass
+                            try:
+                                resolved_uname = str(get_val(user_obj, "username", "") or "")
+                            except:
+                                resolved_uname = username
+                            if uid:
+                                ent2["from_user_id"] = int(uid)
+                            ent2["from_username"] = resolved_uname or username
+                            ent2["from_first_name"] = first
+                            ent2["from_last_name"] = last
+                            ent2["from_text"] = (first + " " + last).strip() or ("@" + (resolved_uname or username))
+                            try:
+                                plugin_self._library_dirty = True
+                            except:
+                                pass
+                            try:
+                                plugin_self._save_cache()
+                            except:
+                                pass
+                            try:
+                                BulletinHelper.show_success("Отправитель сохранён")
+                            except:
+                                pass
+                            try:
+                                plugin_self.reload_settings()
+                            except:
+                                pass
+                        except Exception as ex:
+                            try:
+                                _log(f"from-resolve apply fail: {ex}")
+                            except:
+                                pass
+
+                    try:
+                        run_on_ui_thread(_apply)
+                    except:
+                        try:
+                            _apply()
+                        except:
+                            pass
+
+            try:
+                mc.resolveUsername(username, _FromResolved())
+            except Exception as ex:
+                try:
+                    _log(f"resolveUsername fail: {ex}")
+                except:
+                    pass
+
+        try:
+            self._show_text_input_dialog("От кого (введите @username)", prefill, _save)
+        except Exception as ex:
+            try:
+                BulletinHelper.show_error(f"Не удалось открыть редактор: {ex}")
+            except:
+                pass
 
     def _edit_my_gift_field(self, key, field, title):
         e = self._library_find_entry(key)
