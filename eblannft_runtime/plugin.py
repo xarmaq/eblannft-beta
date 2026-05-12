@@ -81,7 +81,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
 EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
@@ -5721,15 +5721,15 @@ class NftClonerPlugin(BasePlugin):
             kind = ""
         is_nft = kind in (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
 
-        patched = False
+        patched = []
 
         # Hide Upgrade button for plain plugin-added entries (NORMAL / LEGACY).
         if not is_nft:
             try:
                 if self._set_field(wrapper, "can_upgrade", False):
-                    patched = True
-            except:
-                pass
+                    patched.append("can_upgrade=False")
+            except Exception as ex:
+                _log(f"override can_upgrade fail: {ex}")
 
         # Date override.
         try:
@@ -5739,9 +5739,9 @@ class NftClonerPlugin(BasePlugin):
         if ep > 0:
             try:
                 if self._set_field(wrapper, "date", int(ep)):
-                    patched = True
-            except:
-                pass
+                    patched.append(f"date={ep}")
+            except Exception as ex:
+                _log(f"override date fail: {ex}")
 
         # From-user override.
         try:
@@ -5753,14 +5753,15 @@ class NftClonerPlugin(BasePlugin):
                 peer = self._build_peer_user(from_uid)
                 if peer is not None:
                     if self._set_field(wrapper, "from_id", peer):
-                        patched = True
-                    # Drop name_hidden so TG renders the real user row.
+                        patched.append(f"from_id={from_uid}")
                     try:
                         self._set_field(wrapper, "name_hidden", False)
                     except:
                         pass
-            except Exception as e:
-                _log(f"override from_id fail: {e}")
+                else:
+                    _log(f"override from_id: _build_peer_user({from_uid}) returned None")
+            except Exception as ex:
+                _log(f"override from_id fail: {ex}")
 
         # Comment / message override.
         try:
@@ -5780,11 +5781,19 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     pass
                 if self._set_field(wrapper, "message", twe):
-                    patched = True
-            except Exception as e:
-                _log(f"override message fail: {e}")
+                    patched.append(f"message={len(comment)}c")
+            except Exception as ex:
+                _log(f"override message fail: {ex}")
 
-        return patched
+        try:
+            kkey = str(entry.get("key", "") or "?")
+            if patched:
+                _log(f"sheet override applied for entry={kkey} kind={kind}: {', '.join(patched)}")
+            else:
+                _log(f"sheet override no-op for entry={kkey} kind={kind} (no override fields set)")
+        except:
+            pass
+        return bool(patched)
 
     def _apply_local_ton_display_to_gift(self, gift):
         if gift is None:
@@ -13309,7 +13318,8 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
     def _edit_my_gift_from(self, key):
-        """Ask user for a @username, resolve via MessagesController, persist user_id + display."""
+        """Ask for a numeric TG user_id, look it up in the local MessagesController
+        cache for name+username, persist all three on the entry."""
         e = self._library_find_entry(key)
         if not e:
             try:
@@ -13319,8 +13329,9 @@ class NftClonerPlugin(BasePlugin):
             return
         prefill = ""
         try:
-            uname = str(e.get("from_username", "") or "").strip().lstrip("@")
-            prefill = ("@" + uname) if uname else str(e.get("from_text", "") or "")
+            uid_cur = int(e.get("from_user_id", 0) or 0)
+            if uid_cur > 0:
+                prefill = str(uid_cur)
         except:
             prefill = ""
 
@@ -13336,6 +13347,14 @@ class NftClonerPlugin(BasePlugin):
                 ent.pop("from_last_name", None)
                 ent["from_text"] = ""
                 try:
+                    ent["updated_at"] = int(time.time())
+                except:
+                    pass
+                try:
+                    self._library_dirty = True
+                except:
+                    pass
+                try:
                     self._save_cache()
                 except:
                     pass
@@ -13349,12 +13368,69 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 return
 
-            username = raw.lstrip("@").strip()
-            ent["from_text"] = raw
+            try:
+                uid = int("".join(ch for ch in raw if ch.isdigit() or ch == "-"))
+            except:
+                uid = 0
+            if uid <= 0:
+                try:
+                    BulletinHelper.show_error("Введите числовой user_id")
+                except:
+                    pass
+                return
+
+            ent["from_user_id"] = int(uid)
             try:
                 ent["updated_at"] = int(time.time())
             except:
                 pass
+
+            # Look up cached user (no network call — local cache only).
+            user_obj = None
+            try:
+                account = int(UserConfig.selectedAccount)
+            except:
+                account = 0
+            try:
+                mc = MessagesController.getInstance(account)
+                if mc is not None and hasattr(mc, "getUser"):
+                    Long = jclass("java.lang.Long")
+                    user_obj = mc.getUser(Long.valueOf(int(uid)))
+            except Exception as ex:
+                try:
+                    _log(f"getUser fail uid={uid}: {ex}")
+                except:
+                    pass
+                user_obj = None
+
+            if user_obj is not None:
+                try:
+                    first = str(get_val(user_obj, "first_name", "") or "")
+                except:
+                    first = ""
+                try:
+                    last = str(get_val(user_obj, "last_name", "") or "")
+                except:
+                    last = ""
+                try:
+                    uname = str(get_val(user_obj, "username", "") or "")
+                except:
+                    uname = ""
+                ent["from_first_name"] = first
+                ent["from_last_name"] = last
+                if uname:
+                    ent["from_username"] = uname
+                else:
+                    ent.pop("from_username", None)
+                display = (first + " " + last).strip() or (("@" + uname) if uname else f"id {uid}")
+                ent["from_text"] = display
+            else:
+                # Fall back to id-only display; the override hook still works via from_user_id.
+                ent.pop("from_first_name", None)
+                ent.pop("from_last_name", None)
+                ent.pop("from_username", None)
+                ent["from_text"] = f"id {uid}"
+
             try:
                 self._library_dirty = True
             except:
@@ -13364,121 +13440,17 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
             try:
+                BulletinHelper.show_success("Отправитель сохранён")
+            except:
+                pass
+            try:
                 self.reload_settings()
             except:
                 pass
 
-            if not username:
-                return
-            try:
-                account = int(UserConfig.selectedAccount)
-            except:
-                account = 0
-            try:
-                mc = MessagesController.getInstance(account)
-            except:
-                mc = None
-            if mc is None or not hasattr(mc, "resolveUsername"):
-                try:
-                    BulletinHelper.show_info(f"Сохранено как «{raw}»")
-                except:
-                    pass
-                return
-
-            plugin_self = self
-            target_key = str(key)
-
-            try:
-                callback_class = jclass("org.telegram.messenger.Utilities$Callback")
-            except:
-                callback_class = None
-            if callback_class is None:
-                return
-
-            class _FromResolved(dynamic_proxy(callback_class)):
-                def run(self_obj, result):
-                    user_obj = None
-                    try:
-                        if result is not None and hasattr(result, "users") and result.users is not None and result.users.size() > 0:
-                            user_obj = result.users.get(0)
-                    except:
-                        user_obj = None
-
-                    def _apply():
-                        try:
-                            ent2 = plugin_self._library_find_entry(target_key)
-                            if not ent2:
-                                return
-                            if user_obj is None:
-                                try:
-                                    BulletinHelper.show_info(f"Юзер @{username} не найден — сохранено как текст")
-                                except:
-                                    pass
-                                return
-                            try:
-                                uid = int(get_val(user_obj, "id", 0) or 0)
-                            except:
-                                uid = 0
-                            first = ""
-                            last = ""
-                            try:
-                                first = str(get_val(user_obj, "first_name", "") or "")
-                            except:
-                                pass
-                            try:
-                                last = str(get_val(user_obj, "last_name", "") or "")
-                            except:
-                                pass
-                            try:
-                                resolved_uname = str(get_val(user_obj, "username", "") or "")
-                            except:
-                                resolved_uname = username
-                            if uid:
-                                ent2["from_user_id"] = int(uid)
-                            ent2["from_username"] = resolved_uname or username
-                            ent2["from_first_name"] = first
-                            ent2["from_last_name"] = last
-                            ent2["from_text"] = (first + " " + last).strip() or ("@" + (resolved_uname or username))
-                            try:
-                                plugin_self._library_dirty = True
-                            except:
-                                pass
-                            try:
-                                plugin_self._save_cache()
-                            except:
-                                pass
-                            try:
-                                BulletinHelper.show_success("Отправитель сохранён")
-                            except:
-                                pass
-                            try:
-                                plugin_self.reload_settings()
-                            except:
-                                pass
-                        except Exception as ex:
-                            try:
-                                _log(f"from-resolve apply fail: {ex}")
-                            except:
-                                pass
-
-                    try:
-                        run_on_ui_thread(_apply)
-                    except:
-                        try:
-                            _apply()
-                        except:
-                            pass
-
-            try:
-                mc.resolveUsername(username, _FromResolved())
-            except Exception as ex:
-                try:
-                    _log(f"resolveUsername fail: {ex}")
-                except:
-                    pass
-
+        # Numeric-keyboard input dialog (uses _show_text_input_dialog's numeric=True branch).
         try:
-            self._show_text_input_dialog("От кого (введите @username)", prefill, _save)
+            self._show_text_input_dialog("User ID отправителя (число)", prefill, _save, numeric=True)
         except Exception as ex:
             try:
                 BulletinHelper.show_error(f"Не удалось открыть редактор: {ex}")
@@ -13628,12 +13600,6 @@ class NftClonerPlugin(BasePlugin):
                 pass
             try:
                 self._set_field(wrapper, "saved_id", random.randint(1000, 9999))
-            except:
-                pass
-            # Plain plugin-added gifts never have a real upgrade path —
-            # stamp can_upgrade=False so the native sheet hides the Upgrade button.
-            try:
-                self._set_field(wrapper, "can_upgrade", False)
             except:
                 pass
 
