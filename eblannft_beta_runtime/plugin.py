@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.69"
+__version__ = "1.0.70"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -13441,12 +13441,6 @@ class NftClonerPlugin(BasePlugin):
             gifts_text = "\u043e\u0442\u043a\u0440\u044b\u0442\u044c"
         return [
             Divider(),
-            Text(
-                text="Подарки",
-                subtext=f"{gifts_text} в библиотеке",
-                icon="msg_emoji_gem",
-                on_click=lambda _: self._open_gift_library_menu(),
-            ),
             Text(
                 text="Мои подарки",
                 subtext=self._my_gifts_summary_subtext(),
@@ -28772,8 +28766,40 @@ class MyGiftsCardSheet:
     # -----------------------------------------------------------------------
 
     def _on_add_clicked(self):
+        # Build the 2-option chooser ourselves (instead of delegating to
+        # plugin._open_my_gifts_add_menu) so each option can dismiss this
+        # card sheet *before* presenting the catalog fragment. Otherwise
+        # the sheet stays alive under the catalog and the user has to back
+        # out twice.
+        def _open_nft():
+            self._dismiss()
+            try:
+                self.plugin._open_catalog_nft_sheet()
+            except Exception as e:
+                try:
+                    BulletinHelper.show_error(f"Каталог NFT: {e}")
+                except:
+                    pass
+
+        def _open_regular():
+            self._dismiss()
+            try:
+                self.plugin._add_regular_gift_via_template()
+            except Exception as e:
+                try:
+                    BulletinHelper.show_error(f"Каталог: {e}")
+                except:
+                    pass
+
         try:
-            self.plugin._open_my_gifts_add_menu()
+            self.plugin._show_action_menu(
+                "Добавить подарок",
+                [
+                    ("NFT-подарок (с улучшениями)", _open_nft),
+                    ("Обычный подарок (без улучшений)", _open_regular),
+                ],
+                negative_text="Отмена",
+            )
         except Exception as e:
             try:
                 BulletinHelper.show_error(f"Меню: {e}")
@@ -28781,6 +28807,9 @@ class MyGiftsCardSheet:
                 pass
 
     def _on_edit_clicked(self, key):
+        # Dismiss before opening the constructor fragment so we don't leave
+        # this BottomSheet stranded under the new screen.
+        self._dismiss()
         try:
             self.plugin._open_constructor_for_library_key(key)
         except Exception as e:
