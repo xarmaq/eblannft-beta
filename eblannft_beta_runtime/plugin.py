@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.62"
+__version__ = "1.0.63"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -12841,8 +12841,10 @@ class NftClonerPlugin(BasePlugin):
         return bool(self.cls_saved and self.cls_unique)
 
     def _open_catalog_nft_sheet(self):
-        _log("Catalog: opening ResaleGridController")
-        ResaleGridController(self, is_catalog=True).show()
+        # nft_only mode: catalog is filtered to gifts with released upgrades,
+        # tap → constructor immediately (no «Обычный подарок?» popup).
+        _log("Catalog: opening ResaleGridController mode=nft_only")
+        ResaleGridController(self, is_catalog=True, mode="nft_only").show()
 
     def _open_gift_actions_menu(self, key):
         e = self._library_find_entry(key)
@@ -13695,42 +13697,15 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
     def _add_regular_gift_via_template(self):
-        """Open the regular-gift catalog picker. Each entry is a real gift from
-        StarsController.gifts filtered to non-unique / non-upgradable. Click →
-        wrap into TL_savedStarGift and upsert into gift_library with
-        gift_kind='standard'."""
+        """Open the regular-gift catalog as a visual grid (same UI as the NFT
+        catalog) in regular_only mode. Tap on any gift adds it as a standard
+        (non-upgraded) entry to gift_library and closes the catalog."""
         try:
-            items = self._get_catalog_standard_gifts()
-        except Exception as e:
-            items = []
-            try:
-                BulletinHelper.show_error(f"Каталог: {e}")
-            except:
-                pass
-        if not items:
-            # Kick off a catalog load and tell the user to retry.
-            try:
-                self._force_load_catalog()
-            except:
-                pass
-            try:
-                BulletinHelper.show_error("Каталог пуст. Открой магазин подарков и попробуй снова.")
-            except:
-                pass
-            return
-
-        actions = []
-        for g in items:
-            try:
-                title = self._regular_gift_picker_label(g)
-            except:
-                title = "Подарок"
-            actions.append((title, (lambda gg=g: self._add_regular_gift_from_template(gg))))
-        try:
-            self._show_action_menu("Обычный подарок", actions, negative_text="Отмена")
+            _log("Catalog: opening ResaleGridController mode=regular_only")
+            ResaleGridController(self, is_catalog=True, mode="regular_only").show()
         except Exception as e:
             try:
-                BulletinHelper.show_error(f"Меню каталога: {e}")
+                BulletinHelper.show_error(f"Каталог обычных подарков: {e}")
             except:
                 pass
 
@@ -27522,9 +27497,20 @@ class AttrLoader:
         run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
 
 class ResaleGridController:
-    def __init__(self, plugin, is_catalog=False):
+    # `mode` selects per-click behavior and item filtering:
+    #   "default"     — legacy popup ("Обычный подарок?" / "Локально улучшить")
+    #                   for non-unique items; constructor for unique. Catalog
+    #                   shows every TL_starGift (no extra filter).
+    #   "nft_only"    — show only gifts whose upgrades have already been
+    #                   released (availability_resale > 0 OR resell_min_stars
+    #                   > 0 OR looks unique). Click → constructor immediately.
+    #   "regular_only"— show all non-unique catalog gifts (both upgradable
+    #                   templates and plain ones). Click → add to gift_library
+    #                   as gift_kind='standard' immediately, then close.
+    def __init__(self, plugin, is_catalog=False, mode="default"):
         self.plugin = plugin
         self.is_catalog = is_catalog
+        self.mode = str(mode or "default")
         self.fragment = None
         self.my_adapter = None
         self.items = []
@@ -27555,7 +27541,10 @@ class ResaleGridController:
             pass
 
     def show(self):
-        title = "ÃƒÂÃ…Â¡ÃƒÂÃ‚Â°Ãƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¾ÃƒÂÃ‚Â³ NFT" if self.is_catalog else "ÃƒÂÃ…â€œÃƒÂÃ‚Â¾ÃƒÂÃ‚Â¸ NFT"
+        title = (
+            "Каталог подарков" if self.mode == "regular_only"
+            else ("Каталог NFT" if (self.mode == "nft_only" or self.is_catalog) else "Мои NFT")
+        )
         try:
             user_id = get_user_config().clientUserId
             ResaleGiftsFragment = jclass("org.telegram.ui.Gifts.ResaleGiftsFragment")
@@ -27616,7 +27605,7 @@ class ResaleGridController:
 
             if self.is_catalog:
                 self.plugin._force_load_catalog()
-                self.items = self.plugin._get_catalog_nft_gifts()
+                self.items = self._mode_filtered_catalog()
                 self._update_ui()
                 if not self.items:
                     BulletinHelper.show_info("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430...")
@@ -27628,11 +27617,60 @@ class ResaleGridController:
         except Exception as e:
             _log(f"Init UI Error: {e}\n{traceback.format_exc()}")
 
+    def _mode_filtered_catalog(self):
+        """Pull the raw catalog list, then narrow it according to self.mode.
+        Cached underlying list — call is cheap on hot path."""
+        try:
+            raw = list(self.plugin._get_catalog_nft_gifts() or [])
+        except:
+            raw = []
+        mode = getattr(self, "mode", "default") or "default"
+        if mode == "regular_only":
+            # All catalog templates (TL_starGift), excluding already-rolled
+            # unique variants — those don't belong in the "add as regular" path.
+            out = []
+            for g in raw:
+                try:
+                    if self.plugin._looks_like_unique_gift(g):
+                        continue
+                except:
+                    pass
+                out.append(g)
+            return out
+        if mode == "nft_only":
+            # Only gifts whose upgrades have been released — i.e. unique
+            # variants exist in the wild (availability_resale > 0 or the
+            # resell market has a min-price). Already-unique items also pass.
+            out = []
+            for g in raw:
+                try:
+                    if self.plugin._looks_like_unique_gift(g):
+                        out.append(g)
+                        continue
+                except:
+                    pass
+                try:
+                    ar = int(get_val(g, "availability_resale", 0) or 0)
+                except:
+                    ar = 0
+                if ar > 0:
+                    out.append(g)
+                    continue
+                try:
+                    rms = int(get_val(g, "resell_min_stars", 0) or 0)
+                except:
+                    rms = 0
+                if rms > 0:
+                    out.append(g)
+                    continue
+            return out
+        return raw
+
     def _retry_catalog_load(self):
         if not self.fragment:
             return
         if self.is_catalog and not self.items:
-            self.items = self.plugin._get_catalog_nft_gifts()
+            self.items = self._mode_filtered_catalog()
             self._update_ui()
             if not self.items:
                 self._retry_attempts = int(getattr(self, "_retry_attempts", 0) or 0) + 1
@@ -27774,6 +27812,45 @@ class ResaleGridController:
             gift = getattr(item, "object", None)
             if not gift:
                 return
+            mode = getattr(self, "mode", "default") or "default"
+
+            # regular_only: tap → add as standard gift immediately, no popup.
+            if mode == "regular_only":
+                try:
+                    self.fragment.finishFragment()
+                except:
+                    pass
+                self._release()
+                try:
+                    self.plugin._add_regular_gift_from_template(gift)
+                except Exception as add_e:
+                    try:
+                        BulletinHelper.show_error(f"Добавление: {add_e}")
+                    except:
+                        pass
+                return
+
+            # nft_only: tap → constructor (AttrLoader) for ANY shown gift,
+            # including non-unique templates with upgrade_stars > 0. The
+            # «Обычный подарок?» / «Локально улучшить» popup is skipped.
+            if mode == "nft_only":
+                self.plugin.stolen_gift_inner = gift
+                try:
+                    self.plugin.cached_gift_id = int(self.plugin._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
+                except:
+                    self.plugin.cached_gift_id = 0
+                if int(self.plugin.cached_gift_id or 0) <= 0:
+                    BulletinHelper.show_error("Не удалось определить gift_id")
+                    return
+                try:
+                    self.fragment.finishFragment()
+                except:
+                    pass
+                self._release()
+                AttrLoader(self.plugin, self.plugin.cached_gift_id, allow_generic_fallback=True).start()
+                return
+
+            # default: legacy two-step popup for non-unique items.
             try:
                 is_unique = bool(self.plugin._looks_like_unique_gift(gift))
             except:
