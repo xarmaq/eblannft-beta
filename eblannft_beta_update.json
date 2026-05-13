@@ -1,6 +1,6 @@
 {
-  "version": "1.0.73",
-  "notes": "Beta 1.0.73 — фикс «От» на чужом профиле, дубль 2. В 1.0.72 я добавил fallback на _get_remote_gift_meta_for_gift, но для regular подарка в hook'е StarGiftSheet.set параметр — это TL_savedStarGift wrapper, у которого нет полей id/slug. Cache же ключевался на inner TL_starGift.id. Lookup промахивался. Теперь V5 row injection пробует найти meta дважды: сначала по wrapper'у (работает для unique подарков), потом разворачивает inner gift через _extract_wrapper_gift и ищет по нему (работает для regular). Соответственно «От» строка с резолвом имени теперь должна появиться при просмотре чужого регулярного подарка.",
+  "version": "1.0.74",
+  "notes": "Beta 1.0.74 — два фикса. (1) V5 row injection («От» / «Комментарий») теперь привязан ко ВСЕМ трём вариантам хука StarGiftSheet.set: A=(TL_starGiftUnique, bool), B=(TL_savedStarGift, IGiftsList), C=(slug, TL_starGiftUnique, IGiftsList). Раньше работал только в Variant A — это вариант для NFT. Regular подарки через сеть идут через Variant B, поэтому на чужом профиле строки не появлялись и оставалось «Hidden User». Теперь покрыты все три. (2) Карточный экран «Мои подарки» сортирует подарки по custom_date_ts (новее → выше), с fallback на created_at/updated_at. Регулярные подарки без даты остаются по порядку добавления.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

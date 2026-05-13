@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.73"
+__version__ = "1.0.74"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -25429,6 +25429,23 @@ class GiftSheetSavedSetHook(MethodHook):
             sheet = getattr(param, "thisObject", None)
         except:
             sheet = None
+        # Regular gifts (TL_savedStarGift wrapper) reach this hook variant —
+        # NFTs typically go through Variant A. Run my-gifts row injection
+        # here too so foreign-profile viewers see the «От» / «Комментарий»
+        # rows on regular gifts as well.
+        try:
+            saved_gift = None
+            try:
+                if param.args and len(param.args) >= 1:
+                    saved_gift = param.args[0]
+            except Exception:
+                saved_gift = None
+            self.plugin._inject_local_gift_my_gifts_rows(sheet, gift=saved_gift)
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSavedSetHook my-gifts-rows error: {e}")
+            except Exception:
+                pass
         try:
             run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
             AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda: self.plugin._install_local_upgrade_button_override(sheet))), 180)
@@ -25487,6 +25504,22 @@ class GiftSheetSlugSetHook(MethodHook):
             sheet = getattr(param, "thisObject", None)
         except:
             sheet = None
+        # Slug-deeplink variant: 2nd arg is the TL_starGiftUnique. Pass it to
+        # the my-gifts row injector so the «От» / «Комментарий» rows still
+        # appear when a gift is opened via slug deeplink instead of a tap.
+        try:
+            unique_gift = None
+            try:
+                if param.args and len(param.args) >= 2:
+                    unique_gift = param.args[1]
+            except Exception:
+                unique_gift = None
+            self.plugin._inject_local_gift_my_gifts_rows(sheet, gift=unique_gift)
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSlugSetHook my-gifts-rows error: {e}")
+            except Exception:
+                pass
         try:
             run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
             AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda: self.plugin._install_local_upgrade_button_override(sheet))), 180)
@@ -28224,6 +28257,25 @@ class MyGiftsCardSheet:
 
     def _fill_cards(self, ctx, cards):
         entries = self.plugin._my_gifts_list_entries()
+        # Newest first: sort by custom_date_ts (user-set date) primarily,
+        # then fall back to created_at / updated_at so freshly-added gifts
+        # without a custom date still surface at the top.
+        def _entry_sort_key(item):
+            _, entry = item
+            try:
+                ts = int(entry.get("custom_date_ts", 0) or 0)
+            except:
+                ts = 0
+            if ts > 0:
+                return ts
+            try:
+                return int(entry.get("created_at", 0) or entry.get("updated_at", 0) or 0)
+            except:
+                return 0
+        try:
+            entries.sort(key=_entry_sort_key, reverse=True)
+        except Exception as _se:
+            _log(f"MyGiftsCardSheet sort fail: {_se}")
         if not entries:
             empty = TextView(ctx)
             empty.setText("Пусто.\nНажмите + чтобы добавить подарок.")
