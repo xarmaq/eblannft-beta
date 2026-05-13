@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.79"
+__version__ = "1.0.80"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28345,6 +28345,23 @@ class MyGiftsCardSheet:
         try:
             outer.setLayoutParams(FrameLayout.LayoutParams(-1, sheet_h))
         except:
+            pass
+        # Inset top padding so the «← Мои подарки     +» bar clears the
+        # system status bar / notch. AndroidUtilities.statusBarHeight is
+        # the standard inset; fall back to 26dp if the field isn't
+        # exposed on this exteraGram fork.
+        try:
+            top_inset = int(getattr(AndroidUtilities, "statusBarHeight", 0) or 0)
+        except Exception:
+            top_inset = 0
+        if top_inset <= 0:
+            try:
+                top_inset = AndroidUtilities.dp(26)
+            except Exception:
+                top_inset = 0
+        try:
+            outer.setPadding(0, top_inset, 0, 0)
+        except Exception:
             pass
 
         # ---- Top bar: back arrow + title + (+) add button -----------------

@@ -1,6 +1,6 @@
 {
-  "version": "1.0.79",
-  "notes": "Beta 1.0.79 — фикс «скрытый подарок снова появляется при перезаходе в профиль». TG-кнопка «Скрыть из профиля» вызывает payments.saveStarGift(unsave=true). В lowercase это «savestargift» — не содержит ни «saved», ни «hide»/«unsave» подстрок, и наш NetworkHook не классифицировал запрос как saved-action. После перехвата запрос игнорировался, hidden_override не выставлялся, _rebuild_injection_payloads на следующем заходе всовывал wrapper обратно с unsaved=false. (1) Добавлена явная детекция имени «savestargift» в фильтре is_saved_action. (2) _apply_saved_action_from_req теперь читает поле req.unsave: записывает wrapper.unsaved и устанавливает entry.hidden_override=bool(unsave). (3) _library_get_wrapper при применении hidden_override теперь также пишет wrapper.unsaved (на TL_savedStarGift нет поля «hidden» — реальный hide-флаг это unsaved). Кнопка «Показать в профиле» симметрично снимает hide.",
+  "version": "1.0.80",
+  "notes": "Beta 1.0.80 — топ-бар «Моих подарков» теперь не залезает под статус-бар. Раньше верх sheet'а упирался прямо в нотч / часы / индикаторы, back-стрелку и кнопку + было трудно нажать. Добавлен top-inset в outer-LinearLayout равный AndroidUtilities.statusBarHeight (с fallback 26dp для форков где поле не экспонировано). Контент сдвигается вниз ровно на высоту статус-бара.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
