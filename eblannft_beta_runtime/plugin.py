@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.86"
+__version__ = "1.0.87"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28413,11 +28413,22 @@ class AttrLoader:
         self._fallback_requested = False
 
     def start(self):
-        # Direct network request — same as prod. No fast-path / cache /
-        # prewarm / inflight-dedup machinery: those layers introduced
-        # cross-gift attribute mixing, a native-side NPE in
-        # StarGiftPreviewSheet$GiftAttributeCell, and starved the
-        # catalog network slot on plugin startup. Match prod.
+        # Per-gift cache hit — instant re-open with the EXACT response
+        # for THIS gift_id. No generic pool, no prewarm, no inflight
+        # dedup — those caused cross-gift mixing and a native NPE in
+        # v1.0.75-v1.0.85. Just a simple gift_id → response map kept
+        # in memory from past successful fetches in this app session.
+        try:
+            cache = getattr(self.plugin, "_upgrade_attr_response_cache", None)
+            if isinstance(cache, dict):
+                cached_resp = cache.get(int(self.gift_id))
+                if cached_resp is not None:
+                    _log(f"AttrLoader: per-gift cache hit gift_id={self.gift_id}")
+                    run_on_ui_thread(lambda r=cached_resp: NftBuilderSheet(self.plugin, self.base_gift_id, r).show())
+                    return
+        except Exception:
+            pass
+
         try:
             req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
             req.gift_id = self.gift_id
