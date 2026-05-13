@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.70"
+__version__ = "1.0.71"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2473,13 +2473,15 @@ class NftClonerPlugin(BasePlugin):
                 if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
                     continue
                 gift = {"b64": b64}
-                for key in ("title", "slug", "key", "gift_kind", "source_gift_kind"):
+                for key in ("title", "slug", "key", "gift_kind", "source_gift_kind",
+                            "custom_from", "custom_date", "custom_comment"):
                     val = entry.get(key)
                     if isinstance(val, str) and val:
                         gift[key] = val
                 for key in ("num", "base_gift_id", "unique_id", "saved_id",
                             "standard_price_stars", "avail_total", "avail_issued",
-                            "limit_total", "order_hint", "updated_at", "created_at"):
+                            "limit_total", "order_hint", "updated_at", "created_at",
+                            "custom_date_ts"):
                     val = entry.get(key)
                     if isinstance(val, (int, float)):
                         gift[key] = int(val)
@@ -3809,6 +3811,20 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 pass
 
+            # «Мои подарки» V6 sync: apply the owner's custom_date_ts to the
+            # received wrapper so the native StarGiftSheet "Date" row renders
+            # the date the owner picked. We intentionally do NOT propagate
+            # custom_from / custom_comment to wrapper-level fields here —
+            # from_id is cleared a few lines above to avoid Telegram's
+            # "X sent you this gift" misrender, and the V5 row injection
+            # picks both up from the meta cache below.
+            try:
+                _cd_ts = int(entry.get("custom_date_ts", 0) or 0)
+                if _cd_ts > 0:
+                    self._set_field(wrapper, "date", int(_cd_ts))
+            except Exception:
+                pass
+
             try:
                 meta = {
                     "_remote_origin_uid": int(user_id),
@@ -3819,6 +3835,15 @@ class NftClonerPlugin(BasePlugin):
                     "title": str(entry.get("title", "") or ""),
                     "slug": str(entry.get("slug", "") or ""),
                     "unique_id": int(entry.get("unique_id", 0) or 0),
+                    # «Мои подарки» V5 row injection reads these on remote
+                    # profiles via _get_remote_gift_meta_for_gift, so the
+                    # sender / date / comment overrides set by the gift owner
+                    # show up in StarGiftSheet for everyone viewing the
+                    # profile, not just locally.
+                    "custom_from": str(entry.get("custom_from", "") or ""),
+                    "custom_date": str(entry.get("custom_date", "") or ""),
+                    "custom_comment": str(entry.get("custom_comment", "") or ""),
+                    "custom_date_ts": int(entry.get("custom_date_ts", 0) or 0),
                 }
                 cache = self._sync_remote_gift_meta_cache
                 try:
@@ -14129,6 +14154,18 @@ class NftClonerPlugin(BasePlugin):
             try:
                 self._save_cache()
             except:
+                pass
+            # Push immediately so other plugin users see the updated From /
+            # Date / Comment on the next pull (~6s) instead of waiting for
+            # the 12s background push tick.
+            try:
+                client = getattr(self, "_eblannft_sync_client", None)
+                if client is not None:
+                    threading.Thread(
+                        target=lambda: client.push_my_state_now(force=True),
+                        daemon=True,
+                    ).start()
+            except Exception:
                 pass
             try:
                 BulletinHelper.show_success("Сохранено")
