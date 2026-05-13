@@ -1,6 +1,6 @@
 {
-  "version": "1.0.77",
-  "notes": "Beta 1.0.77 — третий throttle для устранения микро-фризов. 1.0.76 разорвал tight loop, но при каждом штатном pull-tick'е (по умолчанию 6с) всё ещё вызывался _sync_schedule_remote_user_patch с 5 отложенными UI-патчами (0/80/220/520/1100мс). Reflection-walk юзера + NotificationCenter события заставляли ProfileActivity перерисовываться, что и ощущалось как микро-фризы каждую секунду (1100мс отложка плюс staggered runs от соседних снапшотов). Throttle на 10с per uid: повторные вызовы schedule в этом окне возвращают None, не планируя дополнительные UI-runs. Изменения identity всё равно обработаются на следующем тике после окна.",
+  "version": "1.0.78",
+  "notes": "Beta 1.0.78 — добиваем фризы + скролл «Моих подарков». (1) Все три sync-throttle'а (force-refresh, invalidate, user-patch) подняты с 5/5/10с до 30с per uid. Тики снапшотов от pull loop (~6с) больше не могут вызывать UI-патч-серии чаще раза в 30с — даже если что-то постоянно re-queue'ит uid, NotificationCenter события на ProfileActivity не сыпятся каждую секунду. Реальные изменения identity подхватятся в следующем 30-секундном окне. (2) BottomSheet «Мои подарки»: setCanDismissWithSwipe(False). Раньше свайп вниз по ScrollView ловился sheet'ом и тот пытался свернуться вместо прокрутки контента вверх. Закрывать только через back-стрелку слева вверху — жесты остаются у ScrollView.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.77"
+__version__ = "1.0.78"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2559,19 +2559,21 @@ class NftClonerPlugin(BasePlugin):
             # rendering an empty list when the fetch lost the race.
             try:
                 if self._sync_gifts_identity_changed(prev_record, record):
-                    # Throttle: even if identity_changed legitimately fires,
-                    # invalidating + force-fetching once per second hammers
-                    # the UI thread (each invalidate ends up scheduling user
-                    # patches and re-rendering gifts list). Cap to once per
-                    # 5s per uid — if real identity flux happens faster
-                    # than that, the next pull cycle will catch up anyway.
+                    # Throttle: invalidate triggers TG to re-fetch the gifts
+                    # list (background), each fetch fires our wrapper which
+                    # posts NotificationCenter events on the UI thread —
+                    # ProfileActivity reacts to those even when paused, so
+                    # the freeze ticks continue after the user exits the
+                    # profile. 30s window keeps real identity changes
+                    # visible (next pull cycle picks them up) without
+                    # spamming the UI thread.
                     inv_ts_map = getattr(self, "_sync_invalidate_ts", None)
                     if not isinstance(inv_ts_map, dict):
                         inv_ts_map = {}
                         self._sync_invalidate_ts = inv_ts_map
                     last_inv = float(inv_ts_map.get(int(uid), 0.0) or 0.0)
                     now_ts = time.time()
-                    if (now_ts - last_inv) >= 5.0:
+                    if (now_ts - last_inv) >= 30.0:
                         inv_ts_map[int(uid)] = now_ts
                         self._sync_invalidate_remote_gifts_list(uid)
             except Exception as _ie:
@@ -2955,10 +2957,11 @@ class NftClonerPlugin(BasePlugin):
             return None
         # Throttle: each scheduled run walks the cached User / UserFull
         # objects with reflection and posts NotificationCenter events that
-        # wake the UI thread (ProfileActivity repaints). Without a guard,
-        # snapshots arriving every 6s × 5 default delays produces 5 UI runs
-        # per cycle, surfacing as a ~1s tick freeze even off-profile.
-        # Cap to one scheduling pass per 10s per uid.
+        # wake the UI thread (ProfileActivity repaints, even when paused).
+        # Without a long enough guard, snapshots arriving every 6s × 5
+        # default delays produce overlapping UI runs that surface as a
+        # ~1s tick freeze. 30s cap eliminates the perceptible drumbeat;
+        # genuine remote-user changes still propagate eventually.
         try:
             ts_map = getattr(self, "_sync_user_patch_ts", None)
             if not isinstance(ts_map, dict):
@@ -2966,7 +2969,7 @@ class NftClonerPlugin(BasePlugin):
                 self._sync_user_patch_ts = ts_map
             last = float(ts_map.get(tuid, 0.0) or 0.0)
             now = time.time()
-            if (now - last) < 10.0:
+            if (now - last) < 30.0:
                 return None
             ts_map[tuid] = now
         except Exception:
@@ -3727,12 +3730,13 @@ class NftClonerPlugin(BasePlugin):
                     record = client.get_cached(user_id)
                 except Exception:
                     record = None
-        # Background refresh hint — but throttle hard. Without this throttle
-        # we get a feedback loop on the receiver side: invalidate → fresh
-        # getSavedStarGifts → wrapper → this function → force-refresh →
-        # snapshot arrives → invalidate again → ... freezing the UI thread
-        # every ~1s as scheduled UI patches fire repeatedly. The pull loop
-        # already wakes every 6s anyway, so spamming force=True buys nothing.
+        # Background refresh hint — heavily throttled. Without this throttle
+        # we get a feedback loop on the receiver side that surfaces as
+        # micro-freezes every second on the UI thread (each cycle posts
+        # NotificationCenter events that trigger ProfileActivity repaint).
+        # 30s window is long enough that scheduled UI runs from neighbouring
+        # snapshots no longer overlap; the pull loop still picks up real
+        # changes on its own 6s cadence.
         try:
             last_ts_map = getattr(self, "_sync_force_request_ts", None)
             if not isinstance(last_ts_map, dict):
@@ -3740,7 +3744,7 @@ class NftClonerPlugin(BasePlugin):
                 self._sync_force_request_ts = last_ts_map
             last_ts = float(last_ts_map.get(int(user_id), 0.0) or 0.0)
             now_ts = time.time()
-            if (now_ts - last_ts) >= 5.0:
+            if (now_ts - last_ts) >= 30.0:
                 last_ts_map[int(user_id)] = now_ts
                 try:
                     client.request_remote_state(user_id, force=True)
@@ -28242,8 +28246,13 @@ class MyGiftsCardSheet:
                 self.sheet.setUseFullWidth(False)
             except:
                 pass
+            # Disable swipe-to-dismiss: BottomSheet's swipe handler captures
+            # vertical drags from the top of the scroll area, so the user
+            # can't scroll up after scrolling down (the sheet starts to
+            # collapse instead of the ScrollView scrolling). Keep the back
+            # arrow as the only close path — gestures stay with ScrollView.
             try:
-                self.sheet.setCanDismissWithSwipe(True)
+                self.sheet.setCanDismissWithSwipe(False)
             except:
                 pass
             root = self._build_root(ctx)
