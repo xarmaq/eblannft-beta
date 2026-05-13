@@ -1,6 +1,6 @@
 {
-  "version": "1.0.68",
-  "notes": "Beta 1.0.68 — пропорции превью карточек. (1) Модель в превью теперь имеет фиксированный размер вместо растягивания на всю плитку: 72dp для NFT (видны backdrop-градиент и pattern-эмодзи вокруг модели), 84dp для обычных подарков (sticker крупный но с небольшим воздухом по краям). Модель строго центрирована (Gravity.CENTER). (2) Pattern-точек теперь 8 вместо 5, расставлены по 4 углам + по серединам каждой стороны — больше не прячутся за моделью.",
+  "version": "1.0.69",
+  "notes": "Beta 1.0.69 — фикс краша «Cannot convert bool object to void» при тапе на NFT в профиле. Три лямбды, оборачивающие _install_local_upgrade_button_override (внутри GiftSheetLocalValueHook.after_hooked_method и двух соседних хуков), передавались в JRunnable / run_on_ui_thread напрямую. Метод возвращает True при успехе, JRunnable.run() ждёт void → ClassCastException. Добавлен модульный _voidify(fn) wrapper и все три site завёрнуты. Превентивно фикс применим ко всем будущим Runnable-передачам в плагине.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

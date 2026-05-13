@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.68"
+__version__ = "1.0.69"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -411,6 +411,24 @@ JCallback5 = gen(jclass("org.telegram.messenger.Utilities$Callback5"), "run")
 JRequestDelegate = gen(RequestDelegate, "run")
 JOnClickListener = gen(jclass("android.view.View$OnClickListener"), "onClick")
 JRunnable = gen(jclass("java.lang.Runnable"), "run")
+
+
+def _voidify(fn):
+    """Wrap fn so its return value is dropped — required for any Python
+    callable that will be bound to a Java method expecting void.
+    Chaquopy turns a Python truthy return (most commonly `True`) into a
+    java.lang.Boolean that fails to convert when the method signature is
+    void, manifesting as
+    `ClassCastException: TypeError: Cannot convert bool object to void`.
+    See KNOWLEDGE.md → "Chaquopy boxing pitfalls" for context.
+    """
+    def _runner(*args, **kwargs):
+        try:
+            fn(*args, **kwargs)
+        except Exception:
+            raise
+        return None
+    return _runner
 JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False)
 JOnGlobalLayoutListener = gen(jclass("android.view.ViewTreeObserver$OnGlobalLayoutListener"), "onGlobalLayout")
 JOnShowListener = gen(jclass("android.content.DialogInterface$OnShowListener"), "onShow")
@@ -25295,8 +25313,8 @@ class GiftSheetLocalValueHook(MethodHook):
         except Exception as e:
             _log(f"GiftSheetLocalValueHook my-gifts-rows error: {e}")
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
-            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
+            AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda: self.plugin._install_local_upgrade_button_override(sheet))), 180)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook upgrade-button error: {e}")
 
@@ -25359,8 +25377,8 @@ class GiftSheetSavedSetHook(MethodHook):
         except:
             sheet = None
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
-            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
+            AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda: self.plugin._install_local_upgrade_button_override(sheet))), 180)
         except Exception as e:
             try:
                 _log(f"GiftSheetSavedSetHook after error: {e}")
@@ -25417,8 +25435,8 @@ class GiftSheetSlugSetHook(MethodHook):
         except:
             sheet = None
         try:
-            run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
-            AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
+            run_on_ui_thread(_voidify(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s)))
+            AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda: self.plugin._install_local_upgrade_button_override(sheet))), 180)
         except Exception as e:
             try:
                 _log(f"GiftSheetSlugSetHook after error: {e}")
