@@ -1,6 +1,6 @@
 {
-  "version": "1.0.67",
-  "notes": "Beta 1.0.67 — Cards UI polish: настоящее NFT-превью и MD3-контейнер для характеристик. (1) Превью NFT теперь рендерится как в профиле: radial-gradient фон center_color→edge_color из TL_starGiftAttributeBackdrop, scattered-pattern overlay из TL_starGiftAttributePattern.document (5 точек, tinted pattern_color, alpha ~0.55), и сверху центрированный model.document. Раньше был только sticker — теперь backdrop+symbols+model. (2) Три строки атрибутов (Model / Symbol / Backdrop) теперь обёрнуты в внутренний tonal-контейнер (rounded 14dp, фон key_windowBackgroundGray, hairline-divider'ы между строками) — стандартный MD3-табличный паттерн.",
+  "version": "1.0.68",
+  "notes": "Beta 1.0.68 — пропорции превью карточек. (1) Модель в превью теперь имеет фиксированный размер вместо растягивания на всю плитку: 72dp для NFT (видны backdrop-градиент и pattern-эмодзи вокруг модели), 84dp для обычных подарков (sticker крупный но с небольшим воздухом по краям). Модель строго центрирована (Gravity.CENTER). (2) Pattern-точек теперь 8 вместо 5, расставлены по 4 углам + по серединам каждой стороны — больше не прячутся за моделью.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

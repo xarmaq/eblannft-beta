@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.67"
+__version__ = "1.0.68"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28307,14 +28307,22 @@ class MyGiftsCardSheet:
         if document is not None:
             try:
                 img = BackupImageView(ctx)
+                # NFT model should leave the backdrop gradient and pattern
+                # symbols visible around it — 72dp inside a 108dp tile is
+                # roughly two thirds, matching the prototype proportions.
+                # Regular gifts have no backdrop so we keep the sticker
+                # slightly bigger (84dp) but still leave some inset breathing
+                # room around the rounded edges.
+                model_size_dp = 72 if source == "nft" else 84
                 try:
-                    img.setRoundRadius(AndroidUtilities.dp(14))
+                    img.setRoundRadius(AndroidUtilities.dp(model_size_dp // 2))
                 except:
                     pass
                 try:
+                    size_tag = f"{model_size_dp}_{model_size_dp}"
                     image_location = ImageLocation.getForDocument(document)
                     if image_location is not None:
-                        img.setImage(image_location, "100_100", None, 0, document)
+                        img.setImage(image_location, size_tag, None, 0, document)
                 except Exception as _e:
                     _log(f"MyGiftsCardSheet sticker load fail: {_e}")
                 try:
@@ -28322,7 +28330,12 @@ class MyGiftsCardSheet:
                         img.startAnimation()
                 except:
                     pass
-                wrap.addView(img, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
+                lp_img = FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(model_size_dp),
+                    AndroidUtilities.dp(model_size_dp),
+                    Gravity.CENTER,
+                )
+                wrap.addView(img, lp_img)
                 return wrap
             except Exception as _e:
                 _log(f"MyGiftsCardSheet BackupImageView fail: {_e}")
@@ -28407,19 +28420,23 @@ class MyGiftsCardSheet:
             except Exception as _e:
                 _log(f"NFT backdrop gradient fail: {_e}")
 
-        # Pattern overlay: scatter a few small pattern doc instances around
-        # the preview to mimic Telegram's "scattered pattern" effect on the
-        # profile tile. Keep it lightweight — 4 corners + 1 center-edge each.
+        # Pattern overlay: scatter pattern doc instances around the 72dp
+        # centered model so they remain visible (model occupies dp 18..90
+        # of the 108dp tile). Positions hand-picked to hit corners + edge
+        # midpoints — mimics Telegram's "scattered pattern" effect.
         if pattern_doc is not None:
             try:
                 pat_color = pattern_color if pattern_color is not None else 0x66FFFFFF
-                # Coordinates relative to a 108dp square. dp will scale.
+                # (left_dp, top_dp, size_dp) inside a 108dp square.
                 positions = (
-                    (10, 10, 20),
-                    (78, 10, 18),
-                    (10, 78, 18),
-                    (78, 78, 20),
-                    (44, 44, 16),  # subtle center-back patch behind model
+                    (4, 4, 16),     # top-left corner
+                    (88, 4, 16),    # top-right corner
+                    (4, 88, 16),    # bottom-left corner
+                    (88, 88, 16),   # bottom-right corner
+                    (47, 2, 14),    # top edge midpoint
+                    (47, 92, 14),   # bottom edge midpoint
+                    (2, 47, 14),    # left edge midpoint
+                    (92, 47, 14),   # right edge midpoint
                 )
                 for left_dp, top_dp, sz_dp in positions:
                     try:
