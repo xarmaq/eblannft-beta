@@ -1,6 +1,6 @@
 {
-  "version": "1.0.87",
-  "notes": "Beta 1.0.87 — безопасный per-gift кэш для мгновенного повторного открытия. Прод дёргает getStarGiftUpgradeAttributes каждый раз, но TG-клиент кэширует ответы внутри — отсюда быстрое повторное открытие. У нас этой TG-внутренней оптимизации не наблюдается, поэтому добавлен ТОЛЬКО per-gift кэш (без generic-pool, prewarm, inflight dedup — это всё снесли в v1.0.86 потому что вызывало смешивание атрибутов и NPE). На каждый успешный getStarGiftUpgradeAttributes(gift_id) _remember_upgrade_attrs пишет response в _upgrade_attr_response_cache[gift_id]. AttrLoader.start первым делом проверяет этот кэш: hit → мгновенный open NftBuilderSheet с РОВНО этим response (никакого union'а с другими гифтами). Miss → стандартный сетевой запрос как в проде. После одного открытия любой NFT — повторы мгновенные. Кэш ограничен 32 entry, LRU-trim.",
+  "version": "1.0.88",
+  "notes": "Beta 1.0.88 — AttrLoader приведён 1:1 к прод-версии из репозитория xarmaq/eblannft. Снесены все мои попытки кэширования (per-gift cache, generic-pool fast-path, prewarm, inflight dedup) — оставлен минимальный класс: __init__ хранит plugin/gift_id/req_callback, start фаит getStarGiftUpgradeAttributes и регистрирует delegate, on_done на ошибке показывает bulletin и выходит, на успехе открывает NftBuilderSheet. Все TG-внутренние оптимизации RPC-кэша теперь работают как в проде. allow_generic_fallback kwarg оставлен в сигнатуре (silently ignored) для совместимости с beta-callsites которые его передают.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

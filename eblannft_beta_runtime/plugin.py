@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.87"
+__version__ = "1.0.88"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28406,29 +28406,10 @@ class GetCurrentUserOverrideHook(MethodHook):
 class AttrLoader:
     def __init__(self, plugin, gift_id, allow_generic_fallback=False):
         self.plugin = plugin
-        self.base_gift_id = int(gift_id or 0)
-        self.gift_id = int(gift_id or 0)
+        self.gift_id = gift_id
         self.req_callback = None
-        self.allow_generic_fallback = bool(allow_generic_fallback)
-        self._fallback_requested = False
 
     def start(self):
-        # Per-gift cache hit — instant re-open with the EXACT response
-        # for THIS gift_id. No generic pool, no prewarm, no inflight
-        # dedup — those caused cross-gift mixing and a native NPE in
-        # v1.0.75-v1.0.85. Just a simple gift_id → response map kept
-        # in memory from past successful fetches in this app session.
-        try:
-            cache = getattr(self.plugin, "_upgrade_attr_response_cache", None)
-            if isinstance(cache, dict):
-                cached_resp = cache.get(int(self.gift_id))
-                if cached_resp is not None:
-                    _log(f"AttrLoader: per-gift cache hit gift_id={self.gift_id}")
-                    run_on_ui_thread(lambda r=cached_resp: NftBuilderSheet(self.plugin, self.base_gift_id, r).show())
-                    return
-        except Exception:
-            pass
-
         try:
             req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
             req.gift_id = self.gift_id
@@ -28443,39 +28424,11 @@ class AttrLoader:
     def on_done(self, response, error):
         if error:
             _log(f"AttrLoader net error: {error.text}")
-            # Clear inflight so future retries don't deadlock as waiters.
-            try:
-                inflight = getattr(self.plugin, "_upgrade_attr_inflight", None)
-                if isinstance(inflight, dict):
-                    inflight.pop(int(self.gift_id or 0), None)
-            except Exception:
-                pass
-            if self.allow_generic_fallback:
-                try:
-                    if self.plugin._has_generic_upgrade_attrs():
-                        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, None).show())
-                        return
-                except:
-                    pass
-                try:
-                    if not self._fallback_requested:
-                        seed_id = int(self.plugin._get_fallback_upgrade_seed_gift_id(exclude_gift_id=self.gift_id) or 0)
-                        if seed_id > 0:
-                            self._fallback_requested = True
-                            self.gift_id = int(seed_id)
-                            self.start()
-                            return
-                except:
-                    pass
             run_on_ui_thread(lambda: BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438: {error.text}"))
             return
         _log("AttrLoader: attributes received")
-        try:
-            # _remember_upgrade_attrs clears inflight + wakes waiters.
-            self.plugin._remember_upgrade_attrs(self.gift_id, response)
-        except:
-            pass
-        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
+        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.gift_id, response).show())
+
 
 
 # ---------------------------------------------------------------------------
