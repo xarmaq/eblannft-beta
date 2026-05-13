@@ -1,6 +1,6 @@
 {
-  "version": "1.0.88",
-  "notes": "Beta 1.0.88 — AttrLoader приведён 1:1 к прод-версии из репозитория xarmaq/eblannft. Снесены все мои попытки кэширования (per-gift cache, generic-pool fast-path, prewarm, inflight dedup) — оставлен минимальный класс: __init__ хранит plugin/gift_id/req_callback, start фаит getStarGiftUpgradeAttributes и регистрирует delegate, on_done на ошибке показывает bulletin и выходит, на успехе открывает NftBuilderSheet. Все TG-внутренние оптимизации RPC-кэша теперь работают как в проде. allow_generic_fallback kwarg оставлен в сигнатуре (silently ignored) для совместимости с beta-callsites которые его передают.",
+  "version": "1.0.89",
+  "notes": "Beta 1.0.89 — превью NFT-карточки больше не оставляет пустой полосы снизу. Раньше превью было фиксированной высоты 108dp, а info-колонка (атрибуты + кнопки) на NFT карточках выше — отсюда зазор cyan-цвета на скриншоте. Превью теперь растягивается на всю высоту строки (LinearLayout LayoutParams height=-1). Pattern-точки переанкорены через FrameLayout.Gravity (углы LEFT|TOP / RIGHT|TOP / LEFT|BOTTOM / RIGHT|BOTTOM + edge-midpoints через CENTER_HORIZONTAL/CENTER_VERTICAL) с симметричными margins — остаются по углам/краям при любой высоте контейнера. Модель остаётся отцентрирована.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

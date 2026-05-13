@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.88"
+__version__ = "1.0.89"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28705,7 +28705,10 @@ class MyGiftsCardSheet:
         top.setOrientation(LinearLayout.HORIZONTAL)
 
         preview = self._build_preview(ctx, source, entry)
-        lp_prev = LinearLayout.LayoutParams(AndroidUtilities.dp(108), AndroidUtilities.dp(108))
+        # Preview stretches vertically to match the info column — the
+        # attribute table + buttons make `info` taller than 108dp on NFT
+        # cards, leaving an ugly empty strip below a fixed-height preview.
+        lp_prev = LinearLayout.LayoutParams(AndroidUtilities.dp(108), -1)
         top.addView(preview, lp_prev)
 
         info = LinearLayout(ctx)
@@ -28935,18 +28938,21 @@ class MyGiftsCardSheet:
         if pattern_doc is not None:
             try:
                 pat_color = pattern_color if pattern_color is not None else 0x66FFFFFF
-                # (left_dp, top_dp, size_dp) inside a 108dp square.
+                # Anchor each pattern dot to a corner / edge midpoint via
+                # FrameLayout.Gravity, so they stay glued to the visible edges
+                # of the preview regardless of how tall the wrap stretches to
+                # match the info column. (gravity, margin_x_dp, margin_y_dp, size_dp)
                 positions = (
-                    (4, 4, 16),     # top-left corner
-                    (88, 4, 16),    # top-right corner
-                    (4, 88, 16),    # bottom-left corner
-                    (88, 88, 16),   # bottom-right corner
-                    (47, 2, 14),    # top edge midpoint
-                    (47, 92, 14),   # bottom edge midpoint
-                    (2, 47, 14),    # left edge midpoint
-                    (92, 47, 14),   # right edge midpoint
+                    (Gravity.LEFT | Gravity.TOP,                 4, 4, 16),
+                    (Gravity.RIGHT | Gravity.TOP,                4, 4, 16),
+                    (Gravity.LEFT | Gravity.BOTTOM,              4, 4, 16),
+                    (Gravity.RIGHT | Gravity.BOTTOM,             4, 4, 16),
+                    (Gravity.CENTER_HORIZONTAL | Gravity.TOP,    0, 2, 14),
+                    (Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0, 2, 14),
+                    (Gravity.LEFT | Gravity.CENTER_VERTICAL,     2, 0, 14),
+                    (Gravity.RIGHT | Gravity.CENTER_VERTICAL,    2, 0, 14),
                 )
-                for left_dp, top_dp, sz_dp in positions:
+                for gravity, mx_dp, my_dp, sz_dp in positions:
                     try:
                         piv = BackupImageView(ctx)
                         try:
@@ -28963,9 +28969,20 @@ class MyGiftsCardSheet:
                             piv.setAlpha(0.55)
                         except:
                             pass
-                        lp = FrameLayout.LayoutParams(AndroidUtilities.dp(sz_dp), AndroidUtilities.dp(sz_dp))
-                        lp.leftMargin = AndroidUtilities.dp(left_dp)
-                        lp.topMargin = AndroidUtilities.dp(top_dp)
+                        lp = FrameLayout.LayoutParams(
+                            AndroidUtilities.dp(sz_dp),
+                            AndroidUtilities.dp(sz_dp),
+                            gravity,
+                        )
+                        # Symmetric margins on all four sides — the Gravity
+                        # picks which two actually push the dot inward.
+                        try:
+                            lp.leftMargin = AndroidUtilities.dp(mx_dp)
+                            lp.rightMargin = AndroidUtilities.dp(mx_dp)
+                            lp.topMargin = AndroidUtilities.dp(my_dp)
+                            lp.bottomMargin = AndroidUtilities.dp(my_dp)
+                        except:
+                            pass
                         wrap.addView(piv, lp)
                     except Exception as _e:
                         _log(f"NFT pattern dot fail: {_e}")
