@@ -1,6 +1,6 @@
 {
-  "version": "1.0.66",
-  "notes": "Beta 1.0.66 — «Мои подарки» V3 (cards UI): экран в виде карточек по прототипу. (1) Тап на «Мои подарки» теперь открывает full-height BottomSheet с прокручиваемым списком карточек, каждая со скруглёнными углами и тенью. (2) Превью подарка слева (108dp): анимированный sticker через BackupImageView + ImageLocation.getForDocument(gift.sticker). (3) Для NFT карточек: три строки атрибутов (Model / Symbol / Backdrop с rarity-процентом) + две пилюли кнопки — синяя «Изменить» (открывает конструктор) и красная «Удалить». (4) Для обычных карточек: три кликабельных строки «От» / «Дата» / «Комментарий» (тап → input dialog → V5-пайплайн через _my_gifts_set_field) + красная «Удалить». (5) Кнопка + в верхнем баре открывает существующее меню добавления (NFT/обычный). Логика добавления / редактирования / удаления переиспользована из V1+V5 пайплайна — никаких новых путей данных, только новая визуальная оболочка. При сбое cards UI плагин показывает Bulletin вместо краша.",
+  "version": "1.0.67",
+  "notes": "Beta 1.0.67 — Cards UI polish: настоящее NFT-превью и MD3-контейнер для характеристик. (1) Превью NFT теперь рендерится как в профиле: radial-gradient фон center_color→edge_color из TL_starGiftAttributeBackdrop, scattered-pattern overlay из TL_starGiftAttributePattern.document (5 точек, tinted pattern_color, alpha ~0.55), и сверху центрированный model.document. Раньше был только sticker — теперь backdrop+symbols+model. (2) Три строки атрибутов (Model / Symbol / Backdrop) теперь обёрнуты в внутренний tonal-контейнер (rounded 14dp, фон key_windowBackgroundGray, hairline-divider'ы между строками) — стандартный MD3-табличный паттерн.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

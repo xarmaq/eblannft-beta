@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.66"
+__version__ = "1.0.67"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28250,10 +28250,11 @@ class MyGiftsCardSheet:
         return card
 
     def _build_preview(self, ctx, source, entry):
-        """Square preview with rounded corners. For both regular and NFT we
-        render the gift's animated sticker via BackupImageView; future V4
-        could swap NFT preview for a profile-tile-style render with the
-        chosen model/backdrop/symbol pattern."""
+        """108dp rounded-corner preview. For regular gifts: just the animated
+        gift sticker. For NFT gifts: backdrop radial gradient (center→edge
+        from TL_starGiftAttributeBackdrop) + pattern document overlay +
+        centered model sticker — same visual style Telegram uses in the
+        profile gift grid."""
         wrap = FrameLayout(ctx)
         bg = GradientDrawable()
         bg.setCornerRadius(AndroidUtilities.dp(14))
@@ -28270,16 +28271,38 @@ class MyGiftsCardSheet:
         except:
             pass
 
-        # Try sticker render.
-        document = None
+        # Resolve wrapper + inner gift once; reused for sticker/backdrop/pattern.
+        wrapper = None
+        gift = None
         try:
             key = str(entry.get("key", "") or "")
             wrapper = self.plugin._library_get_wrapper(key) if key else None
             gift = self.plugin._extract_wrapper_gift(wrapper) if wrapper is not None else None
-            if gift is not None:
-                document = get_val(gift, "sticker", None)
         except:
-            document = None
+            wrapper, gift = None, None
+
+        # NFT-only: backdrop gradient + pattern overlay (only if attributes
+        # carry a Backdrop). Fall through to sticker render below for the
+        # model layer regardless.
+        if source == "nft" and gift is not None:
+            try:
+                self._apply_nft_backdrop_and_pattern(ctx, wrap, gift)
+            except Exception as _e:
+                _log(f"MyGiftsCardSheet backdrop/pattern fail: {_e}")
+
+        # Sticker / model layer: regular = gift.sticker, NFT = model.document
+        # if available (model attribute), else gift.sticker as fallback.
+        document = None
+        if source == "nft" and gift is not None:
+            try:
+                document = self._resolve_nft_model_document(gift)
+            except:
+                document = None
+        if document is None and gift is not None:
+            try:
+                document = get_val(gift, "sticker", None)
+            except:
+                document = None
 
         if document is not None:
             try:
@@ -28304,29 +28327,203 @@ class MyGiftsCardSheet:
             except Exception as _e:
                 _log(f"MyGiftsCardSheet BackupImageView fail: {_e}")
 
-        # Fallback: an emoji-ish gift icon.
+        # Final fallback: blank rounded tile.
         fallback = ImageView(ctx)
-        try:
-            fallback.setImageDrawable(Theme.createSimpleSelectorRoundRectDrawable(0, 0, 0))
-        except:
-            pass
         wrap.addView(fallback, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         return wrap
 
+    def _apply_nft_backdrop_and_pattern(self, ctx, wrap, gift):
+        """Apply backdrop radial gradient and pattern document overlay onto
+        the preview FrameLayout. Reads from TL_starGiftAttributeBackdrop
+        (center_color, edge_color, pattern_color) and TL_starGiftAttributePattern
+        (document) inside gift.attributes."""
+        attrs = get_val(gift, "attributes", None)
+        if attrs is None:
+            return
+        try:
+            size = int(attrs.size() or 0)
+        except:
+            return
+
+        center_color = None
+        edge_color = None
+        pattern_color = None
+        pattern_doc = None
+        for i in range(size):
+            try:
+                a = attrs.get(i)
+            except:
+                continue
+            if a is None:
+                continue
+            try:
+                cls_low = str(a.getClass().getSimpleName() or "").lower()
+            except:
+                cls_low = ""
+            if "backdrop" in cls_low:
+                try:
+                    center_color = int(get_val(a, "center_color", 0) or 0) | 0xFF000000
+                except:
+                    pass
+                try:
+                    edge_color = int(get_val(a, "edge_color", 0) or 0) | 0xFF000000
+                except:
+                    pass
+                try:
+                    pattern_color = int(get_val(a, "pattern_color", 0) or 0) | 0xFF000000
+                except:
+                    pass
+            elif "pattern" in cls_low or "symbol" in cls_low:
+                try:
+                    pattern_doc = get_val(a, "document", None)
+                except:
+                    pattern_doc = None
+
+        # Backdrop: radial gradient from center to edge.
+        if center_color is not None and edge_color is not None:
+            try:
+                grad = GradientDrawable()
+                grad.setShape(GradientDrawable.RECTANGLE)
+                grad.setCornerRadius(AndroidUtilities.dp(14))
+                grad.setGradientType(GradientDrawable.RADIAL_GRADIENT)
+                try:
+                    grad.setGradientCenter(0.5, 0.5)
+                except:
+                    pass
+                try:
+                    grad.setGradientRadius(AndroidUtilities.dp(80))
+                except:
+                    pass
+                try:
+                    # API 16+: setColors([center, edge])
+                    grad.setColors([to_java_int(center_color), to_java_int(edge_color)])
+                except:
+                    # Fallback if setColors not available.
+                    try:
+                        grad.setColor(to_java_int(center_color))
+                    except:
+                        pass
+                wrap.setBackground(grad)
+            except Exception as _e:
+                _log(f"NFT backdrop gradient fail: {_e}")
+
+        # Pattern overlay: scatter a few small pattern doc instances around
+        # the preview to mimic Telegram's "scattered pattern" effect on the
+        # profile tile. Keep it lightweight — 4 corners + 1 center-edge each.
+        if pattern_doc is not None:
+            try:
+                pat_color = pattern_color if pattern_color is not None else 0x66FFFFFF
+                # Coordinates relative to a 108dp square. dp will scale.
+                positions = (
+                    (10, 10, 20),
+                    (78, 10, 18),
+                    (10, 78, 18),
+                    (78, 78, 20),
+                    (44, 44, 16),  # subtle center-back patch behind model
+                )
+                for left_dp, top_dp, sz_dp in positions:
+                    try:
+                        piv = BackupImageView(ctx)
+                        try:
+                            image_location = ImageLocation.getForDocument(pattern_doc)
+                            if image_location is not None:
+                                piv.setImage(image_location, f"{sz_dp}_{sz_dp}", None, 0, pattern_doc)
+                        except:
+                            continue
+                        try:
+                            piv.setColorFilter(to_java_int(pat_color))
+                        except:
+                            pass
+                        try:
+                            piv.setAlpha(0.55)
+                        except:
+                            pass
+                        lp = FrameLayout.LayoutParams(AndroidUtilities.dp(sz_dp), AndroidUtilities.dp(sz_dp))
+                        lp.leftMargin = AndroidUtilities.dp(left_dp)
+                        lp.topMargin = AndroidUtilities.dp(top_dp)
+                        wrap.addView(piv, lp)
+                    except Exception as _e:
+                        _log(f"NFT pattern dot fail: {_e}")
+                        continue
+            except Exception as _e:
+                _log(f"NFT pattern overlay fail: {_e}")
+
+    def _resolve_nft_model_document(self, gift):
+        """For a TL_starGiftUnique, return the model attribute's document
+        (the actual 3D-style upgraded sticker), falling back to None so the
+        caller can use gift.sticker as a backup."""
+        try:
+            attrs = get_val(gift, "attributes", None)
+            if attrs is None:
+                return None
+            try:
+                size = int(attrs.size() or 0)
+            except:
+                return None
+            for i in range(size):
+                try:
+                    a = attrs.get(i)
+                except:
+                    continue
+                if a is None:
+                    continue
+                try:
+                    cls_low = str(a.getClass().getSimpleName() or "").lower()
+                except:
+                    cls_low = ""
+                if "model" in cls_low:
+                    try:
+                        return get_val(a, "document", None)
+                    except:
+                        return None
+        except:
+            pass
+        return None
+
     def _build_nft_attribute_rows(self, ctx, info, entry):
-        """Three attribute rows (Model / Symbol / Backdrop) with rarity %.
-        Display-only — NFT attributes aren't editable from the card; user
-        taps «Изменить» to open the constructor."""
-        # Resolve attrs via the live wrapper (uses cached LRU on hot path).
+        """Three attribute rows (Model / Symbol / Backdrop) with rarity %,
+        wrapped in an inner MD3-style tonal container (rounded, slightly
+        darker than the parent card, hairline dividers between rows)."""
         attrs = self._read_nft_attributes(entry)
         labels = (
             ("model", "Model"),
             ("pattern", "Symbol"),
             ("backdrop", "Backdrop"),
         )
-        for attr_key, attr_label in labels:
+
+        inner = LinearLayout(ctx)
+        inner.setOrientation(LinearLayout.VERTICAL)
+        inner_bg = GradientDrawable()
+        inner_bg.setCornerRadius(AndroidUtilities.dp(14))
+        try:
+            inner_bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray))
+        except:
+            inner_bg.setColor(0x33000000)
+        try:
+            inner.setBackground(inner_bg)
+        except:
+            pass
+        inner.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8),
+                         AndroidUtilities.dp(12), AndroidUtilities.dp(8))
+
+        for idx, (attr_key, attr_label) in enumerate(labels):
             name, rarity = attrs.get(attr_key, ("—", 0))
-            self._add_attribute_row(ctx, info, attr_label, name, rarity)
+            self._add_attribute_row(ctx, inner, attr_label, name, rarity)
+            if idx < len(labels) - 1:
+                # Hairline divider between rows.
+                div = View(ctx)
+                try:
+                    div.setBackgroundColor(Theme.getColor(Theme.key_divider))
+                except:
+                    div.setBackgroundColor(0x22FFFFFF)
+                lp_div = LinearLayout.LayoutParams(-1, 1)
+                lp_div.topMargin = AndroidUtilities.dp(6)
+                lp_div.bottomMargin = AndroidUtilities.dp(0)
+                inner.addView(div, lp_div)
+
+        lp_inner = LinearLayout.LayoutParams(-1, -2)
+        lp_inner.topMargin = AndroidUtilities.dp(8)
+        info.addView(inner, lp_inner)
 
     def _read_nft_attributes(self, entry):
         out = {"model": ("—", 0), "pattern": ("—", 0), "backdrop": ("—", 0)}
