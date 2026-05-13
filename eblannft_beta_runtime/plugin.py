@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.85"
+__version__ = "1.0.86"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2298,13 +2298,10 @@ class NftClonerPlugin(BasePlugin):
             except Exception as inner_e:
                 _log(f"Sync bootstrap error: {inner_e}")
 
-            # Pre-warm the upgrade-attribute pool in the background, so that
-            # by the time the user taps an NFT in the catalog the constructor
-            # opens instantly via AttrLoader's fast-path. Fire-and-forget.
-            try:
-                AndroidUtilities.runOnUIThread(JRunnable(_voidify(self._prewarm_upgrade_attr_pool)), 1500)
-            except Exception as inner_e:
-                _log(f"prewarm scheduling error: {inner_e}")
+            # Prewarm of getStarGiftUpgradeAttributes was removed: the
+            # parallel fan-out at startup starved the catalog's network
+            # slot and made the constructor inconsistent across taps.
+            # AttrLoader now fetches lazily per-tap (same as prod).
 
             _log(f"Plugin loaded v{__version__}")
         except Exception as e:
@@ -26554,13 +26551,13 @@ class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
                 key = self.entry_key
                 def _open():
                     try:
-                        opened = False
                         if key:
-                            opened = bool(self.plugin._open_local_upgrade_for_entry(key))
-                        if not opened:
-                            BulletinHelper.show_info(
-                                "Подарок уже сконвертирован в звёзды — используй локальный апгрейд из меню eblanNFT"
-                            )
+                            self.plugin._open_local_upgrade_for_entry(key)
+                        # No fallback bulletin: «Подарок уже сконвертирован»
+                        # toast suppressed per user request. If local upgrade
+                        # can't open we silently drop the action — the
+                        # original "Unknown error" toast is already
+                        # swallowed by the surrounding delegate.
                     except Exception as e:
                         _log(f"UpgradeStarGiftDelegate reroute open failed: {e}")
                     # explicit: Runnable.run -> void
@@ -28416,45 +28413,11 @@ class AttrLoader:
         self._fallback_requested = False
 
     def start(self):
-        # Per-gift cache hit only — generic-pool fast-path was killed
-        # in v1.0.84 because it mixed attrs across gifts and triggered
-        # an NPE in StarGiftPreviewSheet$GiftAttributeCell.
-        gid = int(self.gift_id or 0)
-        try:
-            cache = getattr(self.plugin, "_upgrade_attr_response_cache", None)
-            if isinstance(cache, dict):
-                cached_resp = cache.get(gid)
-                if cached_resp is not None:
-                    _log(f"AttrLoader: per-gift cache hit, opening gift_id={gid}")
-                    run_on_ui_thread(lambda r=cached_resp: NftBuilderSheet(self.plugin, self.base_gift_id, r).show())
-                    return
-        except Exception:
-            pass
-
-        # In-flight dedup: if prewarm (or another constructor open) is
-        # already fetching this gift_id, just register a waiter instead
-        # of firing a duplicate request. _remember_upgrade_attrs fan-outs
-        # the response to all waiters when it lands.
-        try:
-            inflight = getattr(self.plugin, "_upgrade_attr_inflight", None)
-            if not isinstance(inflight, dict):
-                inflight = {}
-                self.plugin._upgrade_attr_inflight = inflight
-            base_id = self.base_gift_id
-            if gid in inflight:
-                _log(f"AttrLoader: piggyback on inflight gift_id={gid}")
-                inflight[gid].append(lambda r, bid=base_id: run_on_ui_thread(
-                    lambda rr=r: NftBuilderSheet(self.plugin, bid, rr).show()
-                ))
-                BulletinHelper.show_info("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043e\u0432...")
-                return
-            inflight[gid] = []
-        except Exception:
-            pass
-
-        # Cold path. _prewarm_upgrade_attr_pool primed the cache for all
-        # library gifts at startup, so this only fires the first time a
-        # never-seen gift_id is opened.
+        # Direct network request — same as prod. No fast-path / cache /
+        # prewarm / inflight-dedup machinery: those layers introduced
+        # cross-gift attribute mixing, a native-side NPE in
+        # StarGiftPreviewSheet$GiftAttributeCell, and starved the
+        # catalog network slot on plugin startup. Match prod.
         try:
             req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
             req.gift_id = self.gift_id
@@ -28464,10 +28427,6 @@ class AttrLoader:
             BulletinHelper.show_info("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043e\u0432...")
         except Exception as e:
             _log(f"AttrLoader error: {e}\n{traceback.format_exc()}")
-            try:
-                inflight.pop(gid, None)
-            except Exception:
-                pass
             BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0440\u043e\u0441\u0430: {e}")
 
     def on_done(self, response, error):
