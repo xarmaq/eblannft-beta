@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.84"
+__version__ = "1.0.85"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -12660,14 +12660,18 @@ class NftClonerPlugin(BasePlugin):
         # accumulates a union of every gift the user has ever opened and
         # the picker shows mixed-up models / patterns / backdrops after
         # ~3 distinct NFTs.
+        gid_int = 0
         try:
-            gid = int(gift_id or 0)
-            if gid > 0:
+            gid_int = int(gift_id or 0)
+        except Exception:
+            gid_int = 0
+        if gid_int > 0:
+            try:
                 cache = getattr(self, "_upgrade_attr_response_cache", None)
                 if not isinstance(cache, dict):
                     cache = {}
                     self._upgrade_attr_response_cache = cache
-                cache[gid] = response
+                cache[gid_int] = response
                 # Bounded — keep the last 32 unique gift_ids.
                 if len(cache) > 32:
                     try:
@@ -12676,8 +12680,25 @@ class NftClonerPlugin(BasePlugin):
                             cache.pop(k, None)
                     except Exception:
                         pass
-        except Exception:
-            pass
+            except Exception:
+                pass
+            # Wake any AttrLoader that was waiting on this gift's in-flight
+            # request. Without this fan-out, prewarm + a near-simultaneous
+            # user tap each fire their own getStarGiftUpgradeAttributes
+            # round-trip — doubling wait time and competing for the same
+            # network slot.
+            try:
+                inflight = getattr(self, "_upgrade_attr_inflight", None)
+                if isinstance(inflight, dict):
+                    waiters = inflight.pop(gid_int, None)
+                    if waiters:
+                        for cb in list(waiters):
+                            try:
+                                cb(response)
+                            except Exception as _wcb:
+                                _log(f"_remember_upgrade_attrs waiter cb error: {_wcb}")
+            except Exception:
+                pass
         pool = getattr(self, "_upgrade_attr_pool", None)
         if not isinstance(pool, dict):
             pool = {"model": [], "pattern": [], "backdrop": []}
@@ -12813,8 +12834,22 @@ class NftClonerPlugin(BasePlugin):
         def _make_handler(gid):
             def _on_done(response, error):
                 if error or response is None:
+                    # Clear inflight on failure so future retries work.
+                    try:
+                        inflight = getattr(self, "_upgrade_attr_inflight", None)
+                        if isinstance(inflight, dict):
+                            inflight.pop(int(gid), None)
+                    except Exception:
+                        pass
+                    try:
+                        et = getattr(error, "text", "") if error is not None else ""
+                        _log(f"_prewarm: error gift_id={gid} err={et}")
+                    except Exception:
+                        pass
                     return None
                 try:
+                    # _remember_upgrade_attrs also clears the inflight slot
+                    # for this gid and wakes any AttrLoader waiters.
                     self._remember_upgrade_attrs(int(gid), response)
                     _log(f"_prewarm: cached gift_id={gid}")
                 except Exception:
@@ -12824,6 +12859,19 @@ class NftClonerPlugin(BasePlugin):
 
         def _fire_for(gid):
             try:
+                # Mark in-flight before sending so a near-simultaneous user
+                # tap on this NFT piggybacks on this request rather than
+                # firing a second round-trip.
+                try:
+                    inflight = getattr(self, "_upgrade_attr_inflight", None)
+                    if not isinstance(inflight, dict):
+                        inflight = {}
+                        self._upgrade_attr_inflight = inflight
+                    if int(gid) in inflight:
+                        return None
+                    inflight[int(gid)] = []
+                except Exception:
+                    pass
                 req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
                 req.gift_id = int(gid)
                 cb = JRequestDelegate(_voidify(_make_handler(gid)))
@@ -28368,27 +28416,45 @@ class AttrLoader:
         self._fallback_requested = False
 
     def start(self):
-        # Per-gift cache hit only — generic-pool fast-path removed.
-        # That fallback was opening NftBuilderSheet with attributes
-        # pulled from a union of every gift the user had ever opened,
-        # which (a) showed wrong models / patterns / backdrops after
-        # the user cycled through 3+ NFTs and (b) triggered an NPE
-        # in StarGiftPreviewSheet$GiftAttributeCell.checkPercentageViewBackground
-        # when TG bound a cell whose attribute reference came from
-        # the mixed pool. The startup prewarm now fills the per-gift
-        # cache for every library entry, so the cold path only fires
-        # the very first time a never-seen gift_id is opened.
+        # Per-gift cache hit only — generic-pool fast-path was killed
+        # in v1.0.84 because it mixed attrs across gifts and triggered
+        # an NPE in StarGiftPreviewSheet$GiftAttributeCell.
+        gid = int(self.gift_id or 0)
         try:
             cache = getattr(self.plugin, "_upgrade_attr_response_cache", None)
             if isinstance(cache, dict):
-                cached_resp = cache.get(int(self.gift_id))
+                cached_resp = cache.get(gid)
                 if cached_resp is not None:
-                    _log(f"AttrLoader: per-gift cache hit, opening gift_id={self.gift_id}")
+                    _log(f"AttrLoader: per-gift cache hit, opening gift_id={gid}")
                     run_on_ui_thread(lambda r=cached_resp: NftBuilderSheet(self.plugin, self.base_gift_id, r).show())
                     return
         except Exception:
             pass
 
+        # In-flight dedup: if prewarm (or another constructor open) is
+        # already fetching this gift_id, just register a waiter instead
+        # of firing a duplicate request. _remember_upgrade_attrs fan-outs
+        # the response to all waiters when it lands.
+        try:
+            inflight = getattr(self.plugin, "_upgrade_attr_inflight", None)
+            if not isinstance(inflight, dict):
+                inflight = {}
+                self.plugin._upgrade_attr_inflight = inflight
+            base_id = self.base_gift_id
+            if gid in inflight:
+                _log(f"AttrLoader: piggyback on inflight gift_id={gid}")
+                inflight[gid].append(lambda r, bid=base_id: run_on_ui_thread(
+                    lambda rr=r: NftBuilderSheet(self.plugin, bid, rr).show()
+                ))
+                BulletinHelper.show_info("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043e\u0432...")
+                return
+            inflight[gid] = []
+        except Exception:
+            pass
+
+        # Cold path. _prewarm_upgrade_attr_pool primed the cache for all
+        # library gifts at startup, so this only fires the first time a
+        # never-seen gift_id is opened.
         try:
             req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
             req.gift_id = self.gift_id
@@ -28398,11 +28464,22 @@ class AttrLoader:
             BulletinHelper.show_info("\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043e\u0432...")
         except Exception as e:
             _log(f"AttrLoader error: {e}\n{traceback.format_exc()}")
+            try:
+                inflight.pop(gid, None)
+            except Exception:
+                pass
             BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u043f\u0440\u043e\u0441\u0430: {e}")
 
     def on_done(self, response, error):
         if error:
             _log(f"AttrLoader net error: {error.text}")
+            # Clear inflight so future retries don't deadlock as waiters.
+            try:
+                inflight = getattr(self.plugin, "_upgrade_attr_inflight", None)
+                if isinstance(inflight, dict):
+                    inflight.pop(int(self.gift_id or 0), None)
+            except Exception:
+                pass
             if self.allow_generic_fallback:
                 try:
                     if self.plugin._has_generic_upgrade_attrs():
@@ -28424,6 +28501,7 @@ class AttrLoader:
             return
         _log("AttrLoader: attributes received")
         try:
+            # _remember_upgrade_attrs clears inflight + wakes waiters.
             self.plugin._remember_upgrade_attrs(self.gift_id, response)
         except:
             pass
