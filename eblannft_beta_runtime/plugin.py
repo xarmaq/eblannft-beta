@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.83"
+__version__ = "1.0.84"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -12760,7 +12760,96 @@ class NftClonerPlugin(BasePlugin):
             return False
         return bool(pool.get("model") or pool.get("pattern") or pool.get("backdrop"))
 
+    def _prewarm_upgrade_attr_pool_OLD(self):  # pragma: no cover
+        """Legacy single-gift prewarm — retained for reference. New
+        _prewarm_upgrade_attr_pool below fans out to every library gift."""
+        return False
+
     def _prewarm_upgrade_attr_pool(self):
+        """Fire background getStarGiftUpgradeAttributes for every distinct
+        base_gift_id in the library so the per-gift cache is primed BEFORE
+        the user taps an NFT. Each cached id then opens the constructor
+        instantly via AttrLoader's per-gift fast-path — no mixing, no
+        5-6s wait, no NPE from cell-bind with cross-pollinated attrs.
+        Bounded to 16 unique ids per pass, staggered 250ms apart so the
+        connection isn't burst-flooded."""
+        ids = []
+        seen = set()
+        try:
+            for entry in list(self.gift_library or []):
+                if not isinstance(entry, dict):
+                    continue
+                gid = 0
+                for k in ("base_gift_id", "unique_id"):
+                    try:
+                        v = int(entry.get(k, 0) or 0)
+                    except Exception:
+                        v = 0
+                    if v > 0:
+                        gid = v
+                        break
+                if gid > 0 and gid not in seen:
+                    seen.add(gid)
+                    ids.append(gid)
+                if len(ids) >= 16:
+                    break
+        except Exception:
+            pass
+        if not ids:
+            return False
+        try:
+            cache = getattr(self, "_upgrade_attr_response_cache", None)
+            if isinstance(cache, dict):
+                ids = [g for g in ids if g not in cache]
+        except Exception:
+            pass
+        if not ids:
+            return False
+        try:
+            self._prewarm_callback_refs = []
+        except Exception:
+            pass
+
+        def _make_handler(gid):
+            def _on_done(response, error):
+                if error or response is None:
+                    return None
+                try:
+                    self._remember_upgrade_attrs(int(gid), response)
+                    _log(f"_prewarm: cached gift_id={gid}")
+                except Exception:
+                    pass
+                return None
+            return _on_done
+
+        def _fire_for(gid):
+            try:
+                req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
+                req.gift_id = int(gid)
+                cb = JRequestDelegate(_voidify(_make_handler(gid)))
+                get_connections_manager().sendRequest(req, cb)
+                try:
+                    self._prewarm_callback_refs.append(cb)
+                except Exception:
+                    pass
+            except Exception as _e:
+                try:
+                    _log(f"_prewarm fire fail gid={gid}: {_e}")
+                except Exception:
+                    pass
+            return None
+
+        for idx, gid in enumerate(ids):
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_voidify(lambda g=gid: _fire_for(g))), idx * 250)
+            except Exception:
+                try:
+                    _fire_for(gid)
+                except Exception:
+                    pass
+        return True
+
+    def _prewarm_upgrade_attr_pool_LEGACY_DEAD(self):  # noqa: pragma: no cover
         """Fire a background getStarGiftUpgradeAttributes request for one
         gift_id from the library (or anywhere we can find one) so the
         attribute pool is populated by the time the user taps an NFT in
@@ -28279,11 +28368,16 @@ class AttrLoader:
         self._fallback_requested = False
 
     def start(self):
-        # Per-gift cache hit: if we already have THIS specific gift's
-        # attribute response cached, open with it immediately. The
-        # constructor then shows attrs that actually belong to this gift,
-        # without the cross-pollution that the generic pool fast-path
-        # caused after the user cycled through several NFTs.
+        # Per-gift cache hit only — generic-pool fast-path removed.
+        # That fallback was opening NftBuilderSheet with attributes
+        # pulled from a union of every gift the user had ever opened,
+        # which (a) showed wrong models / patterns / backdrops after
+        # the user cycled through 3+ NFTs and (b) triggered an NPE
+        # in StarGiftPreviewSheet$GiftAttributeCell.checkPercentageViewBackground
+        # when TG bound a cell whose attribute reference came from
+        # the mixed pool. The startup prewarm now fills the per-gift
+        # cache for every library entry, so the cold path only fires
+        # the very first time a never-seen gift_id is opened.
         try:
             cache = getattr(self.plugin, "_upgrade_attr_response_cache", None)
             if isinstance(cache, dict):
@@ -28292,34 +28386,6 @@ class AttrLoader:
                     _log(f"AttrLoader: per-gift cache hit, opening gift_id={self.gift_id}")
                     run_on_ui_thread(lambda r=cached_resp: NftBuilderSheet(self.plugin, self.base_gift_id, r).show())
                     return
-        except Exception:
-            pass
-
-        # Generic pool fast-path: only when caller opted into the generic
-        # fallback (no specific cache hit exists). NftBuilderSheet renders
-        # with mixed attrs from previously seen gifts — acceptable when
-        # the caller passed allow_generic_fallback=True (e.g. resale grid
-        # tap, where the user expects a permissive editor).
-        try:
-            if self.allow_generic_fallback and self.plugin._has_any_upgrade_attrs():
-                _log(f"AttrLoader: generic-pool fallback, opening gift_id={self.gift_id}")
-                run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, None).show())
-                def _bg_refresh(response, error):
-                    if error or response is None:
-                        return None
-                    try:
-                        self.plugin._remember_upgrade_attrs(self.gift_id, response)
-                    except Exception:
-                        pass
-                    return None
-                try:
-                    bg_req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
-                    bg_req.gift_id = self.gift_id
-                    self.req_callback = JRequestDelegate(_voidify(_bg_refresh))
-                    get_connections_manager().sendRequest(bg_req, self.req_callback)
-                except Exception:
-                    pass
-                return
         except Exception:
             pass
 
