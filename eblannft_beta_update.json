@@ -1,6 +1,6 @@
 {
-  "version": "1.0.74",
-  "notes": "Beta 1.0.74 — два фикса. (1) V5 row injection («От» / «Комментарий») теперь привязан ко ВСЕМ трём вариантам хука StarGiftSheet.set: A=(TL_starGiftUnique, bool), B=(TL_savedStarGift, IGiftsList), C=(slug, TL_starGiftUnique, IGiftsList). Раньше работал только в Variant A — это вариант для NFT. Regular подарки через сеть идут через Variant B, поэтому на чужом профиле строки не появлялись и оставалось «Hidden User». Теперь покрыты все три. (2) Карточный экран «Мои подарки» сортирует подарки по custom_date_ts (новее → выше), с fallback на created_at/updated_at. Регулярные подарки без даты остаются по порядку добавления.",
+  "version": "1.0.75",
+  "notes": "Beta 1.0.75 — чистка UI + ускорение. (1) Убран legacy «О eblanNFT • Поддержка» footer card внизу настроек (был остаток старого UI, дублировал «О плагине» пункт списка). (2) Удалён пункт «Обновить каталог» из Сервиса — каталог сам подгружается когда нужен. (3) Конструктор: AttrLoader теперь fast-path'ом сразу открывает builder если пул атрибутов уже загружен (бывшие 5–10с ожидания после первого подарка превращаются в мгновенный open; обновление пула идёт в фоне). (4) Производительность профиля: V4 wrapper override получил cheap early-exit (entries без custom_* возвращают 0 моментально), убран broad reflection-walk по всем String-полям wrapper'а и inner gift'а — V5 row injection и так покрывает отображение комментария. (5) V5 row injection теперь de-dup'ит вставку строк по id(sheet)+TTL, чтобы один тап не плодил «От» / «Комментарий» строки трижды (по числу sheet-set вариантов).",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
