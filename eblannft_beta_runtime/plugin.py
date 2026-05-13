@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.46"
+__version__ = "1.0.60"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -820,6 +820,12 @@ class NftClonerPlugin(BasePlugin):
         self.inject_active = False
 
         self.gift_library = []
+        # Regular (non-upgraded) gifts list — populated from the regular-gift
+        # catalog path. Each entry is a dict: {"key", "title", "from", "date",
+        # "comment", "created_at"}. Persisted alongside gift_library in
+        # _save_cache / _load_cache under "regular_gifts".
+        self.regular_gifts = []
+        self._regular_gifts_seq = 0
         self.gift_objects = {}
         self._gift_objects_order = []
         self._gift_objects_max = 12
@@ -9208,6 +9214,8 @@ class NftClonerPlugin(BasePlugin):
             self.injection_payloads = []
             self.inject_active = False
             self.gift_library = []
+            self.regular_gifts = []
+            self._regular_gifts_seq = 0
             self.gift_objects = {}
             self._gift_objects_order = []
             self.editing_gift_key = None
@@ -13407,6 +13415,13 @@ class NftClonerPlugin(BasePlugin):
                 icon="msg_emoji_gem",
                 on_click=lambda _: self._open_gift_library_menu(),
             ),
+            Text(
+                text="Мои подарки",
+                subtext=self._my_gifts_summary_subtext(),
+                icon="msg_emoji_gem",
+                create_sub_fragment=self._create_my_gifts_subfragment,
+                link_alias="eblannft_my_gifts_subfragment",
+            ),
             Divider(),
             Text(
                 text="Профиль",
@@ -13515,6 +13530,312 @@ class NftClonerPlugin(BasePlugin):
                 on_click=lambda _: self._on_about_click(),
             ),
         ]
+
+    # ---------------------------------------------------------------
+    # «Мои подарки» — settings submenu (V1: list + edit fields + delete).
+    # Custom MD3 card UI and regular-only catalog routing are deferred to V2.
+    # ---------------------------------------------------------------
+
+    def _my_gifts_summary_subtext(self):
+        try:
+            nft_n = len(self.gift_library or [])
+            reg_n = len(getattr(self, "regular_gifts", []) or [])
+        except:
+            nft_n = 0
+            reg_n = 0
+        if nft_n == 0 and reg_n == 0:
+            return "пусто"
+        parts = []
+        if nft_n:
+            parts.append(f"{nft_n} NFT")
+        if reg_n:
+            parts.append(f"{reg_n} обычных")
+        return " • ".join(parts)
+
+    def _my_gifts_list_entries(self):
+        """Return [(source, entry)] for all gifts. source: 'nft' or 'regular'."""
+        out = []
+        try:
+            for e in (self.gift_library or []):
+                if isinstance(e, dict):
+                    out.append(("nft", e))
+        except:
+            pass
+        try:
+            for e in (getattr(self, "regular_gifts", []) or []):
+                if isinstance(e, dict):
+                    out.append(("regular", e))
+        except:
+            pass
+        return out
+
+    def _my_gifts_find_entry(self, gift_id, source):
+        gid = str(gift_id or "")
+        if source == "nft":
+            for e in (self.gift_library or []):
+                if isinstance(e, dict) and str(e.get("key", "")) == gid:
+                    return e
+        elif source == "regular":
+            for e in (getattr(self, "regular_gifts", []) or []):
+                if isinstance(e, dict) and str(e.get("key", "")) == gid:
+                    return e
+        return None
+
+    def _my_gifts_entry_title(self, source, entry):
+        try:
+            t = str(entry.get("title", "") or "")
+        except:
+            t = ""
+        if not t:
+            t = "NFT" if source == "nft" else "Подарок"
+        try:
+            n = int(entry.get("num", 0) or 0)
+            if n > 0:
+                return f"{t} #{n}"
+        except:
+            pass
+        return t
+
+    def _my_gifts_entry_subtext(self, source, entry):
+        bits = []
+        try:
+            cf = str(entry.get("custom_from", "") or "").strip()
+            if cf:
+                bits.append(f"От: {cf}")
+        except:
+            pass
+        try:
+            cd = str(entry.get("custom_date", "") or "").strip()
+            if cd:
+                bits.append(cd)
+        except:
+            pass
+        if not bits:
+            if source == "nft":
+                bits.append("NFT подарок")
+            else:
+                bits.append("Обычный подарок")
+        return " • ".join(bits)
+
+    def _create_my_gifts_subfragment(self, parent_view=None):
+        items = [
+            Divider(text="Список всех подарков, добавленных в локальный профиль."),
+            Text(
+                text="Добавить подарок",
+                subtext="NFT с улучшениями или обычный",
+                icon="msg_edit",
+                on_click=lambda _: self._open_my_gifts_add_menu(),
+            ),
+        ]
+        entries = self._my_gifts_list_entries()
+        if not entries:
+            items.append(Divider(text="Пока пусто. Нажмите «Добавить подарок», чтобы пополнить коллекцию."))
+            return items
+
+        items.append(Divider(text=f"Всего: {len(entries)}"))
+
+        for source, entry in entries:
+            try:
+                key = str(entry.get("key", "") or "")
+            except:
+                key = ""
+            if not key:
+                continue
+            icon = "msg_emoji_gem" if source == "nft" else "msg_gift_premium"
+            title = self._my_gifts_entry_title(source, entry)
+            subtext = self._my_gifts_entry_subtext(source, entry)
+
+            def _make_factory(gid, src):
+                return lambda parent_view=None: self._create_my_gift_detail_subfragment(gid, src, parent_view)
+
+            items.append(Text(
+                text=title,
+                subtext=subtext,
+                icon=icon,
+                create_sub_fragment=_make_factory(key, source),
+                link_alias=f"eblannft_my_gift_detail_{source}_{key}",
+            ))
+        return items
+
+    def _open_my_gifts_add_menu(self):
+        try:
+            actions = [
+                ("NFT-подарок (с улучшениями)", lambda: self._open_catalog_nft_sheet()),
+                ("Обычный подарок (без улучшений)", lambda: self._add_regular_gift_via_template()),
+            ]
+            self._show_action_menu("Добавить подарок", actions, negative_text="Отмена")
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Меню не открылось: {e}")
+            except:
+                pass
+
+    def _add_regular_gift_via_template(self):
+        # V1: regular-gift catalog (regular_only mode in ResaleGridController) is
+        # not wired yet — see commit a241f49 in history for prior approach. For
+        # now create a placeholder regular gift the user can rename / annotate.
+        try:
+            try:
+                self._regular_gifts_seq = int(getattr(self, "_regular_gifts_seq", 0) or 0) + 1
+            except:
+                self._regular_gifts_seq = 1
+            import time
+            new_key = f"reg_{self._regular_gifts_seq}_{int(time.time())}"
+            entry = {
+                "key": new_key,
+                "title": "Подарок",
+                "custom_from": "",
+                "custom_date": "",
+                "custom_comment": "",
+                "created_at": int(time.time()),
+            }
+            if not isinstance(getattr(self, "regular_gifts", None), list):
+                self.regular_gifts = []
+            self.regular_gifts.append(entry)
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                BulletinHelper.show_success("Обычный подарок добавлен")
+            except:
+                pass
+            try:
+                self._show_text_input_dialog("Название подарка", "Подарок", lambda v: self._my_gifts_set_title(new_key, "regular", v))
+            except:
+                pass
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Не удалось добавить: {e}")
+            except:
+                pass
+
+    def _create_my_gift_detail_subfragment(self, gift_id, source, parent_view=None):
+        entry = self._my_gifts_find_entry(gift_id, source)
+        if not entry:
+            return [Divider(text="Подарок не найден. Возможно, он был удалён.")]
+        title = self._my_gifts_entry_title(source, entry)
+        cf = str(entry.get("custom_from", "") or "")
+        cd = str(entry.get("custom_date", "") or "")
+        cc = str(entry.get("custom_comment", "") or "")
+        items = [
+            Divider(text=title),
+            Text(
+                text="От кого",
+                subtext=cf if cf else "не указано",
+                icon="msg_groups",
+                on_click=lambda _: self._show_text_input_dialog(
+                    "От кого", cf, lambda v: self._my_gifts_set_field(gift_id, source, "custom_from", v)
+                ),
+            ),
+            Text(
+                text="Дата",
+                subtext=cd if cd else "не указана",
+                icon="msg_stats_solar",
+                on_click=lambda _: self._show_text_input_dialog(
+                    "Дата (например 23.03.2026)", cd, lambda v: self._my_gifts_set_field(gift_id, source, "custom_date", v)
+                ),
+            ),
+            Text(
+                text="Комментарий",
+                subtext=cc if cc else "не указан",
+                icon="msg_message",
+                on_click=lambda _: self._show_text_input_dialog(
+                    "Комментарий", cc, lambda v: self._my_gifts_set_field(gift_id, source, "custom_comment", v)
+                ),
+            ),
+        ]
+        if source == "regular":
+            items.append(Text(
+                text="Название",
+                subtext=str(entry.get("title", "") or "Подарок"),
+                icon="msg_edit",
+                on_click=lambda _: self._show_text_input_dialog(
+                    "Название подарка", str(entry.get("title", "") or ""),
+                    lambda v: self._my_gifts_set_title(gift_id, source, v)
+                ),
+            ))
+        if source == "nft":
+            items.append(Text(
+                text="Изменить",
+                subtext="Открыть в конструкторе",
+                icon="msg_edit",
+                on_click=lambda _: self._open_constructor_for_library_key(gift_id),
+            ))
+        items.append(Text(
+            text="Удалить",
+            subtext="Убрать подарок из локального профиля",
+            icon="msg_delete",
+            on_click=lambda _: self._my_gifts_confirm_delete(gift_id, source),
+            red=True,
+        ))
+        return items
+
+    def _my_gifts_set_field(self, gift_id, source, field, value):
+        try:
+            entry = self._my_gifts_find_entry(gift_id, source)
+            if not entry:
+                BulletinHelper.show_error("Подарок не найден")
+                return
+            entry[str(field)] = str(value or "")
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                BulletinHelper.show_success("Сохранено")
+            except:
+                pass
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Ошибка: {e}")
+            except:
+                pass
+
+    def _my_gifts_set_title(self, gift_id, source, value):
+        v = str(value or "").strip()
+        if not v:
+            v = "Подарок"
+        self._my_gifts_set_field(gift_id, source, "title", v)
+
+    def _my_gifts_confirm_delete(self, gift_id, source):
+        try:
+            actions = [
+                ("Да, удалить", lambda: self._my_gifts_delete(gift_id, source)),
+            ]
+            self._show_action_menu("Удалить подарок?", actions, negative_text="Отмена")
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Ошибка: {e}")
+            except:
+                pass
+
+    def _my_gifts_delete(self, gift_id, source):
+        try:
+            gid = str(gift_id or "")
+            if source == "nft":
+                # Route to existing NFT deletion path so injection_payloads etc.
+                # stay consistent. Falls back to plain list mutation if absent.
+                try:
+                    self._delete_library_gift_key(gid)
+                    return
+                except:
+                    self.gift_library = [x for x in (self.gift_library or []) if str(x.get("key", "")) != gid]
+            else:
+                self.regular_gifts = [x for x in (getattr(self, "regular_gifts", []) or []) if str(x.get("key", "")) != gid]
+            try:
+                self._save_cache()
+            except:
+                pass
+            try:
+                BulletinHelper.show_success("Подарок удалён")
+            except:
+                pass
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Не удалось удалить: {e}")
+            except:
+                pass
 
     def _create_username_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_username_tokens()
@@ -15673,6 +15994,14 @@ class NftClonerPlugin(BasePlugin):
             data["local_stars_balance_value"] = int(self._get_local_stars_balance_value() or 0)
             data["hide_official_gifts_local"] = bool(getattr(self, "hide_official_gifts_local", False))
             data["gift_library"] = self.gift_library or []
+            try:
+                data["regular_gifts"] = list(self.regular_gifts or [])
+            except:
+                data["regular_gifts"] = []
+            try:
+                data["_regular_gifts_seq"] = int(getattr(self, "_regular_gifts_seq", 0) or 0)
+            except:
+                data["_regular_gifts_seq"] = 0
 
             try:
                 self._cache_pending = (uid, data)
@@ -15914,6 +16243,15 @@ class NftClonerPlugin(BasePlugin):
                     self.gift_library = lib
                 else:
                     self.gift_library = []
+                try:
+                    reg = data.get("regular_gifts", [])
+                    self.regular_gifts = [r for r in reg if isinstance(r, dict)] if isinstance(reg, list) else []
+                except:
+                    self.regular_gifts = []
+                try:
+                    self._regular_gifts_seq = int(data.get("_regular_gifts_seq", 0) or 0)
+                except:
+                    self._regular_gifts_seq = 0
                 self.gift_objects = {}
                 self._gift_objects_order = []
                 self._profile_saved_lists = []
@@ -16094,6 +16432,8 @@ class NftClonerPlugin(BasePlugin):
         self.injection_payloads = []
         self.inject_active = False
         self.gift_library = []
+        self.regular_gifts = []
+        self._regular_gifts_seq = 0
         self.gift_objects = {}
         self._gift_objects_order = []
         self._gift_objects_max = 12

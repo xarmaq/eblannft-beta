@@ -1,6 +1,6 @@
 {
-  "version": "1.0.46",
-  "notes": "Beta 1.0.46 - fix client crash 'Cannot convert bool object to void' on local upgrade: lambdas passed to run_on_ui_thread now go through void runnables instead of returning bool from _open_local_upgrade_for_entry/_gift. Network-level UpgradeStarGiftDelegate also hardened to never call the original RequestDelegate with synthesized null response and to always return void.",
+  "version": "1.0.60",
+  "notes": "Beta 1.0.60 — добавлен раздел «Мои подарки» в настройках плагина (V1). (1) Новый пункт «Мои подарки» рядом с «Профиль» / «Сервис» открывает подменю со списком всех подарков (NFT и обычные). (2) В деталях подарка можно редактировать поля «От кого», «Дата», «Комментарий»; значения сохраняются в кэше. (3) Кнопки «Изменить» (для NFT — открывает конструктор) и «Удалить» (красная, с подтверждением). (4) Кнопка «Добавить подарок» открывает меню из двух опций: «NFT-подарок (с улучшениями)» — существующий каталог без изменений; «Обычный подарок (без улучшений)» — создаёт обычную запись для локального профиля. Кастомные MD3-карточки со скриншота и интеграция каталога regular_only — отложены в V2.",
   "files": [
     "eblannft.plugin",
     "eblannft_beta_runtime/__init__.py",
