@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.78"
+__version__ = "1.0.79"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -10955,6 +10955,14 @@ class NftClonerPlugin(BasePlugin):
                             self._set_field(obj, fn, bool(hv))
                         except:
                             pass
+                    # TL_savedStarGift has no `hidden` field — the actual
+                    # hide-from-profile semantic lives on `unsaved`. Mirror
+                    # hidden_override there so re-injected wrappers stay
+                    # hidden after the user tapped TG's «Hide from profile».
+                    try:
+                        self._set_field(obj, "unsaved", bool(hv))
+                    except:
+                        pass
             except:
                 pass
             try:
@@ -24369,6 +24377,22 @@ class NftClonerPlugin(BasePlugin):
                         hidden_from_req = bool(v)
             except:
                 pass
+        # payments.saveStarGift carries the toggle in an `unsave` boolean
+        # (true = hide from profile, false = show on profile). Treat it
+        # as the hidden flag and also write through to wrapper.unsaved so
+        # the gift list re-renders correctly on the next profile open.
+        try:
+            unsave_v = get_val(req, "unsave", None)
+            if unsave_v is not None:
+                un = bool(unsave_v)
+                try:
+                    self._set_field(w, "unsaved", un)
+                except:
+                    pass
+                if hidden_from_req is None:
+                    hidden_from_req = un
+        except:
+            pass
         # Persist explicit action state as overrides too (helps across forks / TL schema differences).
         try:
             if pinned_from_req is not None:
@@ -26097,6 +26121,14 @@ class NetworkHook(MethodHook):
                     pass
 
             is_saved_action = ("saved" in req_name_l and "gift" in req_name_l)
+            # payments.saveStarGift(stargift, unsave=true/false) is what TG's
+            # "Hide from profile" / "Show on profile" button fires. Its
+            # lowercased name is "savestargift" — no "saved" substring,
+            # no "hide" token — the original heuristic missed it entirely,
+            # so plugin entries kept being re-injected after the user hid
+            # them. Detect this overload explicitly.
+            if (not is_saved_action) and ("savestargift" in req_name_l or "savestar" in req_name_l):
+                is_saved_action = True
             if (not is_saved_action) and ("gift" in req_name_l) and ("get" not in req_name_l):
                 for tok in ["hide", "unhide", "pin", "pinned", "unpin", "order", "reorder", "sort", "unsave", "remove", "visible", "show"]:
                     if tok in req_name_l:

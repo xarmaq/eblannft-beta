@@ -1,6 +1,6 @@
 {
-  "version": "1.0.78",
-  "notes": "Beta 1.0.78 — добиваем фризы + скролл «Моих подарков». (1) Все три sync-throttle'а (force-refresh, invalidate, user-patch) подняты с 5/5/10с до 30с per uid. Тики снапшотов от pull loop (~6с) больше не могут вызывать UI-патч-серии чаще раза в 30с — даже если что-то постоянно re-queue'ит uid, NotificationCenter события на ProfileActivity не сыпятся каждую секунду. Реальные изменения identity подхватятся в следующем 30-секундном окне. (2) BottomSheet «Мои подарки»: setCanDismissWithSwipe(False). Раньше свайп вниз по ScrollView ловился sheet'ом и тот пытался свернуться вместо прокрутки контента вверх. Закрывать только через back-стрелку слева вверху — жесты остаются у ScrollView.",
+  "version": "1.0.79",
+  "notes": "Beta 1.0.79 — фикс «скрытый подарок снова появляется при перезаходе в профиль». TG-кнопка «Скрыть из профиля» вызывает payments.saveStarGift(unsave=true). В lowercase это «savestargift» — не содержит ни «saved», ни «hide»/«unsave» подстрок, и наш NetworkHook не классифицировал запрос как saved-action. После перехвата запрос игнорировался, hidden_override не выставлялся, _rebuild_injection_payloads на следующем заходе всовывал wrapper обратно с unsaved=false. (1) Добавлена явная детекция имени «savestargift» в фильтре is_saved_action. (2) _apply_saved_action_from_req теперь читает поле req.unsave: записывает wrapper.unsaved и устанавливает entry.hidden_override=bool(unsave). (3) _library_get_wrapper при применении hidden_override теперь также пишет wrapper.unsaved (на TL_savedStarGift нет поля «hidden» — реальный hide-флаг это unsaved). Кнопка «Показать в профиле» симметрично снимает hide.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
