@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.71"
+__version__ = "1.0.72"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -22165,7 +22165,11 @@ class NftClonerPlugin(BasePlugin):
         StarGiftSheet table when the gift has user-set custom_from /
         custom_comment overrides. Native sheet doesn't always render
         from_id correctly (Hidden User fallback) and never shows a
-        comment field at all — these rows are the durable channel."""
+        comment field at all — these rows are the durable channel.
+
+        Works for both locally-owned gifts (entry resolved via
+        gift_library) and foreign gifts received via sync (entry
+        resolved via _get_remote_gift_meta_for_gift)."""
         if sheet is None:
             return False
         key = None
@@ -22179,6 +22183,14 @@ class NftClonerPlugin(BasePlugin):
             except:
                 key = None
         e = self._library_find_entry(key) if key else None
+        # V6 sync: fall back to the remote meta cache so foreign-profile
+        # viewers also see the owner's «От» / «Комментарий» rows. Mirrors
+        # the pattern used by _inject_local_gift_value_row.
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         try:

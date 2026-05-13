@@ -1,6 +1,6 @@
 {
-  "version": "1.0.71",
-  "notes": "Beta 1.0.71 — синхронизация обычных подарков с сервером, включая «От», «Дата», «Комментарий». (1) Снапшот, который плагин пушит на сервер, теперь включает поля custom_from / custom_date / custom_comment / custom_date_ts на каждом подарке (обычные подарки уже были в gift_library после V2-унификации, не хватало только этих ключей). (2) Принимающая сторона при инжекте удалённых подарков копирует custom_from / custom_date / custom_comment / custom_date_ts в _sync_remote_gift_meta_cache — V5 row injection («От» и «Комментарий» в StarGiftSheet) сразу подхватывает их при тапе на чужой подарок. (3) Также при инжекте удалённых wrapper'ов применяется wrapper.date = custom_date_ts, чтобы нативная строка «Date» в StarGiftSheet показала ту дату, которую выставил владелец. (4) Сохранение любого custom_* поля теперь форс-пушит снапшот в фоновом потоке (~6с до видимости у других вместо 12с background tick).",
+  "version": "1.0.72",
+  "notes": "Beta 1.0.72 — фикс «От» при просмотре чужого профиля. V5 row injection (_inject_local_gift_my_gifts_rows) проверял только локальный gift_library и возвращал False для чужих подарков — отсюда «Hidden User» в чужом StarGiftSheet несмотря на то что V6 sync уже передавал identity_config / custom_from через snapshot. Добавлен fallback на _get_remote_gift_meta_for_gift (та же логика, что у существующего _inject_local_gift_value_row). Теперь когда вы открываете чужой профиль, в плитке regular-подарка появляется строка «От» с резолвом имени отправителя через MessagesController.getUser.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
