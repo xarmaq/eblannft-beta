@@ -20,15 +20,11 @@ from org.telegram.tgnet import TLRPC
 from ui.bulletin import BulletinHelper
 from ui.alert import AlertDialogBuilder
 from ui.settings import Header, Text, Divider, Switch
-try:
-    from ui.settings import Custom as _UISettingsCustom
-except Exception:
-    _UISettingsCustom = None
 from file_utils import write_file, read_file, get_plugins_dir, ensure_dir_exists
 from hook_utils import find_class
 
 from android.view import View, Gravity, ViewGroup, ViewTreeObserver, WindowManager, ViewOutlineProvider
-from android.widget import FrameLayout, LinearLayout, ScrollView, TextView, EditText, ImageView, HorizontalScrollView, PopupWindow, ProgressBar
+from android.widget import FrameLayout, LinearLayout, ScrollView, TextView, EditText, ImageView, HorizontalScrollView
 from android.text import SpannableString, SpannableStringBuilder, Spanned, TextPaint
 from android.text.style import ImageSpan, ForegroundColorSpan, ClickableSpan
 from android.graphics.drawable import GradientDrawable, BitmapDrawable
@@ -53,14 +49,6 @@ import base64
 import re
 import math
 from urllib.request import Request, urlopen
-try:
-    from .legacy_gifts import get_legacy_gift_meta
-except Exception:
-    try:
-        from legacy_gifts import get_legacy_gift_meta
-    except Exception:
-        def get_legacy_gift_meta(base_gift_id=0):
-            return {}
 
 def _gen(java_class, method_name):
     def _run(instance, *java_args):
@@ -79,20 +67,11 @@ JRunnable = _gen(jclass("java.lang.Runnable"), "run")
 
 __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
-__description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления: [vc дополнения](https://t.me/vcvk1)"
+__description__ = "Бета-канал eblanNFT. \n\nПозволяет визуально добавлять NFT подарки визуально в профиль, менять свой номер телефона, ставить коллекцинный юзернеймы. Имеет систему конфигов. Ставится параллельно с основной версией — данные хранятся отдельно. \n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.3"
+__version__ = "1.0.4"
 __icon__ = "HappyHappyPepe/31"
-EBLANNFT_UPDATE_REPO_DEFAULT = "xarmaq/eblannft-beta"
-EBLANNFT_UPDATE_BRANCH_DEFAULT = "main"
-EBLANNFT_UPDATE_MANIFEST_PATH = "eblannft_update.json"
-EBLANNFT_UPDATE_DEFAULT_FILES = [
-    "eblannft.plugin",
-    "eblannft_runtime/__init__.py",
-    "eblannft_runtime/plugin.py",
-]
-EBLANNFT_UPDATE_CHECK_INTERVAL_SEC = 6 * 60 * 60
-EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
+EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_beta_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
 EBLANNFT_WELCOME_STICKER_SET = "HappyHappyPepe"
 EBLANNFT_WELCOME_STICKER_INDEX = 0
@@ -112,17 +91,6 @@ EBLANNFT_LOCAL_ABOUT_AVATAR_FILES = [
 ]
 PROFILE_CONFIG_FILE_EXTENSION = ".profile"
 PROFILE_CONFIG_VERSION = 1
-GIFT_OBJECTS_CACHE_MIN = 24
-GIFT_OBJECTS_CACHE_BUFFER = 8
-GIFT_OBJECTS_CACHE_MAX = 256
-GIFT_LIST_SCAN_MIN = 24
-GIFT_LIST_SCAN_MAX = 96
-GIFT_KIND_REAL_UPGRADED = "real_upgraded"
-GIFT_KIND_NORMAL = "normal"
-GIFT_KIND_LEGACY = "legacy_normal"
-GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
-GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
-LOCAL_VISUAL_UPGRADE_STARS = 0
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -198,6 +166,17 @@ def to_java_int(val):
     if val > 0x7FFFFFFF:
         val -= 0x100000000
     return val
+
+def to_java_Integer(val):
+    """Box a Python int as java.lang.Integer (NOT Long) for postNotificationName
+    Object... varargs. Chaquopy autoboxes Python int -> java.lang.Long in
+    Object[] context, which crashes recipients that cast args[0] to Integer
+    (e.g. DialogsActivity for updateInterfaces masks).
+    """
+    try:
+        return jclass("java.lang.Integer")(int(to_java_int(val)))
+    except Exception:
+        return int(to_java_int(val))
 
 def get_val(obj, name, default=None):
     if obj is None:
@@ -398,10 +377,7 @@ def deserialize_fragment_collectible_info(b64_str):
 def gen(java_class, method_name, return_value=False, default_value=None):
     def _run(instance, *java_args):
         try:
-            result = instance._fn(*java_args)
-            # If the Java method returns void, never propagate the Python return value –
-            # Chaquopy raises ClassCastException when it tries to convert bool→void.
-            return result if return_value else None
+            return instance._fn(*java_args)
         except Exception:
             return default_value
 
@@ -421,8 +397,7 @@ JCallback5 = gen(jclass("org.telegram.messenger.Utilities$Callback5"), "run")
 JRequestDelegate = gen(RequestDelegate, "run")
 JOnClickListener = gen(jclass("android.view.View$OnClickListener"), "onClick")
 JRunnable = gen(jclass("java.lang.Runnable"), "run")
-# onTouch returns boolean in Java – return_value=True is required here
-JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", return_value=True, default_value=False)
+JOnTouchListener = gen(jclass("android.view.View$OnTouchListener"), "onTouch", default_value=False)
 JOnGlobalLayoutListener = gen(jclass("android.view.ViewTreeObserver$OnGlobalLayoutListener"), "onGlobalLayout")
 JOnShowListener = gen(jclass("android.content.DialogInterface$OnShowListener"), "onShow")
 JOnDismissListener = gen(jclass("android.content.DialogInterface$OnDismissListener"), "onDismiss")
@@ -783,7 +758,6 @@ def _cache_dir():
     base = get_plugins_dir()
     new_dir = os.path.join(base, f"{__id__}_data")
     legacy_dirs = [
-        os.path.join(base, "eblannft_data"),
         os.path.join(base, "nft_architect_data"),
     ]
     d = new_dir
@@ -833,7 +807,7 @@ class NftClonerPlugin(BasePlugin):
         self.gift_library = []
         self.gift_objects = {}
         self._gift_objects_order = []
-        self._gift_objects_max = GIFT_OBJECTS_CACHE_MIN
+        self._gift_objects_max = 12
         self._profile_saved_lists = []
         self._profile_saved_lists_frag_key = 0
         self.editing_gift_key = None
@@ -948,11 +922,6 @@ class NftClonerPlugin(BasePlugin):
         self._catalog_nft_cache_last_ts = 0.0
         self._catalog_gift_lookup_sig = ""
         self._catalog_gift_lookup = {}
-        self._upgrade_attr_pool = {"model": [], "pattern": [], "backdrop": []}
-        self._pending_local_upgrade_key = None
-        self._pending_local_upgrade_source_b64 = ""
-        self._pending_local_upgrade_source_kind = ""
-        self._pending_local_upgrade_animation = "telegram_upgrade"
 
         # Gift (three dots) menu integration on StarGiftSheet.
         self._inside_gift_menu = False
@@ -1420,40 +1389,16 @@ class NftClonerPlugin(BasePlugin):
             return 0
 
     def _recompute_gift_objects_limit(self):
-        lib_count = 0
         try:
-            lib_count = len(self.gift_library or [])
+            _ = len(self.gift_library or [])
         except:
-            lib_count = 0
-        target = max(int(GIFT_OBJECTS_CACHE_MIN), int(lib_count or 0) + int(GIFT_OBJECTS_CACHE_BUFFER))
-        target = min(int(GIFT_OBJECTS_CACHE_MAX), int(target))
+            pass
+        target = 12
         try:
             self._gift_objects_max = int(target)
         except:
-            self._gift_objects_max = int(GIFT_OBJECTS_CACHE_MIN)
-        return int(getattr(self, "_gift_objects_max", GIFT_OBJECTS_CACHE_MIN) or GIFT_OBJECTS_CACHE_MIN)
-
-    def _list_walk_limit(self, list_like, min_limit=GIFT_LIST_SCAN_MIN, max_limit=GIFT_LIST_SCAN_MAX):
-        try:
-            size = int(list_like.size() or 0)
-        except:
-            size = 0
-        if size <= 0:
-            return 0
-        try:
-            lib_count = int(len(self.gift_library or []) or 0)
-        except:
-            lib_count = 0
-        try:
-            target = max(int(min_limit), lib_count + int(GIFT_OBJECTS_CACHE_BUFFER))
-        except:
-            target = int(min_limit)
-        try:
-            if int(max_limit or 0) > 0:
-                target = min(int(max_limit), int(target))
-        except:
-            pass
-        return min(int(size), max(int(min_limit), int(target)))
+            self._gift_objects_max = 12
+        return int(getattr(self, "_gift_objects_max", 12) or 12)
 
     def _has_live_catalog_controller(self):
         try:
@@ -2175,6 +2120,1913 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
 
+    # ---------------------------------------------------------------
+    # eblanNFT 1.0.3 — VPS sync integration (ported from beta 1.0.14)
+    # Same VPS endpoint and plugin_key as beta, so prod and beta clients
+    # share the same record namespace (keyed by tg:<user_id>) and see each
+    # other's NFTs / wear / NFT username / NFT number.
+    # ---------------------------------------------------------------
+    def _sync_get_settings(self):
+        cfg = {
+            "enabled": True,
+            "server_url": "http://35.242.218.223:8787",
+            "plugin_key": "6ef78976213eb13982ee124c373b74411dd5cbf35e7250ab",
+        }
+        try:
+            stored = getattr(self, "_eblannft_sync_cfg", None)
+            if isinstance(stored, dict):
+                cfg.update({k: stored.get(k, cfg[k]) for k in cfg.keys()})
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_save_settings(self, **patch):
+        cfg = self._sync_get_settings()
+        cfg.update({k: v for k, v in patch.items() if k in cfg})
+        self._eblannft_sync_cfg = cfg
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is not None:
+                client.update_endpoint(server_url=cfg.get("server_url"),
+                                       plugin_key=cfg.get("plugin_key"))
+                client.set_enabled(bool(cfg.get("enabled", True)))
+        except Exception:
+            pass
+        return cfg
+
+    def _sync_my_user_id(self):
+        try:
+            uc = get_user_config()
+            return int(uc.getCurrentUser().id)
+        except Exception:
+            try:
+                return int(get_user_config().clientUserId)
+            except Exception:
+                return 0
+
+    def _sync_collect_local_state(self):
+        snapshot = {
+            "plugin_id": "eblannft_beta",
+            "updated_at": int(time.time()),
+            "gifts": [],
+            # Mirror local "hide official gifts" toggle to remote viewers.
+            # When true, other plugin users opening this profile filter out
+            # any non-plugin gift wrappers from the server response, matching
+            # what the owner sees locally.
+            "hide_official_gifts": bool(getattr(self, "hide_official_gifts_local", False)),
+            "wear_active": False,
+            "wear_collectible_id": 0,
+            "wear_status_data": {},
+            "username_state": {
+                "enabled": bool(self._is_nft_username_active()) if hasattr(self, "_is_nft_username_active") else False,
+                "tokens": list(self._get_nft_username_tokens() or []) if hasattr(self, "_get_nft_username_tokens") else [],
+                "price_ton": str(getattr(self, "nft_username_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_username_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_username_purchase_date", "") or ""),
+            },
+            "number_state": {
+                "enabled": bool(self._is_nft_number_active()) if hasattr(self, "_is_nft_number_active") else False,
+                "tokens": list(self._get_nft_number_tokens() or []) if hasattr(self, "_get_nft_number_tokens") else [],
+                "price_ton": str(getattr(self, "nft_number_price_ton", "0") or "0"),
+                "price_usd": str(getattr(self, "nft_number_price_usd", "0") or "0"),
+                "purchase_date": str(getattr(self, "nft_number_purchase_date", "") or ""),
+            },
+            # Local "Stars Rating" decoration — value/level/next_goal tuple.
+            # Receivers patch userFull.stars_rating with these so the rating
+            # widget on a foreign profile reflects what the owner set.
+            "rating_state": {
+                "enabled": bool(self._is_local_rating_active()) if hasattr(self, "_is_local_rating_active") else False,
+                "value": int(getattr(self, "local_rating_value", 0) or 0),
+                "level": int(getattr(self, "local_rating_level", 0) or 1),
+                "next_goal": int(getattr(self, "local_rating_next_goal", 0) or 0),
+            },
+        }
+        try:
+            if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                snapshot["wear_active"] = True
+                snapshot["wear_collectible_id"] = int(self.wear_collectible_id)
+                wsd = getattr(self, "wear_status_data", None)
+                if isinstance(wsd, dict):
+                    snapshot["wear_status_data"] = {
+                        k: v for k, v in wsd.items()
+                        if isinstance(v, (str, int, float, bool)) or v is None
+                    }
+        except Exception:
+            pass
+        try:
+            library = (
+                getattr(self, "gift_library", None)
+                or getattr(self, "stolen_cache", None)
+                or getattr(self, "_stolen_cache", None)
+                or []
+            )
+            if isinstance(library, dict):
+                items = list(library.values())
+            elif isinstance(library, list):
+                items = list(library)
+            else:
+                items = []
+            try:
+                my_id_for_filter = int(self._sync_my_user_id() or 0)
+            except Exception:
+                my_id_for_filter = 0
+            count = 0
+            for entry in items:
+                if not isinstance(entry, dict):
+                    continue
+                b64 = entry.get("b64") or entry.get("payload_b64")
+                if not isinstance(b64, str) or len(b64) < 16:
+                    continue
+                # Only skip "gifted to someone else" — gate on
+                # identity_config.to_user_id, the explicit gift-target field.
+                # The previous owner_user_id check was excluding legacy library
+                # entries (created before _library_upsert_wrapper started
+                # auto-stamping owner=my_id, and stolen-gift entries that kept
+                # the original owner uid) — they all stopped showing on remote
+                # profiles after the 1.0.3 sync rollout.
+                try:
+                    ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
+                    to_uid = int(ic.get("to_user_id", 0) or 0)
+                except Exception:
+                    to_uid = 0
+                if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
+                    continue
+                gift = {"b64": b64}
+                for key in ("title", "slug", "key", "gift_kind"):
+                    val = entry.get(key)
+                    if isinstance(val, str) and val:
+                        gift[key] = val
+                for key in ("num", "base_gift_id", "unique_id", "saved_id",
+                            "standard_price_stars", "avail_total", "avail_issued",
+                            "limit_total", "order_hint", "updated_at", "created_at"):
+                    val = entry.get(key)
+                    if isinstance(val, (int, float)):
+                        gift[key] = int(val)
+                for key in ("inject", "limited_flag", "pinned_override", "hidden_override"):
+                    if key in entry:
+                        gift[key] = bool(entry.get(key))
+                # Include all per-gift configs that affect what the receiver
+                # sees in the StarGiftSheet — owner row, "Ценность" row,
+                # TON-blockchain link, custom star prices.
+                for key in ("wear_status_data", "build_config", "identity_config",
+                            "value_config", "gift_stars_config", "ton_display_config"):
+                    val = entry.get(key)
+                    if isinstance(val, dict):
+                        gift[key] = {
+                            kk: vv for kk, vv in val.items()
+                            if isinstance(vv, (str, int, float, bool)) or vv is None
+                        }
+                snapshot["gifts"].append(gift)
+                count += 1
+                if count >= 64:
+                    break
+        except Exception as e:
+            _log(f"sync collect gifts error: {e}")
+        return snapshot
+
+    def _sync_on_remote_state(self, user_key, record):
+        # Detect a content change so we know whether to force a gifts-list
+        # invalidate. Snapshot's gift identities are the definitive signal —
+        # `updated_at` bumps on every push, so comparing identities avoids
+        # needless re-fetches that would loop with our request_remote_state
+        # ticks in _sync_inject_remote_gifts.
+        prev_record = None
+        try:
+            lock = getattr(self, "_eblannft_sync_lock", None)
+            if lock is None:
+                return
+            with lock:
+                cache = getattr(self, "_eblannft_sync_remote_cache", None)
+                if cache is None:
+                    cache = {}
+                    self._eblannft_sync_remote_cache = cache
+                prev_record = cache.get(user_key)
+                cache[user_key] = record
+        except Exception:
+            pass
+
+        try:
+            uid = 0
+            try:
+                key = str(user_key or "")
+                if key.startswith("tg:"):
+                    uid = int(key[3:] or 0)
+                else:
+                    uid = int(key or 0)
+            except Exception:
+                uid = 0
+            if uid <= 0:
+                return
+            try:
+                self._sync_schedule_remote_user_patch(uid, delays=[60, 240])
+            except Exception:
+                pass
+            # When the gift identities in the snapshot change vs what we
+            # already cached, force Telegram's StarsController.GiftsList
+            # for this dialog to reload — getSavedStarGifts re-fires, our
+            # network wrapper intercepts, and _sync_inject_remote_gifts
+            # picks up the now-fresh snapshot. Fixes the "gifts randomly
+            # don't show on first profile open" symptom: cold opens were
+            # racing the blocking 2s fetch and silently rendering an empty
+            # list when the fetch lost the race.
+            try:
+                if self._sync_gifts_identity_changed(prev_record, record):
+                    self._sync_invalidate_remote_gifts_list(uid)
+            except Exception as _ie:
+                try:
+                    _log(f"sync invalidate-on-arrival error: {_ie}")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _sync_gifts_identity_changed(self, prev_record, new_record):
+        def _ids(rec):
+            if not isinstance(rec, dict):
+                return None
+            gifts = rec.get("gifts") or []
+            if not isinstance(gifts, list):
+                return None
+            out = []
+            for g in gifts:
+                if not isinstance(g, dict):
+                    continue
+                uid_g = int(g.get("unique_id", 0) or 0)
+                slug_g = str(g.get("slug", "") or "")
+                if uid_g > 0:
+                    out.append(("u", uid_g))
+                elif slug_g:
+                    out.append(("s", slug_g))
+            out.sort()
+            return tuple(out)
+
+        prev_ids = _ids(prev_record)
+        new_ids = _ids(new_record)
+        if new_ids is None:
+            return False
+        if prev_ids is None:
+            return bool(new_ids)
+        return prev_ids != new_ids
+
+    def _sync_invalidate_remote_gifts_list(self, user_id):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return False
+        try:
+            CtrlClass = jclass("org.telegram.ui.Stars.StarsController")
+            try:
+                ctrl = CtrlClass.getInstance(self._get_user_account_or_default())
+            except Exception:
+                try:
+                    ctrl = CtrlClass.getInstance(0)
+                except Exception:
+                    ctrl = None
+            if ctrl is None:
+                return False
+
+            def _do_invalidate():
+                try:
+                    ctrl.invalidateProfileGifts(int(uid))
+                    _log(f"invalidated profile gifts for uid={uid} (snapshot identities changed)")
+                except Exception as e:
+                    try:
+                        _log(f"invalidateProfileGifts error uid={uid}: {e}")
+                    except Exception:
+                        pass
+
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_do_invalidate))
+            except Exception:
+                _do_invalidate()
+            return True
+        except Exception as e:
+            try:
+                _log(f"_sync_invalidate_remote_gifts_list setup error: {e}")
+            except Exception:
+                pass
+            return False
+
+    def request_remote_profile(self, user_id):
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is None:
+                return None
+            return client.request_remote_state(user_id)
+        except Exception:
+            return None
+
+    def _sync_get_remote_record(self, user_id):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return None
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return None
+        record = None
+        try:
+            record = client.get_cached_fresh(uid)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.fetch_remote_state_blocking(uid, max_timeout=2.0)
+            except Exception:
+                record = None
+            if not isinstance(record, dict):
+                try:
+                    record = client.get_cached(uid)
+                except Exception:
+                    record = None
+        return record if isinstance(record, dict) else None
+
+    def _build_collectible_status_from_wsd(self, collectible_id, wsd):
+        try:
+            cid = int(collectible_id or 0)
+        except Exception:
+            cid = 0
+        if cid <= 0:
+            return None
+        try:
+            Cls = jclass("org.telegram.tgnet.TLRPC$TL_emojiStatusCollectible")
+            st = Cls()
+            self._set_field(st, "collectible_id", cid)
+            try:
+                self._set_field(st, "until", 0)
+            except Exception:
+                pass
+            if isinstance(wsd, dict):
+                for color_field in ["center_color", "edge_color", "pattern_color", "text_color"]:
+                    val = wsd.get(color_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, color_field, int(val))
+                        except Exception:
+                            pass
+                for long_field in ["document_id", "pattern_document_id"]:
+                    val = wsd.get(long_field, 0)
+                    if val:
+                        try:
+                            self._set_field(st, long_field, int(val))
+                        except Exception:
+                            pass
+                for str_field in ["title", "slug"]:
+                    val = wsd.get(str_field, "")
+                    if val:
+                        try:
+                            self._set_field(st, str_field, str(val))
+                        except Exception:
+                            pass
+            return st
+        except Exception:
+            return None
+
+    def _sync_get_remote_gifts_count(self, record):
+        """How many synced NFTs the remote record carries — used to bump
+        userFull.stargifts_count so the «Подарки» tab shows up on a foreign
+        profile that has zero real saved gifts.
+        """
+        if not isinstance(record, dict):
+            return 0
+        gifts = record.get("gifts")
+        if not isinstance(gifts, list):
+            return 0
+        n = 0
+        for g in gifts:
+            if not isinstance(g, dict):
+                continue
+            b64 = g.get("b64") or g.get("payload_b64")
+            if isinstance(b64, str) and len(b64) >= 16:
+                n += 1
+        return n
+
+    def _apply_remote_stargifts_count_to_obj(self, obj, desired_count):
+        """Bump stargifts_count on a UserFull/ChatFull-shaped object so
+        Telegram renders the gifts tab even when the server says count=0.
+        Only ever increases — never lowers a real value.
+        """
+        if obj is None:
+            return False
+        try:
+            target = int(desired_count or 0)
+        except Exception:
+            target = 0
+        if target <= 0:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("userfull" not in cls_name) and ("chatfull" not in cls_name) \
+                and ("stargifts_count" not in field_names) \
+                and ("stargiftsCount" not in field_names):
+            return False
+        current = 0
+        for name in ["stargifts_count", "stargiftsCount"]:
+            try:
+                v = int(self._to_int(get_val(obj, name, 0), 0) or 0)
+            except Exception:
+                v = 0
+            if v > current:
+                current = v
+        if target <= current:
+            return False
+        changed = False
+        for name in ["stargifts_count", "stargiftsCount"]:
+            try:
+                if self._set_field(obj, name, int(target)):
+                    changed = True
+            except Exception:
+                pass
+            try:
+                if hasattr(obj, name) and int(getattr(obj, name) or 0) != int(target):
+                    setattr(obj, name, int(target))
+                    changed = True
+            except Exception:
+                pass
+        return bool(changed)
+
+    def _apply_remote_nft_username_to_user(self, user_obj, tokens):
+        if user_obj is None or not tokens:
+            return False
+        changed = False
+        try:
+            usernames = get_val(user_obj, "usernames", None)
+            if usernames is None:
+                try:
+                    tmp = ArrayList()
+                    if self._set_field(user_obj, "usernames", tmp):
+                        usernames = tmp
+                        changed = True
+                except Exception:
+                    usernames = None
+            if usernames is not None:
+                for t in tokens:
+                    try:
+                        if self._ensure_username_in_list(usernames, t):
+                            changed = True
+                    except Exception:
+                        pass
+            for list_name in ["active_usernames", "editable_usernames"]:
+                try:
+                    lst = get_val(user_obj, list_name, None)
+                except Exception:
+                    lst = None
+                if lst is None:
+                    continue
+                for t in tokens:
+                    try:
+                        if self._ensure_string_in_list(lst, t):
+                            changed = True
+                    except Exception:
+                        pass
+            primary = tokens[0] if tokens else ""
+            if primary:
+                try:
+                    if self._set_field(user_obj, "username", primary):
+                        changed = True
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"_apply_remote_nft_username_to_user error: {e}")
+            except Exception:
+                pass
+        return changed
+
+    def _compute_rating_floor(self, level, next_goal, value):
+        """Same shape as _get_local_rating_floor but parametrised — used for
+        remote sync where the foreign uid doesn't have my local self-state.
+        """
+        try:
+            level = int(level or 0)
+            goal = int(next_goal or 0)
+            value = int(value or 0)
+        except Exception:
+            return 0
+        if level <= 1 or goal <= 1:
+            return 0
+        step = max(int(goal / max(level, 1)), 1)
+        floor = max(goal - step, 0)
+        if floor > value:
+            floor = min(value, floor)
+        if floor >= goal:
+            floor = max(goal - 1, 0)
+        return int(floor)
+
+    def _apply_remote_rating_to_stars_rating_obj(self, obj, value, level, next_goal):
+        """Patch a TL_starsRating-shaped object with explicit values — no
+        self gate, used for syncing a foreign user's local rating.
+        """
+        if obj is None:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        field_names = set()
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("starsrating" not in cls_name) and (not ({"level", "current_level_stars", "stars", "next_level_stars"} & field_names)):
+            return False
+        try:
+            value = int(value or 0)
+            level = int(level or 1)
+            next_goal = int(next_goal or 0)
+        except Exception:
+            return False
+        floor = self._compute_rating_floor(level, next_goal, value)
+        changed = False
+        for names, val in [
+            (["level"], level),
+            (["current_level_stars", "currentLevelStars"], floor),
+            (["stars"], value),
+            (["next_level_stars", "nextLevelStars"], next_goal),
+        ]:
+            for name in names:
+                try:
+                    if self._set_field(obj, name, int(val)):
+                        changed = True
+                except Exception:
+                    pass
+        try:
+            flags = self._to_int(get_val(obj, "flags", 0), 0)
+            wanted = int(flags | 1)
+            if wanted != flags and self._set_field(obj, "flags", wanted):
+                changed = True
+        except Exception:
+            pass
+        return bool(changed)
+
+    def _create_remote_stars_rating_obj(self, value, level, next_goal):
+        for cls_name in [
+            "org.telegram.tgnet.tl.TL_stars$Tl_starsRating",
+            "org.telegram.tgnet.tl.TL_stars$TL_starsRating",
+            "org.telegram.tgnet.TLRPC$TL_starsRating",
+        ]:
+            try:
+                obj = jclass(cls_name)()
+                self._apply_remote_rating_to_stars_rating_obj(obj, value, level, next_goal)
+                return obj
+            except Exception:
+                continue
+        return None
+
+    def _apply_remote_rating_to_full_user(self, obj, value, level, next_goal):
+        """Mirror of _apply_local_rating_to_full_user without the self-only
+        gate — patches userFull.stars_rating for a synced foreign profile.
+        """
+        if obj is None:
+            return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except Exception:
+            cls_name = ""
+        field_names = set()
+        try:
+            field_names = set([str(f.getName() or "") for f in self._iter_object_fields(obj)])
+        except Exception:
+            field_names = set()
+        if ("userfull" not in cls_name) and ("stars_rating" not in field_names) and ("starsRating" not in field_names):
+            return False
+        changed = False
+        rating_obj = None
+        for name in ["stars_rating", "starsRating"]:
+            try:
+                rating_obj = get_val(obj, name, None)
+            except Exception:
+                rating_obj = None
+            if rating_obj is not None:
+                break
+        if rating_obj is None:
+            rating_obj = self._create_remote_stars_rating_obj(value, level, next_goal)
+            if rating_obj is not None:
+                for name in ["stars_rating", "starsRating"]:
+                    try:
+                        if self._set_field(obj, name, rating_obj):
+                            changed = True
+                            break
+                    except Exception:
+                        pass
+        else:
+            try:
+                if self._apply_remote_rating_to_stars_rating_obj(rating_obj, value, level, next_goal):
+                    changed = True
+            except Exception:
+                pass
+        try:
+            flags2 = self._to_int(get_val(obj, "flags2", 0), 0)
+            wanted = int(flags2 | (1 << 17))
+            if wanted != flags2 and self._set_field(obj, "flags2", wanted):
+                changed = True
+        except Exception:
+            pass
+        return bool(changed)
+
+    def _apply_remote_nft_number_to_user(self, user_obj, token):
+        if user_obj is None or not token:
+            return False
+        changed = False
+        try:
+            if self._set_field(user_obj, "phone", token):
+                changed = True
+        except Exception:
+            pass
+        try:
+            for f in user_obj.getClass().getFields():
+                try:
+                    field_name = str(f.getName() or "")
+                    low = field_name.lower()
+                    typ = f.getType().getName()
+                except Exception:
+                    continue
+                if typ != "java.lang.String":
+                    continue
+                if ("phone" in low) or (low in ["number", "phone_number", "phoneNumber"]):
+                    try:
+                        if self._set_field(user_obj, field_name, token):
+                            changed = True
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return changed
+
+    def _sync_apply_remote_user_overrides(self, response, target_user_id):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if response is None or tuid <= 0:
+            return 0
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return 0
+        wear_active = bool(record.get("wear_active"))
+        cid = 0
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        wsd = record.get("wear_status_data") or {}
+        wear_status = None
+        if wear_active and cid > 0:
+            wear_status = self._build_collectible_status_from_wsd(cid, wsd)
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            remote_unames = []
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            remote_numbers = []
+        try:
+            remote_gifts_count = int(self._sync_get_remote_gifts_count(record) or 0)
+        except Exception:
+            remote_gifts_count = 0
+
+        # Remote local-rating decoration → apply only when the sender had it
+        # enabled with a non-zero value. We pass (value, level, next_goal)
+        # down to _apply_remote_rating_to_full_user.
+        remote_rating = None
+        try:
+            rs = record.get("rating_state") or {}
+            if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                remote_rating = (
+                    int(rs.get("value", 0) or 0),
+                    int(rs.get("level", 1) or 1),
+                    int(rs.get("next_goal", 0) or 0),
+                )
+        except Exception:
+            remote_rating = None
+
+        if wear_status is None and not remote_unames and not remote_numbers \
+                and remote_gifts_count <= 0 and remote_rating is None:
+            return 0
+        patched = [0]
+        visited = set()
+
+        def walk(obj, depth):
+            if obj is None or depth > 3:
+                return
+            try:
+                oid = int(obj.hashCode())
+            except Exception:
+                oid = id(obj)
+            if oid in visited:
+                return
+            visited.add(oid)
+            # UserFull / ChatFull don't carry an `id` field — they wrap a
+            # nested user. Bump stargifts_count on any UserFull-shaped object
+            # we encounter while walking the response, so the gifts tab shows
+            # up on the foreign profile.
+            if remote_gifts_count > 0:
+                try:
+                    if self._apply_remote_stargifts_count_to_obj(obj, remote_gifts_count):
+                        patched[0] += 1
+                except Exception:
+                    pass
+            # Foreign-profile local rating (stars_rating widget on userFull).
+            if remote_rating is not None:
+                try:
+                    if self._apply_remote_rating_to_full_user(obj, *remote_rating):
+                        patched[0] += 1
+                except Exception:
+                    pass
+            try:
+                obj_uid = int(get_val(obj, "id", 0) or 0)
+            except Exception:
+                obj_uid = 0
+            if obj_uid == tuid:
+                if wear_status is not None:
+                    try:
+                        if self._set_field(obj, "emoji_status", wear_status):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_unames:
+                    try:
+                        if self._apply_remote_nft_username_to_user(obj, remote_unames):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+                if remote_numbers:
+                    try:
+                        if self._apply_remote_nft_number_to_user(obj, remote_numbers[0]):
+                            patched[0] += 1
+                    except Exception:
+                        pass
+            try:
+                if self._is_java_list_like(obj):
+                    try:
+                        size = min(int(obj.size() or 0), 32)
+                    except Exception:
+                        size = 0
+                    for i in range(size):
+                        try:
+                            walk(obj.get(i), depth + 1)
+                        except Exception:
+                            continue
+                    return
+            except Exception:
+                pass
+            try:
+                for f in self._iter_object_fields(obj):
+                    try:
+                        val = f.get(obj)
+                    except Exception:
+                        continue
+                    if val is None:
+                        continue
+                    try:
+                        typ = str(f.getType().getName() or "")
+                    except Exception:
+                        typ = ""
+                    if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
+                        continue
+                    try:
+                        walk(val, depth + 1)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+        walk(response, 0)
+        return int(patched[0] or 0)
+
+    def _sync_patch_remote_cached_user(self, target_user_id):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return False
+        record = self._sync_get_remote_record(tuid)
+        if not isinstance(record, dict):
+            return False
+        st = None
+        try:
+            cid = int(record.get("wear_collectible_id") or 0)
+        except Exception:
+            cid = 0
+        if record.get("wear_active") and cid > 0:
+            wsd = record.get("wear_status_data") or {}
+            st = self._build_collectible_status_from_wsd(cid, wsd)
+        remote_unames = []
+        try:
+            us = record.get("username_state") or {}
+            if isinstance(us, dict) and us.get("enabled") and isinstance(us.get("tokens"), list):
+                for t in us["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_unames.append(t.strip().lstrip("@"))
+        except Exception:
+            pass
+        remote_numbers = []
+        try:
+            ns = record.get("number_state") or {}
+            if isinstance(ns, dict) and ns.get("enabled") and isinstance(ns.get("tokens"), list):
+                for t in ns["tokens"]:
+                    if isinstance(t, str) and t.strip():
+                        remote_numbers.append(t.strip().lstrip("+"))
+        except Exception:
+            pass
+        try:
+            remote_gifts_count = int(self._sync_get_remote_gifts_count(record) or 0)
+        except Exception:
+            remote_gifts_count = 0
+
+        remote_rating = None
+        try:
+            rs = record.get("rating_state") or {}
+            if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                remote_rating = (
+                    int(rs.get("value", 0) or 0),
+                    int(rs.get("level", 1) or 1),
+                    int(rs.get("next_goal", 0) or 0),
+                )
+        except Exception:
+            remote_rating = None
+
+        if st is None and not remote_unames and not remote_numbers \
+                and remote_gifts_count <= 0 and remote_rating is None:
+            return False
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+            user_obj = ctrl.getUser(tuid)
+            if user_obj is None:
+                return False
+            any_set = False
+            if st is not None:
+                try:
+                    if self._set_field(user_obj, "emoji_status", st):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_unames:
+                try:
+                    if self._apply_remote_nft_username_to_user(user_obj, remote_unames):
+                        any_set = True
+                except Exception:
+                    pass
+            if remote_numbers:
+                try:
+                    if self._apply_remote_nft_number_to_user(user_obj, remote_numbers[0]):
+                        any_set = True
+                except Exception:
+                    pass
+
+            # Bump cached UserFull.stargifts_count too — that's the field
+            # ProfileActivity reads to decide whether to render the gifts
+            # tab on a foreign profile.
+            full_obj = None
+            try:
+                full_obj = ctrl.getUserFull(tuid)
+            except Exception:
+                full_obj = None
+            if full_obj is not None and remote_gifts_count > 0:
+                try:
+                    if self._apply_remote_stargifts_count_to_obj(full_obj, remote_gifts_count):
+                        any_set = True
+                except Exception:
+                    pass
+            # Patch the cached UserFull.stars_rating with the synced rating.
+            if full_obj is not None and remote_rating is not None:
+                try:
+                    if self._apply_remote_rating_to_full_user(full_obj, *remote_rating):
+                        any_set = True
+                except Exception:
+                    pass
+
+            if not any_set:
+                return False
+            try:
+                ctrl.putUser(user_obj, False, True)
+            except Exception:
+                try:
+                    ctrl.putUser(user_obj, False)
+                except Exception:
+                    pass
+            try:
+                self._post_remote_profile_notifications(tuid, user_obj, reason="remote_wear_patch")
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            _log(f"sync remote cached user patch error uid={tuid}: {e}")
+            return False
+
+    def _sync_schedule_remote_user_patch(self, target_user_id, delays=None):
+        try:
+            tuid = int(target_user_id or 0)
+        except Exception:
+            tuid = 0
+        if tuid <= 0:
+            return None
+        if delays is None:
+            delays = [0, 80, 220, 520, 1100]
+
+        def _cb():
+            try:
+                self._sync_patch_remote_cached_user(tuid)
+            except Exception:
+                pass
+
+        return self._schedule_ui_batch(f"sync_remote_user_patch:{tuid}", _cb, delays)
+
+    def _post_remote_profile_notifications(self, user_id, user_obj=None, reason="remote_profile_patch"):
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        try:
+            if bool(getattr(self, "_plugin_unloading", False)) or bool(getattr(self, "_patching_nc", False)):
+                return 0
+        except Exception:
+            pass
+        try:
+            notify_map = getattr(self, "_remote_profile_notify_ts", None)
+            if not isinstance(notify_map, dict):
+                notify_map = {}
+                self._remote_profile_notify_ts = notify_map
+            key = f"{reason}:{uid}"
+            now = time.time()
+            last = float(notify_map.get(key, 0.0) or 0.0)
+            if (now - last) < 0.18:
+                return 0
+            notify_map[key] = now
+        except Exception:
+            pass
+
+        captured_user = user_obj
+
+        def _emit():
+            try:
+                self._patching_nc = True
+            except Exception:
+                pass
+            try:
+                try:
+                    account = int(get_user_config().selectedAccount or 0)
+                except Exception:
+                    account = 0
+                try:
+                    NC = jclass("org.telegram.messenger.NotificationCenter")
+                    nc = NC.getInstance(to_java_int(account))
+                    gnc = NC.getGlobalInstance()
+                except Exception:
+                    return
+                if nc is None:
+                    return
+
+                def _eid(name):
+                    try:
+                        return int(self._get_notification_center_event_id(NC, name) or 0)
+                    except Exception:
+                        return 0
+
+                try:
+                    MC = jclass("org.telegram.messenger.MessagesController")
+                    try:
+                        mask_emoji = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                    except Exception:
+                        mask_emoji = 524288
+                    try:
+                        mask_name = int(MC.UPDATE_MASK_NAME)
+                    except Exception:
+                        mask_name = 2
+                    eid = _eid("updateInterfaces")
+                    if eid > 0:
+                        nc.postNotificationName(to_java_int(eid), to_java_Integer(mask_emoji | mask_name))
+                except Exception:
+                    pass
+
+                try:
+                    target_user = captured_user
+                    if target_user is None:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            target_user = ctrl.getUser(uid)
+                        except Exception:
+                            target_user = None
+                    eid = _eid("userEmojiStatusUpdated")
+                    if eid > 0 and target_user is not None:
+                        nc.postNotificationName(to_java_int(eid), target_user)
+                except Exception:
+                    pass
+
+                try:
+                    eid = _eid("emojiLoaded")
+                    if eid > 0 and gnc is not None:
+                        gnc.postNotificationName(to_java_int(eid))
+                except Exception:
+                    pass
+
+                # userInfoDidLoad(uid, userFull) — repaints UserFull-driven
+                # widgets in ProfileActivity (rating badge, stories ring, gifts
+                # tab, avatar story-indicator). Without this the StarRatingView
+                # keeps showing the level Telegram drew before our cache patch
+                # landed — symptom: own profile shows level=6, foreign profile
+                # shows the default level=1. updateInterfaces alone does NOT
+                # repaint ratingView; ProfileActivity gates the rating refresh
+                # specifically on userInfoDidLoad (~line 9091).
+                # Chaquopy autoboxes Python int -> java.lang.Long in Object[]
+                # varargs, which matches ProfileActivity's `(Long) args[0]`
+                # cast — pass uid bare, no manual JLong wrap (the wrap was
+                # silently failing on some builds).
+                try:
+                    eid = _eid("userInfoDidLoad")
+                    if eid > 0:
+                        try:
+                            ctrl_mc = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            user_full = ctrl_mc.getUserFull(uid)
+                        except Exception:
+                            user_full = None
+                        if user_full is not None:
+                            try:
+                                nc.postNotificationName(to_java_int(eid), uid, user_full)
+                                _log(f"posted userInfoDidLoad for uid={uid}")
+                            except Exception as _ue:
+                                _log(f"userInfoDidLoad post error: {_ue}")
+                except Exception:
+                    pass
+            finally:
+                try:
+                    self._patching_nc = False
+                except Exception:
+                    pass
+
+        try:
+            run_on_ui_thread(_emit)
+            return 1
+        except Exception:
+            try:
+                _emit()
+                return 1
+            except Exception:
+                return 0
+
+    def _sync_apply_remote_hide_official(self, gifts_list, user_id):
+        """If remote user's snapshot has hide_official_gifts=True, strip all
+        server-returned wrappers from the list. Called BEFORE
+        _sync_inject_remote_gifts so the list is clean by the time we
+        re-populate it with synced plugin gifts.
+        """
+        if gifts_list is None:
+            return 0
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return 0
+        # The toggle changes more often than the freshness window, so prefer
+        # an authoritative blocking fetch. Falls back to whatever is cached
+        # if the server is slow / offline so behaviour stays deterministic.
+        record = None
+        try:
+            record = client.fetch_remote_state_blocking(uid, max_timeout=1.5)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            try:
+                record = client.get_cached(uid)
+            except Exception:
+                record = None
+        if not isinstance(record, dict):
+            try:
+                _log(f"hide-official: no record for uid={uid}, skipping")
+            except Exception:
+                pass
+            return 0
+        try:
+            hide_flag = bool(record.get("hide_official_gifts", False))
+        except Exception:
+            hide_flag = False
+        try:
+            _log(f"hide-official: uid={uid} flag={hide_flag} record_age={int(time.time() - (record.get('updated_at') or 0))}s")
+        except Exception:
+            pass
+        if not hide_flag:
+            return 0
+        removed = 0
+        try:
+            for i in range(int(gifts_list.size() or 0) - 1, -1, -1):
+                try:
+                    gifts_list.remove(i)
+                    removed += 1
+                except Exception:
+                    continue
+        except Exception as e:
+            try:
+                _log(f"remote hide-official strip error: {e}")
+            except Exception:
+                pass
+        if removed:
+            try:
+                _log(f"Remote hide-official: stripped {removed} server gifts for uid={uid}")
+            except Exception:
+                pass
+        return removed
+
+    def _bump_remote_gifts_list_total_count(self, user_id, desired_min=3):
+        """Bump `totalCount` on any cached StarsController.GiftsList for the
+        given foreign dialog so the gift grid renders 3 columns even when the
+        server's real `count` is < 3.
+        """
+        try:
+            uid = int(user_id or 0)
+        except Exception:
+            uid = 0
+        if uid <= 0:
+            return 0
+        try:
+            desired = max(int(desired_min or 0), 3)
+        except Exception:
+            desired = 3
+        bumped = 0
+        try:
+            CtrlClass = jclass("org.telegram.ui.Stars.StarsController")
+            try:
+                ctrl = CtrlClass.getInstance(self._get_user_account_or_default())
+            except Exception:
+                try:
+                    ctrl = CtrlClass.getInstance(0)
+                except Exception:
+                    ctrl = None
+            if ctrl is None:
+                return 0
+            try:
+                fields = list(self._iter_object_fields(ctrl))
+            except Exception:
+                fields = []
+            seen_ids = set()
+            for f in fields:
+                try:
+                    val = f.get(ctrl)
+                except Exception:
+                    continue
+                if val is None:
+                    continue
+                bumped += self._maybe_bump_gifts_list_total(val, uid, desired, seen_ids, depth=0)
+        except Exception as _ee:
+            try:
+                _log(f"_bump_remote_gifts_list_total_count error: {_ee}")
+            except Exception:
+                pass
+        if bumped:
+            try:
+                _log(f"Remote GiftsList totalCount bumped to >= {desired} for uid={uid} (n={bumped})")
+            except Exception:
+                pass
+        return bumped
+
+    def _maybe_bump_gifts_list_total(self, obj, uid, desired, seen_ids, depth=0):
+        if obj is None or depth > 3:
+            return 0
+        try:
+            oid = int(obj.hashCode())
+        except Exception:
+            oid = id(obj)
+        if oid in seen_ids:
+            return 0
+        seen_ids.add(oid)
+        bumped = 0
+        try:
+            cls_name = str(obj.getClass().getName() or "")
+        except Exception:
+            cls_name = ""
+        if "GiftsList" in cls_name:
+            try:
+                did = int(self._to_int(get_val(obj, "dialogId", 0), 0) or 0)
+            except Exception:
+                did = 0
+            if did == uid:
+                try:
+                    cur = int(self._to_int(get_val(obj, "totalCount", 0), 0) or 0)
+                except Exception:
+                    cur = 0
+                if cur < desired:
+                    try:
+                        if self._set_field(obj, "totalCount", int(desired)):
+                            bumped += 1
+                    except Exception:
+                        pass
+            return bumped
+        try:
+            if hasattr(obj, "size") and hasattr(obj, "get") and not hasattr(obj, "put"):
+                try:
+                    n = int(obj.size() or 0)
+                except Exception:
+                    n = 0
+                for i in range(min(n, 32)):
+                    try:
+                        bumped += self._maybe_bump_gifts_list_total(obj.get(i), uid, desired, seen_ids, depth + 1)
+                    except Exception:
+                        continue
+                return bumped
+            if hasattr(obj, "values") and hasattr(obj, "get") and hasattr(obj, "size"):
+                try:
+                    vals = obj.values()
+                    it = vals.iterator()
+                    cnt = 0
+                    while it.hasNext() and cnt < 64:
+                        cnt += 1
+                        try:
+                            bumped += self._maybe_bump_gifts_list_total(it.next(), uid, desired, seen_ids, depth + 1)
+                        except Exception:
+                            break
+                    return bumped
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return bumped
+
+    def _get_user_account_or_default(self):
+        try:
+            UC = jclass("org.telegram.messenger.UserConfig")
+            try:
+                return int(UC.selectedAccount)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return 0
+
+    def _sync_inject_remote_gifts(self, gifts_list, user_id):
+        if gifts_list is None or int(user_id or 0) <= 0:
+            return 0
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return 0
+        # Prefer the freshest data. Use cache only if it's < ~3s old; otherwise
+        # do a blocking fetch so the user sees current NFTs on every profile
+        # open instead of an aging snapshot.
+        record = None
+        try:
+            record = client.get_cached_fresh(user_id, max_age_sec=3)
+        except Exception:
+            record = None
+        if not isinstance(record, dict):
+            # First-open fetches are racing ProfileActivity's render — give
+            # the HTTP round-trip 4s instead of 2s. The async invalidate
+            # path in _sync_on_remote_state retries anyway when the
+            # snapshot eventually lands, so this is an immediate-rendering
+            # quality knob to reduce the rate of empty first renders.
+            try:
+                fetched = client.fetch_remote_state_blocking(user_id, max_timeout=4.0)
+                if isinstance(fetched, dict):
+                    record = fetched
+            except Exception as _fe:
+                _log(f"sync remote blocking fetch error: {_fe}")
+            if not isinstance(record, dict):
+                # last-resort: any cached value, even if stale
+                try:
+                    record = client.get_cached(user_id)
+                except Exception:
+                    record = None
+        # Always queue an async refresh too — covers next profile reopen.
+        try:
+            client.request_remote_state(user_id, force=True)
+        except Exception:
+            pass
+        if not isinstance(record, dict):
+            return 0
+        gifts_raw = record.get("gifts") or []
+        if not isinstance(gifts_raw, list) or not gifts_raw:
+            return 0
+        try:
+            existing_ids = set()
+            for i in range(int(gifts_list.size() or 0)):
+                try:
+                    it = gifts_list.get(i)
+                    g = get_val(it, "gift", None)
+                    gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+                    if gid > 0:
+                        existing_ids.add(gid)
+                except Exception:
+                    continue
+        except Exception:
+            existing_ids = set()
+        # Make sure the meta cache exists (per-process, lives until plugin reload).
+        if not hasattr(self, "_sync_remote_gift_meta_cache") or not isinstance(
+            getattr(self, "_sync_remote_gift_meta_cache", None), dict
+        ):
+            self._sync_remote_gift_meta_cache = {}
+
+        # Buffers for two-phase insert: pinned ones go above the fold, normal
+        # ones get appended. Telegram orders saved gifts by `pinned_to_top`
+        # first; if we just `gifts_list.add(wrapper)` for a pinned gift it
+        # lands at the bottom anyway because we appended after the natural
+        # pinned block. Collect first, place properly after.
+        pending_pinned = []   # list of (wrapper, pinned_order_hint)
+        pending_normal = []
+        inserted = 0
+        for entry in gifts_raw:
+            if not isinstance(entry, dict):
+                continue
+            b64 = entry.get("b64") or entry.get("payload_b64")
+            if not isinstance(b64, str) or len(b64) < 16:
+                continue
+            try:
+                wrapper = deserialize_tl_saved_gift(b64)
+            except Exception as e:
+                _log(f"sync remote deserialize fail: {e}")
+                continue
+            if wrapper is None:
+                continue
+            g = None
+            try:
+                g = get_val(wrapper, "gift", None)
+                gid = int(get_val(g, "id", 0) or 0) if g is not None else 0
+            except Exception:
+                gid = 0
+            # Dedup case — the gift already exists in the server's response
+            # (very common when the user added their REAL Telegram NFT to the
+            # plugin to attach a value/star/TON config). Just skipping leaves
+            # the server's pristine copy with no value patches and no meta in
+            # our cache, so neither the native «GiftValue2» row nor our
+            # custom «Ценность» fallback ever appear. Instead: walk the list,
+            # find the existing wrapper, mutate ITS inner gift in-place with
+            # the same patches, and populate the meta cache by that gid so
+            # the after-hook still finds the cfg.
+            if gid > 0 and gid in existing_ids:
+                try:
+                    self._sync_patch_existing_gift_in_list(gifts_list, gid, entry, int(user_id))
+                except Exception as _pe:
+                    _log(f"sync remote dedup-patch error gid={gid}: {_pe}")
+                continue
+            if gid > 0:
+                existing_ids.add(gid)
+
+            # Set owner_id on the gift so Telegram's StarGiftSheet renders
+            # the "Владелец" row. Do NOT propagate from_id / saved_from_id /
+            # to_id — Telegram interprets a non-null `gift.from_id` as
+            # "this user sent you the gift" (StarGiftSheet.java:8374) and
+            # plasters a "X sent you this gift on <date>" header above the
+            # sheet, which is wrong when the viewer just opened a third
+            # party's profile.
+            try:
+                self._set_user_ref_fields(g, ["owner_id", "owner", "ownerId"], int(user_id))
+            except Exception:
+                pass
+            try:
+                self._set_user_ref_fields(wrapper, ["owner_id", "owner", "ownerId"], int(user_id))
+            except Exception:
+                pass
+            # Explicitly clear from_id / saved_from_id / sender_id on the
+            # wrapper if the sender's serialized b64 had them set (e.g. they
+            # had configured "from" in the constructor — that's a self-only
+            # decoration and must not surface as a gift-sender on the viewer).
+            for _null_field in ("from_id", "fromId", "saved_from_id", "savedFromId",
+                                  "sender_id", "senderId", "sender"):
+                try:
+                    self._set_field(wrapper, _null_field, None)
+                except Exception:
+                    pass
+            # Also clear the SavedStarGift `flags & 2` bit ("from_id present")
+            # so any other Telegram code path that reads the flag doesn't
+            # falsely think there's a sender.
+            try:
+                cur_flags = int(self._to_int(get_val(wrapper, "flags", 0), 0) or 0)
+                if cur_flags & 2:
+                    self._set_field(wrapper, "flags", int(cur_flags & ~2))
+            except Exception:
+                pass
+
+            # Custom star/upgrade values (transfer/convert/resale).
+            try:
+                stars_cfg = entry.get("gift_stars_config")
+                if isinstance(stars_cfg, dict):
+                    self._apply_gift_stars_config_to_objects(gift=g, wrapper=wrapper, stars_config=stars_cfg)
+            except Exception:
+                pass
+
+            # Native «GiftValue2» row — populates gift.value_amount /
+            # value_currency + flags|=256 so Telegram shows the value row
+            # natively at StarGiftSheet.java:4194. Our custom «Ценность»
+            # row injector fires on top of this from the after-hook;
+            # native row is the more familiar UX since it matches what
+            # users see on real priced gifts.
+            try:
+                value_cfg = entry.get("value_config")
+                if isinstance(value_cfg, dict):
+                    if self._apply_value_config_to_gift_native(g, value_cfg):
+                        try:
+                            _log(f"remote gift native value applied: id={int(get_val(g, 'id', 0) or 0)}")
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            # Remember meta so the StarGiftSheet "Ценность" row injector can
+            # surface it for remote gifts (which have no local library entry).
+            try:
+                meta = {
+                    "_remote_origin_uid": int(user_id),
+                    "identity_config": entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {},
+                    "value_config": entry.get("value_config") if isinstance(entry.get("value_config"), dict) else {},
+                    "gift_stars_config": entry.get("gift_stars_config") if isinstance(entry.get("gift_stars_config"), dict) else {},
+                    "ton_display_config": entry.get("ton_display_config") if isinstance(entry.get("ton_display_config"), dict) else {},
+                    "title": str(entry.get("title", "") or ""),
+                    "slug": str(entry.get("slug", "") or ""),
+                    "unique_id": int(entry.get("unique_id", 0) or 0),
+                }
+                cache = self._sync_remote_gift_meta_cache
+                try:
+                    uniq = int(get_val(g, "id", 0) or 0)
+                except Exception:
+                    uniq = 0
+                if uniq > 0:
+                    cache[f"id:{uniq}"] = meta
+                if meta["unique_id"] > 0:
+                    cache[f"unique:{meta['unique_id']}"] = meta
+                if meta["slug"]:
+                    cache[f"slug:{meta['slug']}"] = meta
+                try:
+                    _vc_str = str((meta.get("value_config") or {}).get("amount", "") or "")
+                    _gs_amt = int((meta.get("gift_stars_config") or {}).get("amount", 0) or 0)
+                    if _vc_str or _gs_amt > 0:
+                        _log(f"remote meta cached id={uniq} slug={meta['slug']!r} value={_vc_str!r} stars={_gs_amt}")
+                except Exception:
+                    pass
+                # Trim oversize cache (keep last ~256 entries)
+                if len(cache) > 320:
+                    for k in list(cache.keys())[: len(cache) - 256]:
+                        cache.pop(k, None)
+            except Exception:
+                pass
+
+            # Re-apply pinned / hidden / order_hint from the entry meta so
+            # pinned status survives even when the sender's serialized b64
+            # was captured before they pinned the gift.
+            is_pinned = False
+            entry_pinned = entry.get("pinned_override", None)
+            if entry_pinned is not None:
+                is_pinned = bool(entry_pinned)
+                for fn in ("pinned_to_top", "pinnedToTop", "pinned", "is_pinned", "isPinned"):
+                    try:
+                        self._set_field(wrapper, fn, bool(entry_pinned))
+                    except Exception:
+                        pass
+            else:
+                # No entry override → trust whatever the deserialized wrapper had.
+                try:
+                    is_pinned = bool(get_val(wrapper, "pinned_to_top", False))
+                except Exception:
+                    is_pinned = False
+
+            entry_hidden = entry.get("hidden_override", None)
+            if entry_hidden is not None:
+                for fn in ("hidden", "is_hidden", "isHidden"):
+                    try:
+                        self._set_field(wrapper, fn, bool(entry_hidden))
+                    except Exception:
+                        pass
+
+            try:
+                ord_hint = int(entry.get("order_hint", 0) or 0)
+            except Exception:
+                ord_hint = 0
+
+            inserted += 1
+            if is_pinned:
+                pending_pinned.append((wrapper, ord_hint))
+            else:
+                pending_normal.append(wrapper)
+            if inserted >= 32:
+                break
+
+        # Phase 2: insert pinned wrappers above the fold, normal wrappers at end.
+        if pending_pinned or pending_normal:
+            try:
+                # Find first non-pinned index in the existing list — this is
+                # where new pinned items should slot in so they stay together
+                # with whatever pinned items the server already returned.
+                pin_anchor = 0
+                try:
+                    cur_size = int(gifts_list.size() or 0)
+                except Exception:
+                    cur_size = 0
+                for i in range(cur_size):
+                    try:
+                        it = gifts_list.get(i)
+                    except Exception:
+                        break
+                    try:
+                        if not bool(get_val(it, "pinned_to_top", False)):
+                            break
+                    except Exception:
+                        break
+                    pin_anchor = i + 1
+
+                # Sort our pinned candidates by descending order_hint so the
+                # most recently-pinned ones land closest to the top.
+                try:
+                    pending_pinned.sort(key=lambda t: -int(t[1] or 0))
+                except Exception:
+                    pass
+                for w, _oh in pending_pinned:
+                    try:
+                        gifts_list.add(int(pin_anchor), w)
+                        pin_anchor += 1
+                    except Exception:
+                        try:
+                            gifts_list.add(w)
+                        except Exception:
+                            pass
+                for w in pending_normal:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+            except Exception as _ie:
+                _log(f"sync remote insert error: {_ie}")
+                # Fallback: just append everything
+                for w, _oh in pending_pinned:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+                for w in pending_normal:
+                    try:
+                        gifts_list.add(w)
+                    except Exception:
+                        pass
+
+        return inserted
+
+    def _sync_patch_existing_gift_in_list(self, gifts_list, gid, entry, owner_uid):
+        """Walk gifts_list, find a wrapper whose inner gift.id == gid, and
+        apply the per-gift configs from `entry` to it in-place. Also populates
+        the remote-meta cache keyed by gid so the StarGiftSheet after-hook
+        can later find the cfg even though we never added a wrapper of our
+        own (the gift was already present in the server's response).
+        Returns True on hit.
+        """
+        if gifts_list is None or gid <= 0 or not isinstance(entry, dict):
+            return False
+        try:
+            size = int(gifts_list.size() or 0)
+        except Exception:
+            size = 0
+        target_w = None
+        target_g = None
+        for i in range(size):
+            try:
+                w = gifts_list.get(i)
+            except Exception:
+                continue
+            if w is None:
+                continue
+            try:
+                g = get_val(w, "gift", None)
+            except Exception:
+                g = None
+            if g is None:
+                continue
+            try:
+                this_id = int(get_val(g, "id", 0) or 0)
+            except Exception:
+                this_id = 0
+            if this_id == gid:
+                target_w = w
+                target_g = g
+                break
+        if target_g is None:
+            try:
+                _log(f"sync remote dedup-patch: gid={gid} not found in list (size={size})")
+            except Exception:
+                pass
+            return False
+
+        # Native «GiftValue2» — the main goal of the dedup-patch path.
+        try:
+            value_cfg = entry.get("value_config")
+            if isinstance(value_cfg, dict):
+                if self._apply_value_config_to_gift_native(target_g, value_cfg):
+                    try:
+                        _log(f"sync remote dedup-patch: native value applied gid={gid}")
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # Custom-row meta cache — keep the after-hook fallback functional.
+        try:
+            stars_cfg = entry.get("gift_stars_config")
+            if isinstance(stars_cfg, dict):
+                self._apply_gift_stars_config_to_objects(gift=target_g, wrapper=target_w, stars_config=stars_cfg)
+        except Exception:
+            pass
+        # Populate the meta cache so _get_remote_gift_meta_for_gift HITs.
+        try:
+            cache = getattr(self, "_sync_remote_gift_meta_cache", None)
+            if not isinstance(cache, dict):
+                cache = {}
+                self._sync_remote_gift_meta_cache = cache
+            try:
+                slug = str(get_val(target_g, "slug", "") or "")
+            except Exception:
+                slug = ""
+            try:
+                unique_id_val = int(entry.get("unique_id", 0) or 0)
+            except Exception:
+                unique_id_val = 0
+            meta = {
+                "_remote_origin_uid": int(owner_uid or 0),
+                "identity_config": entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {},
+                "value_config": entry.get("value_config") if isinstance(entry.get("value_config"), dict) else {},
+                "gift_stars_config": entry.get("gift_stars_config") if isinstance(entry.get("gift_stars_config"), dict) else {},
+                "ton_display_config": entry.get("ton_display_config") if isinstance(entry.get("ton_display_config"), dict) else {},
+                "title": str(entry.get("title", "") or ""),
+                "slug": slug or str(entry.get("slug", "") or ""),
+                "unique_id": unique_id_val,
+            }
+            cache[f"id:{gid}"] = meta
+            if unique_id_val > 0:
+                cache[f"unique:{unique_id_val}"] = meta
+            if meta["slug"]:
+                cache[f"slug:{meta['slug']}"] = meta
+            try:
+                _vc_str = str((meta.get("value_config") or {}).get("amount", "") or "")
+                if _vc_str:
+                    _log(f"sync remote dedup-patch: meta cached gid={gid} value={_vc_str!r}")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return True
+
+    def _get_remote_gift_meta_for_gift(self, gift):
+        """Look up cached remote-sync meta for a TL gift object.
+        Tries gift.id → unique_id → slug. Logs cache hit/miss for diagnosing
+        the "ценность не видно" complaint — without this we couldn't tell
+        whether the meta cache was even being populated.
+        """
+        if gift is None:
+            return None
+        cache = getattr(self, "_sync_remote_gift_meta_cache", None)
+        if not isinstance(cache, dict) or not cache:
+            try:
+                _log("remote gift meta lookup: cache empty")
+            except Exception:
+                pass
+            return None
+        try:
+            gid = int(get_val(gift, "id", 0) or 0)
+        except Exception:
+            gid = 0
+        try:
+            slug = str(get_val(gift, "slug", "") or "")
+        except Exception:
+            slug = ""
+        if gid > 0:
+            m = cache.get(f"id:{gid}")
+            if m:
+                try:
+                    _log(f"remote gift meta HIT id:{gid}")
+                except Exception:
+                    pass
+                return m
+            m = cache.get(f"unique:{gid}")
+            if m:
+                try:
+                    _log(f"remote gift meta HIT unique:{gid}")
+                except Exception:
+                    pass
+                return m
+        if slug:
+            m = cache.get(f"slug:{slug}")
+            if m:
+                try:
+                    _log(f"remote gift meta HIT slug:{slug}")
+                except Exception:
+                    pass
+                return m
+        # Fallback: walk all meta entries comparing slug or unique_id. Catches
+        # cases where Telegram refreshed the gift via getUniqueStarGift between
+        # our injection and the sheet-open and the field-name shape we keyed
+        # on no longer matches.
+        try:
+            for k, m in cache.items():
+                if not isinstance(m, dict):
+                    continue
+                try:
+                    m_slug = str(m.get("slug", "") or "")
+                except Exception:
+                    m_slug = ""
+                if slug and m_slug and m_slug == slug:
+                    try:
+                        _log(f"remote gift meta HIT walk:slug={slug}")
+                    except Exception:
+                        pass
+                    return m
+                try:
+                    m_uniq = int(m.get("unique_id", 0) or 0)
+                except Exception:
+                    m_uniq = 0
+                if gid > 0 and m_uniq > 0 and m_uniq == gid:
+                    try:
+                        _log(f"remote gift meta HIT walk:unique={gid}")
+                    except Exception:
+                        pass
+                    return m
+        except Exception:
+            pass
+        try:
+            _log(f"remote gift meta MISS id={gid} slug={slug!r} cache_size={len(cache)}")
+        except Exception:
+            pass
+        return None
+
+    def _apply_native_value_to_gift_for_sheet(self, gift):
+        """Resolve the value_config for `gift` (from either local library
+        for own gifts, or remote sync meta cache for foreign gifts) and
+        write the native gift.value_amount / value_currency / flags|=256
+        fields BEFORE Telegram's StarGiftSheet.set() reads them. This is
+        the only timing where the native «GiftValue2» row can be made to
+        appear — patching the same fields after-hook is too late.
+        """
+        if gift is None:
+            return False
+        cfg = None
+        # Local library — both for own profile and for any gift the user
+        # has stored locally (e.g. they added a foreign user's gift to
+        # their library and want to see their own value annotation).
+        try:
+            key = self._resolve_library_key_for_gift(gift)
+        except Exception:
+            key = None
+        if key:
+            try:
+                e = self._library_find_entry(key)
+            except Exception:
+                e = None
+            if isinstance(e, dict):
+                vc = e.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        # Remote sync — meta cache populated by _sync_inject_remote_gifts
+        # and the dedup-patch helper. Fires for foreign profile gifts.
+        if cfg is None:
+            try:
+                meta = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                meta = None
+            if isinstance(meta, dict):
+                vc = meta.get("value_config")
+                if isinstance(vc, dict):
+                    cfg = vc
+        if not isinstance(cfg, dict):
+            return False
+        try:
+            ok = bool(self._apply_value_config_to_gift_native(gift, cfg))
+        except Exception:
+            ok = False
+        if ok:
+            try:
+                _log(f"native value pre-patch OK gift_id={int(get_val(gift, 'id', 0) or 0)}")
+            except Exception:
+                pass
+        return ok
+
+    def _apply_value_config_to_gift_native(self, gift, value_config):
+        """Populate Telegram's native gift.value_amount / value_currency /
+        flags|=256 from a per-gift value_config dict — so the receiver
+        sees Telegram's stock «GiftValue2» row («~$X.XX») instead of just
+        our custom «Ценность» row. The two row injectors complement each
+        other: the native row is shown when value_amount looks plausible,
+        our row is rendered as a labelled fallback via the StarGiftSheet
+        after-hook.
+        """
+        if gift is None or not isinstance(value_config, dict):
+            return False
+        try:
+            amount_str = str(value_config.get("amount", "") or "").strip()
+        except Exception:
+            amount_str = ""
+        if not amount_str:
+            return False
+        try:
+            currency = str(value_config.get("currency", "USD") or "USD").strip().upper()
+        except Exception:
+            currency = "USD"
+        if currency not in ("USD", "EUR", "RUB"):
+            currency = "USD"
+        # Telegram's BillingController stores currency amounts in the
+        # smallest unit (cents for USD/EUR/RUB → exp=2). For unsupported
+        # currencies we'd need to look up the exp; for our three the rule
+        # is the same.
+        try:
+            amount_float = float(amount_str.replace(",", "."))
+        except Exception:
+            return False
+        if amount_float <= 0:
+            return False
+        cents = int(round(amount_float * 100))
+        if cents <= 0:
+            return False
+        changed = False
+        try:
+            if self._set_field(gift, "value_amount", int(cents)):
+                changed = True
+        except Exception:
+            pass
+        try:
+            if self._set_field(gift, "value_currency", str(currency)):
+                changed = True
+        except Exception:
+            pass
+        # Set TL_starGiftUnique.flags bit 8 (== 256) so Telegram believes
+        # value_amount is present and renders the row at line 4194 in
+        # StarGiftSheet.java.
+        try:
+            cur_flags = int(self._to_int(get_val(gift, "flags", 0), 0) or 0)
+            if not (cur_flags & 256):
+                self._set_field(gift, "flags", int(cur_flags | 256))
+                changed = True
+        except Exception:
+            pass
+        return changed
+
+    def _sync_bootstrap(self):
+        if not hasattr(self, "_eblannft_sync_lock"):
+            self._eblannft_sync_lock = threading.Lock()
+        if getattr(self, "_eblannft_sync_client", None) is not None:
+            return
+        try:
+            from . import sync_client as _sync_module
+        except Exception:
+            try:
+                import eblannft_beta_runtime.sync_client as _sync_module  # type: ignore
+            except Exception as e:
+                _log(f"sync module import failed: {e}")
+                return
+        cfg = self._sync_get_settings()
+        if not cfg.get("enabled", True):
+            _log("sync disabled by config")
+            return
+        try:
+            client = _sync_module.SyncClient(
+                server_url=cfg.get("server_url"),
+                plugin_key=cfg.get("plugin_key"),
+                collect_local_state=self._sync_collect_local_state,
+                on_remote_state=self._sync_on_remote_state,
+                get_my_user_id=self._sync_my_user_id,
+            )
+            client.start()
+            self._eblannft_sync_client = client
+            try:
+                def _initial_push():
+                    try:
+                        time.sleep(2.0)
+                        client.push_my_state_now(force=True)
+                    except Exception:
+                        pass
+                threading.Thread(target=_initial_push, daemon=True).start()
+            except Exception:
+                pass
+        except Exception as e:
+            _log(f"sync bootstrap failed: {e}")
+
+    def _sync_shutdown(self):
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return
+        try:
+            client.stop()
+        except Exception:
+            pass
+        self._eblannft_sync_client = None
+
     def _hook_native_catalog_ui(self):
         try:
             JavaClass = jclass("java.lang.Class")
@@ -2287,7 +4139,7 @@ class NftClonerPlugin(BasePlugin):
             self._hook_gift_three_dots_menu()
             self._hook_local_gift_value_ui()
             self._hook_drawer_phone_ui()
-            # Custom settings header/footer disabled in runtime-loader build.
+            self._setup_settings_header_hook()
             self._prewarm_self_user_info_cache(force=True)
 
             if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active():
@@ -2301,11 +4153,6 @@ class NftClonerPlugin(BasePlugin):
                 self._maybe_show_first_install_welcome()
             except Exception as inner_e:
                 _log(f"Welcome bootstrap error: {inner_e}")
-
-            try:
-                self._maybe_auto_check_updates()
-            except Exception as inner_e:
-                _log(f"Auto update bootstrap error: {inner_e}")
 
             try:
                 self._sync_bootstrap()
@@ -2355,198 +4202,6 @@ class NftClonerPlugin(BasePlugin):
         except Exception:
             pass
         self._shutdown_bg_executor()
-
-    # ---------------------------------------------------------------
-    # eblanNFT Beta 1.0.2 — VPS sync integration
-    # ---------------------------------------------------------------
-    def _sync_get_settings(self):
-        cfg = {
-            "enabled": True,
-            "server_url": "http://127.0.0.1:8787",
-            "plugin_key": "",
-        }
-        try:
-            stored = getattr(self, "_eblannft_sync_cfg", None)
-            if isinstance(stored, dict):
-                cfg.update({k: stored.get(k, cfg[k]) for k in cfg.keys()})
-        except Exception:
-            pass
-        return cfg
-
-    def _sync_save_settings(self, **patch):
-        cfg = self._sync_get_settings()
-        cfg.update({k: v for k, v in patch.items() if k in cfg})
-        self._eblannft_sync_cfg = cfg
-        try:
-            client = getattr(self, "_eblannft_sync_client", None)
-            if client is not None:
-                client.update_endpoint(server_url=cfg.get("server_url"),
-                                       plugin_key=cfg.get("plugin_key"))
-                client.set_enabled(bool(cfg.get("enabled", True)))
-        except Exception:
-            pass
-        return cfg
-
-    def _sync_my_user_id(self):
-        try:
-            uc = get_user_config()
-            return int(uc.getCurrentUser().id)
-        except Exception:
-            try:
-                return int(get_user_config().clientUserId)
-            except Exception:
-                return 0
-
-    def _sync_collect_local_state(self):
-        """Build a shareable snapshot of local NFT/identity state.
-
-        Только публичные/визуальные поля. Никаких приватных ключей,
-        диск не сериализуется здесь — берём из уже-собранных in-memory
-        структур плагина и обходим неподдерживаемые типы.
-        """
-        snapshot = {
-            "plugin_id": "eblannft_beta",
-            "updated_at": int(time.time()),
-            "gifts": [],
-            "wear_active": False,
-            "wear_collectible_id": 0,
-            "wear_status_data": {},
-            "username_state": {
-                "enabled": bool(self._is_nft_username_active()) if hasattr(self, "_is_nft_username_active") else False,
-                "tokens": list(getattr(self, "_nft_username_tokens", []) or []),
-                "price_ton": str(getattr(self, "_nft_username_price_ton", "0") or "0"),
-                "price_usd": str(getattr(self, "_nft_username_price_usd", "0") or "0"),
-                "purchase_date": str(getattr(self, "_nft_username_purchase_date", "") or ""),
-            },
-            "number_state": {
-                "enabled": bool(self._is_nft_number_active()) if hasattr(self, "_is_nft_number_active") else False,
-                "tokens": list(getattr(self, "_nft_number_tokens", []) or []),
-                "price_ton": str(getattr(self, "_nft_number_price_ton", "0") or "0"),
-                "price_usd": str(getattr(self, "_nft_number_price_usd", "0") or "0"),
-                "purchase_date": str(getattr(self, "_nft_number_purchase_date", "") or ""),
-            },
-        }
-        try:
-            if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
-                snapshot["wear_active"] = True
-                snapshot["wear_collectible_id"] = int(self.wear_collectible_id)
-                wsd = getattr(self, "wear_status_data", None)
-                if isinstance(wsd, dict):
-                    snapshot["wear_status_data"] = {
-                        k: v for k, v in wsd.items()
-                        if isinstance(v, (str, int, float, bool)) or v is None
-                    }
-        except Exception:
-            pass
-        try:
-            library = getattr(self, "stolen_cache", None) or getattr(self, "_stolen_cache", None) or {}
-            if isinstance(library, dict):
-                items = library.values()
-            elif isinstance(library, list):
-                items = library
-            else:
-                items = []
-            count = 0
-            for entry in items:
-                if not isinstance(entry, dict):
-                    continue
-                b64 = entry.get("b64") or entry.get("payload_b64")
-                if not isinstance(b64, str) or len(b64) < 16:
-                    continue
-                gift = {"b64": b64}
-                for key in ("title", "slug", "key", "gift_kind", "source_gift_kind"):
-                    val = entry.get(key)
-                    if isinstance(val, str) and val:
-                        gift[key] = val
-                for key in ("num", "base_gift_id", "unique_id", "saved_id",
-                            "standard_price_stars", "avail_total", "avail_issued",
-                            "limit_total", "order_hint", "updated_at", "created_at"):
-                    val = entry.get(key)
-                    if isinstance(val, (int, float)):
-                        gift[key] = int(val)
-                for key in ("inject", "limited_flag", "pinned_override", "hidden_override", "official_import", "local_only"):
-                    if key in entry:
-                        gift[key] = bool(entry.get(key))
-                for key in ("wear_status_data", "build_config", "identity_config", "local_upgrade_state", "legacy_meta"):
-                    val = entry.get(key)
-                    if isinstance(val, dict):
-                        gift[key] = {
-                            kk: vv for kk, vv in val.items()
-                            if isinstance(vv, (str, int, float, bool)) or vv is None
-                        }
-                snapshot["gifts"].append(gift)
-                count += 1
-                if count >= 64:
-                    break
-        except Exception as e:
-            _log(f"sync collect gifts error: {e}")
-        return snapshot
-
-    def _sync_on_remote_state(self, user_key, record):
-        try:
-            with getattr(self, "_eblannft_sync_lock", threading.Lock()):
-                cache = getattr(self, "_eblannft_sync_remote_cache", None)
-                if cache is None:
-                    cache = {}
-                    self._eblannft_sync_remote_cache = cache
-                cache[user_key] = record
-        except Exception:
-            pass
-
-    def request_remote_profile(self, user_id):
-        """Public entry point: ask server for another user's NFT state.
-
-        Возвращает кэшированную запись (или None) и параллельно
-        обновляет её в фоне. Безопасно вызывать из любого хука —
-        если sync отключён или сервер недоступен, вернётся None.
-        """
-        try:
-            client = getattr(self, "_eblannft_sync_client", None)
-            if client is None:
-                return None
-            return client.request_remote_state(user_id)
-        except Exception:
-            return None
-
-    def _sync_bootstrap(self):
-        if not hasattr(self, "_eblannft_sync_lock"):
-            self._eblannft_sync_lock = threading.Lock()
-        if getattr(self, "_eblannft_sync_client", None) is not None:
-            return
-        try:
-            from . import sync_client as _sync_module
-        except Exception:
-            try:
-                import eblannft_runtime.sync_client as _sync_module  # type: ignore
-            except Exception as e:
-                _log(f"sync module import failed: {e}")
-                return
-        cfg = self._sync_get_settings()
-        if not cfg.get("enabled", True):
-            _log("sync disabled by config")
-            return
-        try:
-            client = _sync_module.SyncClient(
-                server_url=cfg.get("server_url"),
-                plugin_key=cfg.get("plugin_key"),
-                collect_local_state=self._sync_collect_local_state,
-                on_remote_state=self._sync_on_remote_state,
-                get_my_user_id=self._sync_my_user_id,
-            )
-            client.start()
-            self._eblannft_sync_client = client
-        except Exception as e:
-            _log(f"sync bootstrap failed: {e}")
-
-    def _sync_shutdown(self):
-        client = getattr(self, "_eblannft_sync_client", None)
-        if client is None:
-            return
-        try:
-            client.stop()
-        except Exception:
-            pass
-        self._eblannft_sync_client = None
 
     def create_settings(self):
         username_status = self._display_nft_username() if self._is_nft_username_active() else "ÃƒÂÃ‚Â²Ãƒâ€˜Ã¢â‚¬Â¹ÃƒÂÃ‚ÂºÃƒÂÃ‚Â»"
@@ -2877,6 +4532,18 @@ class NftClonerPlugin(BasePlugin):
             if self._is_my_profile_activity():
                 self._refresh_profile_gifts_ui()
         except:
+            pass
+        # Push the new flag to the server immediately so other plugin users
+        # see the hidden state on the next pull (default 6s) instead of
+        # waiting for the next 12s push tick.
+        try:
+            client = getattr(self, "_eblannft_sync_client", None)
+            if client is not None:
+                threading.Thread(
+                    target=lambda: client.push_my_state_now(force=True),
+                    daemon=True,
+                ).start()
+        except Exception:
             pass
         try:
             BulletinHelper.show_info("Official gifts hidden locally" if enabled else "Official gifts are visible again")
@@ -3610,7 +5277,6 @@ class NftClonerPlugin(BasePlugin):
                 outer.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(14))
             except:
                 pass
-            back_cover_enabled = self._is_settings_back_cover_enabled()
 
             def _try_res(*names):
                 try:
@@ -3733,10 +5399,7 @@ class NftClonerPlugin(BasePlugin):
             try:
                 bg = GradientDrawable()
                 bg.setCornerRadius(float(AndroidUtilities.dp(24)))
-                if back_cover_enabled:
-                    bg.setColor(0xFFC9CBCE)
-                else:
-                    bg.setColor(0xFF171717)
+                bg.setColor(0xFF171717)
                 card.setBackground(bg)
                 card.setClipToOutline(True)
                 card.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
@@ -3749,45 +5412,31 @@ class NftClonerPlugin(BasePlugin):
                 pattern = _build_pattern(card_w, card_h)
                 if pattern is not None:
                     pattern_view.setImageBitmap(pattern)
-                elif back_cover_enabled:
-                    try:
-                        pattern_view.setBackground(self._create_round_rect(0xFFC9CBCE, radius_dp=24))
-                    except:
-                        pass
             except:
                 pass
-            if back_cover_enabled:
-                card.addView(pattern_view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
+            card.addView(pattern_view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
 
             overlay = View(ctx)
             try:
                 overlay_bg = GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    [0x00000000, 0x18000000, 0x8A000000],
+                    [0x00000000, 0x22000000, 0xBB000000],
                 )
                 overlay.setBackground(overlay_bg)
             except:
                 pass
-            if back_cover_enabled:
-                card.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
+            card.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
 
             left_icon = _make_side_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "◧", text_size=22.0)
             right_icon = _make_side_icon(0, "", text_size=24.0)
             lp_left = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT)
             lp_left.leftMargin = AndroidUtilities.dp(16)
             lp_left.topMargin = AndroidUtilities.dp(16)
-            try:
-                left_icon.setClickable(True)
-                left_icon.setFocusable(True)
-                left_icon.setOnClickListener(JOnClickListener(lambda v: self._show_settings_back_cover_menu(left_icon)))
-            except:
-                pass
             card.addView(left_icon, lp_left)
-            if back_cover_enabled:
-                lp_right = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT)
-                lp_right.rightMargin = AndroidUtilities.dp(16)
-                lp_right.topMargin = AndroidUtilities.dp(16)
-                card.addView(right_icon, lp_right)
+            lp_right = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT)
+            lp_right.rightMargin = AndroidUtilities.dp(16)
+            lp_right.topMargin = AndroidUtilities.dp(16)
+            card.addView(right_icon, lp_right)
 
             avatar_wrap = FrameLayout(ctx)
             avatar = None
@@ -3853,73 +5502,6 @@ class NftClonerPlugin(BasePlugin):
             lp_text.rightMargin = AndroidUtilities.dp(16)
             lp_text.bottomMargin = AndroidUtilities.dp(18)
             card.addView(text_box, lp_text)
-
-            toggle = LinearLayout(ctx)
-            toggle.setOrientation(LinearLayout.HORIZONTAL)
-            try:
-                toggle.setGravity(Gravity.CENTER_VERTICAL)
-                toggle.setClickable(True)
-                toggle.setFocusable(True)
-                toggle.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(10), AndroidUtilities.dp(12), AndroidUtilities.dp(10))
-                toggle.setBackground(self._create_round_rect(0xEE0B0B0B, radius_dp=18, stroke_color=0xFF1B1B1B, stroke_dp=1))
-            except:
-                pass
-
-            toggle_text = TextView(ctx)
-            try:
-                toggle_text.setText("Back Cover")
-                toggle_text.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.0)
-                toggle_text.setTextColor(0xFFFFFFFF)
-                try:
-                    toggle_text.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-            except:
-                pass
-            toggle.addView(toggle_text)
-
-            toggle_check = FrameLayout(ctx)
-            try:
-                toggle_check.setBackground(self._create_round_rect(0x00000000, radius_dp=11, stroke_color=0xFFFFFFFF, stroke_dp=1))
-            except:
-                pass
-            check_size = AndroidUtilities.dp(28)
-            if back_cover_enabled:
-                check_label = TextView(ctx)
-                try:
-                    check_label.setText("✓")
-                    check_label.setGravity(Gravity.CENTER)
-                    check_label.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18.0)
-                    check_label.setTextColor(0xFFFFFFFF)
-                    try:
-                        check_label.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                    except:
-                        pass
-                except:
-                    pass
-                toggle_check.addView(check_label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
-            lp_check = LinearLayout.LayoutParams(check_size, check_size)
-            lp_check.leftMargin = AndroidUtilities.dp(12)
-            toggle.addView(toggle_check, lp_check)
-
-            def _toggle_back_cover(v):
-                try:
-                    self.set_setting("eblannft_settings_back_cover", not back_cover_enabled, reload_settings=True)
-                except Exception as e:
-                    try:
-                        BulletinHelper.show_error(f"Не удалось переключить back cover: {e}")
-                    except:
-                        pass
-
-            try:
-                toggle.setOnClickListener(JOnClickListener(_toggle_back_cover))
-            except:
-                pass
-
-            lp_toggle = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM)
-            lp_toggle.leftMargin = AndroidUtilities.dp(18)
-            lp_toggle.bottomMargin = AndroidUtilities.dp(52)
-            card.addView(toggle, lp_toggle)
 
             outer.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, card_h))
             return outer
@@ -4062,543 +5644,6 @@ class NftClonerPlugin(BasePlugin):
             _log(f"build version view fail: {e}")
             return None
 
-    def _is_settings_back_cover_enabled(self):
-        try:
-            raw = self.get_setting("eblannft_settings_back_cover", True)
-        except:
-            raw = True
-        if isinstance(raw, bool):
-            return raw
-        try:
-            return str(raw or "").strip().lower() in ("1", "true", "yes", "on")
-        except:
-            return True
-
-    def _show_settings_back_cover_menu(self, anchor_view):
-        try:
-            if anchor_view is None:
-                return
-            ctx = anchor_view.getContext() if hasattr(anchor_view, "getContext") else None
-            if ctx is None:
-                return
-            enabled = self._is_settings_back_cover_enabled()
-
-            root = LinearLayout(ctx)
-            root.setOrientation(LinearLayout.VERTICAL)
-            try:
-                bg = GradientDrawable()
-                bg.setCornerRadius(float(AndroidUtilities.dp(16)))
-                try:
-                    bg.setColor(int(Theme.getColor(Theme.key_windowBackgroundWhite)))
-                except:
-                    bg.setColor(0xFF111111)
-                root.setBackground(bg)
-            except:
-                pass
-
-            row = LinearLayout(ctx)
-            row.setOrientation(LinearLayout.HORIZONTAL)
-            try:
-                row.setGravity(Gravity.CENTER_VERTICAL | Gravity.LEFT)
-                row.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(12), AndroidUtilities.dp(14), AndroidUtilities.dp(12))
-                row.setClickable(True)
-                row.setFocusable(True)
-            except:
-                pass
-
-            tv = TextView(ctx)
-            try:
-                tv.setText("Back Cover")
-                tv.setTextColor(int(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText)))
-                tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
-                try:
-                    tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-            except:
-                pass
-            row.addView(tv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-            cb = LinearLayout(ctx)
-            cb.setGravity(Gravity.CENTER)
-            try:
-                cb_bg = GradientDrawable()
-                cb_bg.setCornerRadius(float(AndroidUtilities.dp(6)))
-                cb_bg.setColor(0x00000000)
-                if enabled:
-                    cb_bg.setStroke(AndroidUtilities.dp(1), int(Theme.getColor(Theme.key_switchTrackChecked)))
-                else:
-                    cb_bg.setStroke(AndroidUtilities.dp(1), int(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText)))
-                cb.setBackground(cb_bg)
-            except:
-                pass
-
-            mark = TextView(ctx)
-            try:
-                mark.setText("✓" if enabled else "")
-                mark.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-                try:
-                    mark.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-                mark.setTextColor(int(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText)))
-            except:
-                pass
-            try:
-                cb.addView(mark, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            except:
-                cb.addView(mark)
-
-            lp_cb = LinearLayout.LayoutParams(AndroidUtilities.dp(24), AndroidUtilities.dp(24))
-            lp_cb.leftMargin = AndroidUtilities.dp(10)
-            row.addView(cb, lp_cb)
-            root.addView(row, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-
-            popup = PopupWindow(root, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, True)
-            try:
-                popup.setOutsideTouchable(True)
-                popup.setFocusable(True)
-            except:
-                pass
-
-            def _toggle(_v=None):
-                try:
-                    nv = not self._is_settings_back_cover_enabled()
-                    self.set_setting("eblannft_settings_back_cover", bool(nv))
-                    try:
-                        self.reload_settings()
-                    except:
-                        pass
-                except Exception as e:
-                    try:
-                        BulletinHelper.show_error(f"Не удалось переключить Back Cover: {e}")
-                    except:
-                        pass
-                try:
-                    popup.dismiss()
-                except:
-                    pass
-
-            try:
-                row.setOnClickListener(JOnClickListener(_toggle))
-            except:
-                pass
-
-            try:
-                popup.showAsDropDown(anchor_view, 0, AndroidUtilities.dp(8), Gravity.LEFT)
-            except:
-                try:
-                    popup.showAsDropDown(anchor_view)
-                except:
-                    pass
-        except Exception as e:
-            _log(f"show back cover menu fail: {e}")
-
-    def _build_settings_header_view(self, ctx):
-        try:
-            outer = LinearLayout(ctx)
-            outer.setOrientation(LinearLayout.VERTICAL)
-            try:
-                outer.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(14))
-            except:
-                pass
-
-            back_cover_enabled = self._is_settings_back_cover_enabled()
-
-            def _try_res(*names):
-                try:
-                    R_drawable = jclass("org.telegram.messenger.R$drawable")
-                except:
-                    return 0
-                for name in names:
-                    try:
-                        rid = int(getattr(R_drawable, str(name), 0) or 0)
-                    except:
-                        rid = 0
-                    if rid:
-                        return rid
-                return 0
-
-            def _build_pattern(width_px, height_px):
-                try:
-                    w = max(1, int(width_px or 1))
-                    h = max(1, int(height_px or 1))
-                    bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    canvas = Canvas(bmp)
-                    canvas.drawColor(0xFFC9CBCE)
-
-                    paint = Paint()
-                    try:
-                        paint.setAntiAlias(True)
-                        paint.setColor(0xFFC14343)
-                        paint.setTextSize(float(AndroidUtilities.dp(64)))
-                        paint.setFakeBoldText(True)
-                        paint.setAlpha(210)
-                    except:
-                        pass
-                    try:
-                        paint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                    except:
-                        pass
-
-                    try:
-                        canvas.save()
-                        canvas.rotate(-15.0, float(w) / 2.0, float(h) / 2.0)
-                    except:
-                        pass
-                    step_x = max(1, AndroidUtilities.dp(150))
-                    step_y = max(1, AndroidUtilities.dp(92))
-                    offset = 0
-                    y = -step_y
-                    while y < h + step_y * 2:
-                        x = -step_x * 2 + offset
-                        while x < w + step_x * 2:
-                            try:
-                                canvas.drawText("Extera", float(x), float(y), paint)
-                            except:
-                                pass
-                            x += step_x
-                        offset = AndroidUtilities.dp(52) if offset == 0 else 0
-                        y += step_y
-                    try:
-                        canvas.restore()
-                    except:
-                        pass
-                    return bmp
-                except:
-                    return None
-
-            def _make_icon(icon_res=0, fallback_text="", text_size=22.0):
-                wrap = FrameLayout(ctx)
-                try:
-                    wrap.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8), AndroidUtilities.dp(8))
-                except:
-                    pass
-                if icon_res:
-                    try:
-                        iv = ImageView(ctx)
-                        iv.setImageResource(int(icon_res))
-                        try:
-                            iv.setColorFilter(0xFFFFFFFF)
-                        except:
-                            pass
-                        wrap.addView(iv, FrameLayout.LayoutParams(AndroidUtilities.dp(26), AndroidUtilities.dp(26), Gravity.CENTER))
-                        return wrap
-                    except:
-                        pass
-                tv = TextView(ctx)
-                try:
-                    tv.setText(str(fallback_text or ""))
-                    tv.setTextColor(0xFFFFFFFF)
-                    tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, float(text_size))
-                    tv.setGravity(Gravity.CENTER)
-                except:
-                    pass
-                wrap.addView(tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-                return wrap
-
-            try:
-                card_w = max(AndroidUtilities.dp(280), int(AndroidUtilities.displaySize.x) - AndroidUtilities.dp(32))
-            except:
-                card_w = AndroidUtilities.dp(340)
-            card_h = AndroidUtilities.dp(176)
-
-            card = FrameLayout(ctx)
-            try:
-                bg = GradientDrawable()
-                bg.setCornerRadius(float(AndroidUtilities.dp(24)))
-                bg.setColor(0xFF171717 if not back_cover_enabled else 0xFFC9CBCE)
-                card.setBackground(bg)
-                card.setClipToOutline(True)
-                card.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
-            except:
-                pass
-
-            if back_cover_enabled:
-                pattern_view = ImageView(ctx)
-                try:
-                    pattern_view.setScaleType(ImageView.ScaleType.CENTER_CROP)
-                    pattern = _build_pattern(card_w, card_h)
-                    if pattern is not None:
-                        pattern_view.setImageBitmap(pattern)
-                except:
-                    pass
-                card.addView(pattern_view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
-
-                overlay = View(ctx)
-                try:
-                    overlay_bg = GradientDrawable(
-                        GradientDrawable.Orientation.TOP_BOTTOM,
-                        [0x00000000, 0x12000000, 0x96000000],
-                    )
-                    overlay.setBackground(overlay_bg)
-                except:
-                    pass
-                card.addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
-
-            left_icon = _make_icon(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo"), "◫", text_size=21.0)
-            try:
-                left_icon.setClickable(True)
-                left_icon.setFocusable(True)
-                left_icon.setOnClickListener(JOnClickListener(lambda v: self._show_settings_back_cover_menu(left_icon)))
-            except:
-                pass
-            lp_left = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT)
-            lp_left.leftMargin = AndroidUtilities.dp(16)
-            lp_left.topMargin = AndroidUtilities.dp(16)
-            card.addView(left_icon, lp_left)
-
-            if back_cover_enabled:
-                right_icon = _make_icon(0, "", text_size=24.0)
-                lp_right = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT)
-                lp_right.rightMargin = AndroidUtilities.dp(16)
-                lp_right.topMargin = AndroidUtilities.dp(16)
-                card.addView(right_icon, lp_right)
-
-            avatar_wrap = FrameLayout(ctx)
-            try:
-                avatar = BackupImageView(ctx)
-                avatar.setRoundRadius(AndroidUtilities.dp(54))
-                self._bind_about_avatar_view(avatar)
-                self._resolve_about_username_user(avatar)
-            except:
-                avatar = ImageView(ctx)
-            try:
-                avatar_wrap.addView(avatar, FrameLayout.LayoutParams(AndroidUtilities.dp(108), AndroidUtilities.dp(108), Gravity.CENTER))
-            except:
-                pass
-            lp_avatar = FrameLayout.LayoutParams(AndroidUtilities.dp(108), AndroidUtilities.dp(108), Gravity.TOP | Gravity.CENTER_HORIZONTAL)
-            lp_avatar.topMargin = AndroidUtilities.dp(12)
-            card.addView(avatar_wrap, lp_avatar)
-
-            title = TextView(ctx)
-            try:
-                title.setText(self._about_header_display_name())
-                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 23.0)
-                title.setTextColor(0xFFFFFFFF)
-                title.setGravity(Gravity.CENTER)
-                try:
-                    title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-            except:
-                pass
-
-            subtitle = TextView(ctx)
-            try:
-                subtitle.setText("From player to chat, no drama.")
-                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12.8)
-                subtitle.setTextColor(0xFFF1F1F1)
-                subtitle.setGravity(Gravity.CENTER)
-            except:
-                pass
-
-            text_box = LinearLayout(ctx)
-            text_box.setOrientation(LinearLayout.VERTICAL)
-            try:
-                text_box.setGravity(Gravity.CENTER_HORIZONTAL)
-            except:
-                pass
-            text_box.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            lp_sub = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lp_sub.topMargin = AndroidUtilities.dp(8)
-            text_box.addView(subtitle, lp_sub)
-
-            lp_text = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL)
-            lp_text.leftMargin = AndroidUtilities.dp(16)
-            lp_text.rightMargin = AndroidUtilities.dp(16)
-            lp_text.bottomMargin = AndroidUtilities.dp(18)
-            card.addView(text_box, lp_text)
-
-            outer.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, card_h))
-            return outer
-        except Exception as e:
-            _log(f"override header fail: {e}")
-            return None
-
-    def _build_settings_header_view(self, ctx):
-        try:
-            outer = LinearLayout(ctx)
-            outer.setOrientation(LinearLayout.VERTICAL)
-            try:
-                outer.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(14))
-            except:
-                pass
-
-            back_cover_enabled = self._is_settings_back_cover_enabled()
-
-            def _try_res(*names):
-                try:
-                    R_drawable = jclass("org.telegram.messenger.R$drawable")
-                except:
-                    return 0
-                for name in names:
-                    try:
-                        rid = int(getattr(R_drawable, str(name), 0) or 0)
-                    except:
-                        rid = 0
-                    if rid:
-                        return rid
-                return 0
-
-            def _build_pattern(width_px, height_px):
-                try:
-                    w = max(1, int(width_px or 1))
-                    h = max(1, int(height_px or 1))
-                    bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    canvas = Canvas(bmp)
-                    canvas.drawColor(0xFFC8C8C8)
-
-                    paint = Paint()
-                    try:
-                        paint.setAntiAlias(True)
-                        paint.setColor(0xFFC24545)
-                        paint.setTextSize(float(AndroidUtilities.dp(64)))
-                        paint.setFakeBoldText(True)
-                        paint.setAlpha(215)
-                    except:
-                        pass
-                    try:
-                        paint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                    except:
-                        pass
-                    try:
-                        canvas.save()
-                        canvas.rotate(-15.0, float(w) / 2.0, float(h) / 2.0)
-                    except:
-                        pass
-                    step_x = max(1, AndroidUtilities.dp(150))
-                    step_y = max(1, AndroidUtilities.dp(92))
-                    offset = 0
-                    y = -step_y
-                    while y < h + step_y * 2:
-                        x = -step_x * 2 + offset
-                        while x < w + step_x * 2:
-                            try:
-                                canvas.drawText("Extera", float(x), float(y), paint)
-                            except:
-                                pass
-                            x += step_x
-                        offset = AndroidUtilities.dp(52) if offset == 0 else 0
-                        y += step_y
-                    try:
-                        canvas.restore()
-                    except:
-                        pass
-                    return bmp
-                except:
-                    return None
-
-            container = FrameLayout(ctx)
-            content = LinearLayout(ctx)
-            content.setOrientation(LinearLayout.VERTICAL)
-            try:
-                content.setGravity(Gravity.CENTER_HORIZONTAL)
-            except:
-                pass
-            container.addView(content, LayoutHelper.createFrame(-1, -2, Gravity.CENTER))
-
-            bg_cover = ImageView(ctx)
-            try:
-                bg_cover.setScaleType(ImageView.ScaleType.CENTER_CROP)
-            except:
-                pass
-            try:
-                bg = GradientDrawable()
-                bg.setCornerRadius(float(AndroidUtilities.dp(18)))
-                bg.setColor(0xFF171717 if not back_cover_enabled else 0xFFC8C8C8)
-                bg_cover.setBackground(bg)
-                bg_cover.setClipToOutline(True)
-            except:
-                pass
-            if back_cover_enabled:
-                try:
-                    pattern = _build_pattern(max(1, int(AndroidUtilities.displaySize.x) - AndroidUtilities.dp(32)), AndroidUtilities.dp(160))
-                    if pattern is not None:
-                        bg_cover.setImageBitmap(pattern)
-                except:
-                    pass
-            container.addView(bg_cover, 0, LayoutHelper.createFrame(-1, 160, Gravity.CENTER_HORIZONTAL, 0, 46, 0, 12))
-
-            if back_cover_enabled:
-                shadow = View(ctx)
-                try:
-                    shadow_bg = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, [0xB8000000, 0x00000000])
-                    shadow_bg.setCornerRadius(float(AndroidUtilities.dp(18)))
-                    shadow.setBackground(shadow_bg)
-                except:
-                    pass
-                container.addView(shadow, 1, LayoutHelper.createFrame(-1, 92, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0, 0, 12))
-
-            left_icon = ImageView(ctx)
-            try:
-                left_icon.setImageResource(int(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo")))
-                left_icon.setColorFilter(0xFFFFFFFF)
-            except:
-                pass
-            try:
-                left_icon.setClickable(True)
-                left_icon.setFocusable(True)
-                left_icon.setOnClickListener(JOnClickListener(lambda v: self._show_settings_back_cover_menu(left_icon)))
-            except:
-                pass
-            container.addView(left_icon, LayoutHelper.createFrame(24, 30, Gravity.LEFT | Gravity.TOP, 24, 60, 0, 0))
-
-            if back_cover_enabled:
-                right_icon = TextView(ctx)
-                try:
-                    right_icon.setText("")
-                    right_icon.setTextColor(0xFFFFFFFF)
-                    right_icon.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 24.0)
-                except:
-                    pass
-                container.addView(right_icon, LayoutHelper.createFrame(-2, -2, Gravity.RIGHT | Gravity.TOP, 0, 56, 24, 0))
-
-            avatar_shell = FrameLayout(ctx)
-            avatar = None
-            try:
-                avatar = BackupImageView(ctx)
-                avatar.setRoundRadius(AndroidUtilities.dp(46))
-                self._bind_about_avatar_view(avatar)
-                self._resolve_about_username_user(avatar)
-            except:
-                avatar = ImageView(ctx)
-            try:
-                avatar_shell.addView(avatar, LayoutHelper.createFrame(92, 92, Gravity.CENTER))
-            except:
-                pass
-            content.addView(avatar_shell, LayoutHelper.createLinear(96, 96, Gravity.CENTER_HORIZONTAL, 0, 20, 0, 12))
-
-            title = TextView(ctx)
-            try:
-                title.setText(self._about_header_display_name())
-                title.setTextColor(0xFFFFFFFF)
-                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20)
-                title.setGravity(Gravity.CENTER)
-                try:
-                    title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-            except:
-                pass
-            content.addView(title, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 16, 0, 16, 12))
-
-            desc = TextView(ctx)
-            try:
-                desc.setText("From player to chat, no drama.")
-                desc.setTextColor(0xFFF1F1F1)
-                desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-                desc.setGravity(Gravity.CENTER)
-            except:
-                pass
-            content.addView(desc, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 16, 0, 16, 16))
-
-            outer.addView(container, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(238)))
-            return outer
-        except Exception as e:
-            _log(f"final header override fail: {e}")
-            return None
-
     def _build_settings_footer_view(self, ctx):
         try:
             outer = LinearLayout(ctx)
@@ -4662,48 +5707,20 @@ class NftClonerPlugin(BasePlugin):
                 support_row.setGravity(Gravity.CENTER_VERTICAL)
                 support_row.setClickable(True)
                 support_row.setFocusable(True)
-                support_row.setPadding(AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2), AndroidUtilities.dp(2))
             except:
                 pass
 
-            badge_wrap = FrameLayout(ctx)
+            badge = TextView(ctx)
             try:
-                badge_wrap.setBackground(self._create_round_rect(0xFF101010, radius_dp=18))
-                badge_wrap.setPadding(AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10), AndroidUtilities.dp(10))
+                badge.setText("@")
+                badge.setGravity(Gravity.CENTER)
+                badge.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18.0)
+                badge.setTextColor(0xFF071104)
+                badge.setBackground(self._create_round_rect(0xFF83BF3A, radius_dp=18))
+                badge.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8), AndroidUtilities.dp(12), AndroidUtilities.dp(8))
             except:
                 pass
-
-            badge_grid = LinearLayout(ctx)
-            badge_grid.setOrientation(LinearLayout.VERTICAL)
-            try:
-                badge_grid.setGravity(Gravity.CENTER)
-            except:
-                pass
-            dot_size = AndroidUtilities.dp(4)
-            dot_gap = AndroidUtilities.dp(3)
-            for _row in range(3):
-                row = LinearLayout(ctx)
-                row.setOrientation(LinearLayout.HORIZONTAL)
-                try:
-                    row.setGravity(Gravity.CENTER)
-                except:
-                    pass
-                for _col in range(3):
-                    dot = View(ctx)
-                    try:
-                        dot.setBackground(self._create_round_rect(0xFFFFFFFF, radius_dp=8))
-                    except:
-                        pass
-                    lp_dot = LinearLayout.LayoutParams(dot_size, dot_size)
-                    if _col > 0:
-                        lp_dot.leftMargin = dot_gap
-                    row.addView(dot, lp_dot)
-                lp_row = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-                if _row > 0:
-                    lp_row.topMargin = dot_gap
-                badge_grid.addView(row, lp_row)
-            badge_wrap.addView(badge_grid, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
-            support_row.addView(badge_wrap, LinearLayout.LayoutParams(AndroidUtilities.dp(44), AndroidUtilities.dp(44)))
+            support_row.addView(badge)
 
             info = LinearLayout(ctx)
             info.setOrientation(LinearLayout.VERTICAL)
@@ -4712,7 +5729,7 @@ class NftClonerPlugin(BasePlugin):
 
             info_title = TextView(ctx)
             try:
-                info_title.setText("vc дополнения")
+                info_title.setText("Поддержка")
                 info_title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15.0)
                 info_title.setTextColor(0xFFFFFFFF)
                 try:
@@ -4725,7 +5742,7 @@ class NftClonerPlugin(BasePlugin):
 
             info_desc = TextView(ctx)
             try:
-                info_desc.setText("Официальный канал обновлений и новостей")
+                info_desc.setText("t.me/xarmaq")
                 info_desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
                 info_desc.setTextColor(0xFF8E8E8E)
             except:
@@ -4740,8 +5757,8 @@ class NftClonerPlugin(BasePlugin):
 
             arrow = TextView(ctx)
             try:
-                arrow.setText("›")
-                arrow.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 28.0)
+                arrow.setText("→")
+                arrow.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 24.0)
                 arrow.setTextColor(0xFFBEBEBE)
             except:
                 pass
@@ -4749,10 +5766,10 @@ class NftClonerPlugin(BasePlugin):
 
             def _open_support(v):
                 try:
-                    Browser.openUrl(v.getContext(), "https://t.me/vcvk1")
+                    Browser.openUrl(v.getContext(), "https://t.me/xarmaq")
                 except:
                     try:
-                        Browser.openUrlInSystemBrowser(v.getContext(), "https://t.me/vcvk1")
+                        Browser.openUrlInSystemBrowser(v.getContext(), "https://t.me/xarmaq")
                     except:
                         pass
 
@@ -4767,207 +5784,6 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             _log(f"build footer view fail: {e}")
             return None
-
-    def _build_settings_header_runtime(self, ctx):
-        try:
-            outer = LinearLayout(ctx)
-            outer.setOrientation(LinearLayout.VERTICAL)
-            try:
-                outer.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(14))
-            except:
-                pass
-
-            back_cover_enabled = self._is_settings_back_cover_enabled()
-
-            def _try_res(*names):
-                try:
-                    R_drawable = jclass("org.telegram.messenger.R$drawable")
-                except:
-                    return 0
-                for name in names:
-                    try:
-                        rid = int(getattr(R_drawable, str(name), 0) or 0)
-                    except:
-                        rid = 0
-                    if rid:
-                        return rid
-                return 0
-
-            def _build_pattern(width_px, height_px):
-                try:
-                    w = max(1, int(width_px or 1))
-                    h = max(1, int(height_px or 1))
-                    bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                    canvas = Canvas(bmp)
-                    canvas.drawColor(0xFFD3D1D1)
-
-                    paint = Paint()
-                    try:
-                        paint.setAntiAlias(True)
-                        paint.setColor(0xFFB64242)
-                        paint.setTextSize(float(AndroidUtilities.dp(64)))
-                        paint.setFakeBoldText(True)
-                        paint.setAlpha(225)
-                    except:
-                        pass
-                    try:
-                        paint.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                    except:
-                        pass
-                    try:
-                        canvas.save()
-                        canvas.rotate(-15.0, float(w) / 2.0, float(h) / 2.0)
-                    except:
-                        pass
-                    step_x = max(1, AndroidUtilities.dp(150))
-                    step_y = max(1, AndroidUtilities.dp(92))
-                    offset = 0
-                    y = -step_y
-                    while y < h + step_y * 2:
-                        x = -step_x * 2 + offset
-                        while x < w + step_x * 2:
-                            try:
-                                canvas.drawText("Extera", float(x), float(y), paint)
-                            except:
-                                pass
-                            x += step_x
-                        offset = AndroidUtilities.dp(52) if offset == 0 else 0
-                        y += step_y
-                    try:
-                        canvas.restore()
-                    except:
-                        pass
-                    return bmp
-                except:
-                    return None
-
-            card_h = AndroidUtilities.dp(176)
-            card = FrameLayout(ctx)
-            try:
-                card_bg = GradientDrawable()
-                card_bg.setCornerRadius(float(AndroidUtilities.dp(24)))
-                card_bg.setColor(0xFF0F0F10 if not back_cover_enabled else 0xFFD3D1D1)
-                card.setBackground(card_bg)
-                try:
-                    card.setClipToOutline(True)
-                except:
-                    pass
-            except:
-                pass
-
-            bg_cover = ImageView(ctx)
-            try:
-                bg_cover.setScaleType(ImageView.ScaleType.CENTER_CROP)
-            except:
-                pass
-            if back_cover_enabled:
-                try:
-                    pattern = _build_pattern(max(1, int(AndroidUtilities.displaySize.x) - AndroidUtilities.dp(32)), card_h)
-                    if pattern is not None:
-                        bg_cover.setImageBitmap(pattern)
-                except:
-                    pass
-            card.addView(bg_cover, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, card_h, Gravity.CENTER))
-
-            if back_cover_enabled:
-                shadow = View(ctx)
-                try:
-                    shadow_bg = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, [0x10000000, 0x24000000, 0xB8000000])
-                    shadow_bg.setCornerRadius(float(AndroidUtilities.dp(24)))
-                    shadow.setBackground(shadow_bg)
-                except:
-                    pass
-                lp_shadow = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, AndroidUtilities.dp(92), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL)
-                card.addView(shadow, lp_shadow)
-
-            left_icon = ImageView(ctx)
-            try:
-                left_icon.setImageResource(int(_try_res("msg_media", "msg_filled_data_photos", "msg_gallery", "msg_photo")))
-                left_icon.setColorFilter(0xFFFFFFFF)
-            except:
-                pass
-            try:
-                left_icon.setClickable(True)
-                left_icon.setFocusable(True)
-                left_icon.setOnClickListener(JOnClickListener(lambda v: self._show_settings_back_cover_menu(left_icon)))
-            except:
-                pass
-            lp_left = FrameLayout.LayoutParams(AndroidUtilities.dp(24), AndroidUtilities.dp(30), Gravity.LEFT | Gravity.TOP)
-            lp_left.leftMargin = AndroidUtilities.dp(20)
-            lp_left.topMargin = AndroidUtilities.dp(18)
-            card.addView(left_icon, lp_left)
-
-            if back_cover_enabled:
-                right_icon = TextView(ctx)
-                try:
-                    right_icon.setText("Apple")
-                    right_icon.setTextColor(0xFFFFFFFF)
-                    right_icon.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17.0)
-                    try:
-                        right_icon.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                    except:
-                        pass
-                except:
-                    pass
-                lp_right = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.RIGHT | Gravity.TOP)
-                lp_right.rightMargin = AndroidUtilities.dp(20)
-                lp_right.topMargin = AndroidUtilities.dp(18)
-                card.addView(right_icon, lp_right)
-
-            avatar_shell = FrameLayout(ctx)
-            avatar = None
-            try:
-                avatar = BackupImageView(ctx)
-                avatar.setRoundRadius(AndroidUtilities.dp(46))
-                self._bind_about_avatar_view(avatar)
-                self._resolve_about_username_user(avatar)
-            except:
-                avatar = ImageView(ctx)
-            try:
-                avatar_shell.addView(avatar, FrameLayout.LayoutParams(AndroidUtilities.dp(92), AndroidUtilities.dp(92), Gravity.CENTER))
-            except:
-                pass
-            lp_avatar = FrameLayout.LayoutParams(AndroidUtilities.dp(96), AndroidUtilities.dp(96), Gravity.TOP | Gravity.CENTER_HORIZONTAL)
-            lp_avatar.topMargin = AndroidUtilities.dp(8)
-            card.addView(avatar_shell, lp_avatar)
-
-            title = TextView(ctx)
-            try:
-                title.setText(self._about_header_display_name() or __name__)
-                title.setTextColor(0xFFFFFFFF)
-                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 21)
-                title.setGravity(Gravity.CENTER)
-                try:
-                    title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                except:
-                    pass
-            except:
-                pass
-            lp_title = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL)
-            lp_title.leftMargin = AndroidUtilities.dp(16)
-            lp_title.rightMargin = AndroidUtilities.dp(16)
-            lp_title.bottomMargin = AndroidUtilities.dp(48)
-            card.addView(title, lp_title)
-
-            desc = TextView(ctx)
-            try:
-                desc.setText("From player to chat, no drama.")
-                desc.setTextColor(0xFFF1F1F1)
-                desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
-                desc.setGravity(Gravity.CENTER)
-            except:
-                pass
-            lp_desc = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL)
-            lp_desc.leftMargin = AndroidUtilities.dp(16)
-            lp_desc.rightMargin = AndroidUtilities.dp(16)
-            lp_desc.bottomMargin = AndroidUtilities.dp(18)
-            card.addView(desc, lp_desc)
-
-            outer.addView(card, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, card_h))
-            return outer
-        except Exception as e:
-            _log(f"runtime header build fail: {e}")
-            return self._build_settings_header_view(ctx)
 
     def _is_our_settings_activity(self, activity):
         if activity is None:
@@ -5036,19 +5852,18 @@ class NftClonerPlugin(BasePlugin):
             if not self._is_home_settings_items(items):
                 return
             try:
-                remove_indices = []
+                has_header = False
+                has_footer = False
                 for i in range(items.size()):
                     it = items.get(i)
                     mk = str(getattr(it, "object2", "") or "")
-                    if mk in ("__eblannft_settings_header__", "__eblannft_settings_footer__"):
-                        remove_indices.append(i)
-                for idx in reversed(remove_indices):
-                    try:
-                        items.remove(idx)
-                    except:
-                        pass
+                    if mk == "__eblannft_settings_header__":
+                        has_header = True
+                    elif mk == "__eblannft_settings_footer__":
+                        has_footer = True
             except:
-                pass
+                has_header = False
+                has_footer = False
 
             ctx = activity.getContext() if hasattr(activity, "getContext") else None
             if not ctx:
@@ -5057,34 +5872,19 @@ class NftClonerPlugin(BasePlugin):
             if not UItem:
                 return
 
-            header = self._build_settings_header_runtime(ctx)
-            if header:
-                hi = UItem.asCustom(header)
-                try:
-                    hi.object2 = "__eblannft_settings_header__"
-                except:
-                    pass
-                try:
-                    hi.setTransparent(True)
-                except:
-                    pass
-                try:
-                    items.add(0, hi)
-                except:
-                    items.add(hi)
-
-            footer = self._build_settings_footer_view(ctx)
-            if footer:
-                fi = UItem.asCustom(footer)
-                try:
-                    fi.object2 = "__eblannft_settings_footer__"
-                except:
-                    pass
-                try:
-                    fi.setTransparent(True)
-                except:
-                    pass
-                items.add(fi)
+            if not has_footer:
+                footer = self._build_settings_footer_view(ctx)
+                if footer:
+                    fi = UItem.asCustom(footer)
+                    try:
+                        fi.object2 = "__eblannft_settings_footer__"
+                    except:
+                        pass
+                    try:
+                        fi.setTransparent(True)
+                    except:
+                        pass
+                    items.add(fi)
         except Exception as e:
             _log(f"inject settings header fail: {e}")
 
@@ -5272,12 +6072,6 @@ class NftClonerPlugin(BasePlugin):
         try:
             if bool(entry.get("inject", False)):
                 tags.append("\u0430\u043a\u0442\u0438\u0432\u0435\u043d")
-        except:
-            pass
-        try:
-            kind_label = self._gift_kind_label(self._classify_gift_kind(entry=entry))
-            if kind_label:
-                tags.append(kind_label)
         except:
             pass
         try:
@@ -5682,185 +6476,6 @@ class NftClonerPlugin(BasePlugin):
             return addr
         return self._build_visual_ton_address(entry)
 
-    def _apply_overrides_to_entry_wrapper(self, key):
-        """Proactively mutate the cached wrapper for this entry AND re-serialize to b64.
-        Call after creating a plain gift and after editing any of the override fields.
-        This way TG sees the overrides regardless of which set() overload it uses."""
-        try:
-            entry = self._library_find_entry(key)
-            if not isinstance(entry, dict):
-                return False
-            wrapper = self._library_get_wrapper(key)
-            if wrapper is None:
-                return False
-            patched = self._apply_local_overrides_to_wrapper(wrapper)
-            if not patched:
-                return False
-            try:
-                new_b64 = serialize_tl_object(wrapper)
-                if new_b64:
-                    entry["b64"] = str(new_b64)
-                    try:
-                        self._library_dirty = True
-                    except:
-                        pass
-                    try:
-                        self._save_cache()
-                    except:
-                        pass
-                    try:
-                        self._save_injection_cache()
-                    except:
-                        pass
-                    try:
-                        self._refresh_local_profile_gifts_section(reason="override_applied")
-                    except:
-                        pass
-            except Exception as ex:
-                _log(f"override re-serialize fail: {ex}")
-            return True
-        except Exception as ex:
-            try:
-                _log(f"_apply_overrides_to_entry_wrapper fail: {ex}")
-            except:
-                pass
-            return False
-
-    def _apply_local_overrides_to_wrapper(self, wrapper):
-        """Mutate a TL_savedStarGift wrapper BEFORE StarGiftSheet.set() reads it,
-        so the native sheet renders our local from / date / comment values and
-        hides the Upgrade button on plain plugin-added entries.
-        Reads overrides from the matching gift_library entry. No-op if no entry."""
-        if wrapper is None:
-            return False
-        try:
-            saved_id = int(self._extract_saved_id_from_wrapper(wrapper) or 0)
-        except:
-            saved_id = 0
-        entry = None
-        if saved_id > 0:
-            try:
-                entry = self._library_find_entry_by_saved_id(saved_id)
-            except:
-                entry = None
-        if entry is None:
-            try:
-                inner = get_val(wrapper, "gift", None)
-                if inner is not None:
-                    slug = str(get_val(inner, "slug", "") or "")
-                    if slug:
-                        entry = self._library_find_entry_by_slug(slug)
-                    if entry is None:
-                        uid = int(get_val(inner, "id", 0) or 0)
-                        if uid > 0:
-                            entry = self._library_find_entry_by_unique_id(uid)
-            except:
-                pass
-        if not isinstance(entry, dict):
-            return False
-
-        try:
-            kind = self._classify_gift_kind(entry=entry)
-        except:
-            kind = ""
-        is_nft = kind in (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
-
-        patched = []
-
-        # Read current flags. TG checks bits at runtime (flags & 2 for from_id, flags & 4 for message,
-        # flags & 1024 for can_upgrade etc) — boolean fields alone are not enough.
-        try:
-            cur_flags = int(get_val(wrapper, "flags", 0) or 0)
-        except:
-            cur_flags = 0
-        new_flags = cur_flags
-
-        # Hide Upgrade button for plain plugin-added entries (NORMAL / LEGACY).
-        # Clear both the boolean field AND flag bit 10 (1024) which TL_savedStarGift uses.
-        if not is_nft:
-            try:
-                if self._set_field(wrapper, "can_upgrade", False):
-                    patched.append("can_upgrade=False")
-            except Exception as ex:
-                _log(f"override can_upgrade fail: {ex}")
-            new_flags &= ~1024
-
-        # Date override (always present, no flag).
-        try:
-            ep = int(entry.get("date_epoch", 0) or 0)
-        except:
-            ep = 0
-        if ep > 0:
-            try:
-                if self._set_field(wrapper, "date", int(ep)):
-                    patched.append(f"date={ep}")
-            except Exception as ex:
-                _log(f"override date fail: {ex}")
-
-        # From-user override.
-        # TG reads: (savedStarGift.flags & 2) != 0 ? from_id : ANONYMOUS.
-        # So we must raise flag bit 1 (=2) AND clear name_hidden (bit 0 / =1).
-        try:
-            from_uid = int(entry.get("from_user_id", 0) or 0)
-        except:
-            from_uid = 0
-        if from_uid > 0:
-            try:
-                peer = self._build_peer_user(from_uid)
-                if peer is not None:
-                    if self._set_field(wrapper, "from_id", peer):
-                        patched.append(f"from_id={from_uid}")
-                    new_flags |= 2           # has from_id
-                    new_flags &= ~1          # clear name_hidden
-                    try:
-                        self._set_field(wrapper, "name_hidden", False)
-                    except:
-                        pass
-                else:
-                    _log(f"override from_id: _build_peer_user({from_uid}) returned None")
-            except Exception as ex:
-                _log(f"override from_id fail: {ex}")
-
-        # Comment / message override. Flag bit 2 (=4) gates message presence.
-        try:
-            comment = str(entry.get("comment_text", "") or "").strip()
-        except:
-            comment = ""
-        if comment:
-            try:
-                TextWithEntities = jclass("org.telegram.tgnet.TLRPC$TL_textWithEntities")
-                twe = TextWithEntities()
-                try:
-                    twe.text = str(comment)
-                except:
-                    pass
-                try:
-                    twe.entities = ArrayList()
-                except:
-                    pass
-                if self._set_field(wrapper, "message", twe):
-                    patched.append(f"message={len(comment)}c")
-                new_flags |= 4
-            except Exception as ex:
-                _log(f"override message fail: {ex}")
-
-        if new_flags != cur_flags:
-            try:
-                if self._set_field(wrapper, "flags", int(new_flags)):
-                    patched.append(f"flags={cur_flags:#x}->{new_flags:#x}")
-            except Exception as ex:
-                _log(f"override flags fail: {ex}")
-
-        try:
-            kkey = str(entry.get("key", "") or "?")
-            if patched:
-                _log(f"sheet override applied for entry={kkey} kind={kind}: {', '.join(patched)}")
-            else:
-                _log(f"sheet override no-op for entry={kkey} kind={kind} (no override fields set)")
-        except:
-            pass
-        return bool(patched)
-
     def _apply_local_ton_display_to_gift(self, gift):
         if gift is None:
             return False
@@ -5868,9 +6483,14 @@ class NftClonerPlugin(BasePlugin):
             key = self._resolve_library_key_for_gift(gift)
         except:
             key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback so
+        # foreign profile gifts also get TON owner_address / gift_address.
+        e = self._library_find_entry(key) if key else None
+        if not e:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -6883,7 +7503,7 @@ class NftClonerPlugin(BasePlugin):
 
             if self._is_java_list_like(obj):
                 try:
-                    size = self._list_walk_limit(obj)
+                    size = min(int(obj.size() or 0), 12)
                 except:
                     size = 0
                 for i in range(size):
@@ -7307,7 +7927,10 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         pass
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                     except:
                         pass
                 try:
@@ -7785,7 +8408,7 @@ class NftClonerPlugin(BasePlugin):
 
             if self._is_java_list_like(obj):
                 try:
-                    size = self._list_walk_limit(obj)
+                    size = min(int(obj.size() or 0), 12)
                 except:
                     size = 0
                 for i in range(size):
@@ -8307,6 +8930,51 @@ class NftClonerPlugin(BasePlugin):
                 try:
                     _post_global("emojiLoaded")
                 except:
+                    pass
+                # Force ProfileActivity to re-render the wear status orbit and
+                # name-row drawable: it listens to updateInterfaces with mask
+                # UPDATE_MASK_EMOJI_STATUS|UPDATE_MASK_NAME (=524290).
+                try:
+                    if (getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0) \
+                            or self._is_nft_username_active() or self._is_nft_number_active():
+                        try:
+                            MC = jclass("org.telegram.messenger.MessagesController")
+                            try:
+                                me = int(MC.UPDATE_MASK_EMOJI_STATUS)
+                            except Exception:
+                                me = 524288
+                            try:
+                                mn = int(MC.UPDATE_MASK_NAME)
+                            except Exception:
+                                mn = 2
+                            mask = me | mn
+                        except Exception:
+                            mask = 524290
+                        eid = _event_id("updateInterfaces")
+                        if eid > 0:
+                            try:
+                                nc.postNotificationName(to_java_int(eid), to_java_Integer(mask))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                # Per-user fast path so the avatar/name drawable picks up the
+                # new emoji_status without waiting for the next interface sweep.
+                try:
+                    if getattr(self, "wear_active", False) and int(getattr(self, "wear_collectible_id", 0) or 0) > 0:
+                        try:
+                            ctrl = jclass("org.telegram.messenger.MessagesController").getInstance(to_java_int(account))
+                            u = ctrl.getUser(int(my_id))
+                        except Exception:
+                            u = None
+                        if u is not None:
+                            eid = _event_id("userEmojiStatusUpdated")
+                            if eid > 0:
+                                try:
+                                    nc.postNotificationName(to_java_int(eid), u)
+                                except Exception:
+                                    pass
+                except Exception:
                     pass
             finally:
                 try:
@@ -10061,9 +10729,9 @@ class NftClonerPlugin(BasePlugin):
             self._gift_objects_order.append(k)
             self.gift_objects[k] = wrapper
             try:
-                max_n = int(self._recompute_gift_objects_limit() or getattr(self, "_gift_objects_max", GIFT_OBJECTS_CACHE_MIN) or GIFT_OBJECTS_CACHE_MIN)
+                max_n = int(self._recompute_gift_objects_limit() or getattr(self, "_gift_objects_max", 12) or 12)
             except:
-                max_n = int(getattr(self, "_gift_objects_max", GIFT_OBJECTS_CACHE_MIN) or GIFT_OBJECTS_CACHE_MIN)
+                max_n = int(getattr(self, "_gift_objects_max", 12) or 12)
             while len(self._gift_objects_order) > max_n:
                 old = self._gift_objects_order.pop(0)
                 try:
@@ -10190,9 +10858,27 @@ class NftClonerPlugin(BasePlugin):
             self._recompute_gift_objects_limit()
         except:
             pass
+        try:
+            my_id_for_filter = int(self._get_my_user_id() or 0)
+        except Exception:
+            my_id_for_filter = 0
         payloads = []
+        skipped_gifted = 0
         for e in (self.gift_library or []):
             if not e.get("inject", False):
+                continue
+            # Skip entries marked as "gifted to someone else" — i.e. their
+            # identity_config.to_user_id is set to a uid that is not us.
+            # Without this gate the gift still appears in our own profile
+            # injection even though the user explicitly routed it to a
+            # different recipient.
+            try:
+                ic = e.get("identity_config") if isinstance(e.get("identity_config"), dict) else {}
+                to_uid = int(ic.get("to_user_id", 0) or 0)
+            except Exception:
+                to_uid = 0
+            if my_id_for_filter > 0 and to_uid > 0 and to_uid != my_id_for_filter:
+                skipped_gifted += 1
                 continue
             w = self._library_get_wrapper(e.get("key"))
             if w and self._repair_saved_gift_wrapper(w):
@@ -10200,6 +10886,11 @@ class NftClonerPlugin(BasePlugin):
         self.injection_payloads = payloads
         self.inject_active = bool(payloads)
         self.injection_payload = payloads[0] if payloads else None
+        if skipped_gifted:
+            try:
+                _log(f"_rebuild_injection_payloads: skipped {skipped_gifted} gifted-out entries")
+            except Exception:
+                pass
         try:
             self._debug_state_snapshot("rebuild_payloads", f"rebuilt={len(payloads or [])}")
         except:
@@ -11593,7 +12284,7 @@ class NftClonerPlugin(BasePlugin):
         return bool(changed)
 
     def _get_catalog_nft_gifts(self):
-        """Return all catalog gifts we can add or visually upgrade locally."""
+        """Filter only NFT gifts from StarsController list."""
         lst = self._get_catalog_gifts_from_memory()
         if not lst:
             return []
@@ -11633,10 +12324,14 @@ class NftClonerPlugin(BasePlugin):
                     self._normalize_catalog_gift_availability(g)
                 except:
                     pass
-                cls_name = str(g.getClass().getName() or "").lower()
-                if "stargift" not in cls_name or "saved" in cls_name:
+                upg = get_val(g, "upgrade_stars", 0)
+                if upg is None:
+                    upg = 0
+                if int(upg) > 0:
+                    out.append(g)
                     continue
-                out.append(g)
+                if "unique" in g.getClass().getName().lower():
+                    out.append(g)
             except:
                 pass
         try:
@@ -11660,26 +12355,6 @@ class NftClonerPlugin(BasePlugin):
             pass
         return out
 
-    def _get_fallback_upgrade_seed_gift_id(self, exclude_gift_id=0):
-        try:
-            exclude_id = int(exclude_gift_id or 0)
-        except:
-            exclude_id = 0
-        for g in list(self._get_catalog_nft_gifts() or []):
-            try:
-                base_id = int(self._get_gift_base_id(g, fallback=int(get_val(g, "id", 0) or 0)) or 0)
-            except:
-                base_id = 0
-            if base_id <= 0 or base_id == exclude_id:
-                continue
-            try:
-                upg = int(self._to_int(get_val(g, "upgrade_stars", 0), 0) or 0)
-            except:
-                upg = 0
-            if upg > 0 or self._looks_like_unique_gift(g):
-                return int(base_id)
-        return 0
-
     def _get_gift_title(self, gift):
         try:
             t = str(get_val(gift, "title", "") or "")
@@ -11698,263 +12373,6 @@ class NftClonerPlugin(BasePlugin):
             return f"Gift {gid}"
         except:
             return "NFT"
-
-    def _looks_like_unique_gift(self, gift):
-        if gift is None:
-            return False
-        try:
-            return "unique" in str(gift.getClass().getName() or "").lower()
-        except:
-            return False
-
-    def _upgrade_attr_signature(self, obj):
-        if obj is None:
-            return "none"
-        try:
-            cls = str(obj.getClass().getName() or "")
-        except:
-            cls = "?"
-        try:
-            doc = get_val(obj, "document", None)
-            if doc is None:
-                doc = get_val(obj, "sticker", None)
-            doc_id = int(get_val(doc, "id", 0) or 0) if doc is not None else 0
-        except:
-            doc_id = 0
-        try:
-            center = int(get_val(obj, "center_color", 0) or 0)
-            edge = int(get_val(obj, "edge_color", 0) or 0)
-            pattern = int(get_val(obj, "pattern_color", 0) or 0)
-        except:
-            center, edge, pattern = 0, 0, 0
-        try:
-            name = str(get_val(obj, "name", "") or "")
-        except:
-            name = ""
-        return f"{cls}|d{doc_id}|c{center}|e{edge}|p{pattern}|n{name}"
-
-    def _gift_looks_rare(self, gift):
-        if gift is None:
-            return False
-        for name in ["limited", "is_limited", "rare", "is_rare"]:
-            try:
-                if bool(get_val(gift, name, False)):
-                    return True
-            except:
-                pass
-        for name in ["availability_total", "availabilityTotal", "limited_count", "limitedCount"]:
-            try:
-                total = int(self._to_int(get_val(gift, name, 0), 0) or 0)
-            except:
-                total = 0
-            if total > 0 and total <= 5000:
-                return True
-        return False
-
-    def _classify_gift_kind(self, gift=None, entry=None, official_import=False, local_only=False):
-        try:
-            if isinstance(entry, dict):
-                raw = str(entry.get("gift_kind", "") or "").strip()
-                if raw:
-                    return raw
-        except:
-            pass
-        if bool(local_only):
-            return GIFT_KIND_LOCAL_UPGRADED
-        base_id = 0
-        try:
-            if isinstance(entry, dict):
-                base_id = int(entry.get("base_gift_id", 0) or 0)
-        except:
-            base_id = 0
-        if base_id <= 0 and gift is not None:
-            try:
-                base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
-            except:
-                base_id = 0
-        legacy_meta = get_legacy_gift_meta(base_id)
-        is_legacy = False
-        if base_id > 0:
-            try:
-                is_legacy = self._get_catalog_gift_by_id(base_id) is None
-            except:
-                is_legacy = False
-        if official_import and self._looks_like_unique_gift(gift):
-            return GIFT_KIND_REAL_UPGRADED
-        if is_legacy:
-            rarity = str(legacy_meta.get("rarity", "") or "").strip().lower()
-            if rarity == "rare" or self._gift_looks_rare(gift):
-                return GIFT_KIND_LEGACY_RARE
-            return GIFT_KIND_LEGACY
-        return GIFT_KIND_NORMAL
-
-    def _gift_kind_label(self, kind):
-        kind_s = str(kind or "").strip().lower()
-        if kind_s == GIFT_KIND_REAL_UPGRADED:
-            return "реально улучшен"
-        if kind_s == GIFT_KIND_NORMAL:
-            return "обычный"
-        if kind_s == GIFT_KIND_LEGACY:
-            return "старый"
-        if kind_s == GIFT_KIND_LEGACY_RARE:
-            return "старый rare"
-        if kind_s == GIFT_KIND_LOCAL_UPGRADED:
-            return "локально улучшен"
-        return ""
-
-    def _entry_can_local_upgrade(self, entry, gift=None):
-        if not isinstance(entry, dict):
-            return False
-        kind = self._classify_gift_kind(gift=gift, entry=entry, official_import=bool(entry.get("official_import", False)), local_only=bool(entry.get("local_only", False)))
-        return kind in [GIFT_KIND_NORMAL, GIFT_KIND_LEGACY, GIFT_KIND_LEGACY_RARE]
-
-    def _remember_upgrade_attrs(self, gift_id, response):
-        if response is None:
-            return False
-        pool = getattr(self, "_upgrade_attr_pool", None)
-        if not isinstance(pool, dict):
-            pool = {"model": [], "pattern": [], "backdrop": []}
-            self._upgrade_attr_pool = pool
-        raw_list = None
-        try:
-            raw_list = get_val(response, "attributes", None)
-        except:
-            raw_list = None
-        if raw_list is None:
-            try:
-                for f in response.getClass().getFields():
-                    try:
-                        val = f.get(response)
-                    except:
-                        continue
-                    if val is not None and hasattr(val, "size") and hasattr(val, "get"):
-                        raw_list = val
-                        break
-            except:
-                raw_list = None
-        if raw_list is None:
-            return False
-        changed = False
-        try:
-            count = int(raw_list.size() or 0)
-        except:
-            count = 0
-        for i in range(count):
-            try:
-                obj = raw_list.get(i)
-            except:
-                continue
-            if obj is None:
-                continue
-            try:
-                cls_name = str(obj.getClass().getName() or "").lower()
-            except:
-                cls_name = ""
-            group = None
-            if "model" in cls_name:
-                group = "model"
-            elif "pattern" in cls_name:
-                group = "pattern"
-            elif "backdrop" in cls_name:
-                group = "backdrop"
-            if not group:
-                continue
-            try:
-                sig = self._upgrade_attr_signature(obj)
-            except:
-                sig = str(obj)
-            found = False
-            for existing in list(pool.get(group, []) or []):
-                try:
-                    if self._upgrade_attr_signature(existing) == sig:
-                        found = True
-                        break
-                except:
-                    continue
-            if not found:
-                pool[group].append(obj)
-                changed = True
-        if changed:
-            try:
-                _log(
-                    "Upgrade attr pool updated: "
-                    f"gift_id={int(gift_id or 0)} "
-                    f"m={len(pool.get('model', []) or [])} "
-                    f"p={len(pool.get('pattern', []) or [])} "
-                    f"b={len(pool.get('backdrop', []) or [])}"
-                )
-            except:
-                pass
-        return bool(changed)
-
-    def _has_generic_upgrade_attrs(self):
-        pool = getattr(self, "_upgrade_attr_pool", None)
-        if not isinstance(pool, dict):
-            return False
-        return bool(pool.get("model") and pool.get("pattern") and pool.get("backdrop"))
-
-    def _annotate_library_entry_kind(self, key, gift_kind="", official_import=None, local_only=None, original_b64=None, animation_style=""):
-        e = self._library_find_entry(key)
-        if not e:
-            return False
-        try:
-            wrapper = self._library_get_wrapper(key)
-        except:
-            wrapper = None
-        try:
-            gift = self._extract_wrapper_gift(wrapper) if wrapper is not None else None
-        except:
-            gift = None
-        kind = str(gift_kind or "").strip() or self._classify_gift_kind(
-            gift=gift,
-            entry=e,
-            official_import=bool(e.get("official_import", False)) if official_import is None else bool(official_import),
-            local_only=bool(e.get("local_only", False)) if local_only is None else bool(local_only),
-        )
-        e["gift_kind"] = kind
-        if official_import is not None:
-            e["official_import"] = bool(official_import)
-        if local_only is not None:
-            e["local_only"] = bool(local_only)
-        if original_b64:
-            try:
-                if not str(e.get("original_b64", "") or ""):
-                    e["original_b64"] = str(original_b64)
-            except:
-                pass
-        try:
-            if kind == GIFT_KIND_LOCAL_UPGRADED:
-                e["local_upgrade_state"] = {
-                    "enabled": True,
-                    "cost_stars": int(LOCAL_VISUAL_UPGRADE_STARS),
-                    "animation_style": str(animation_style or "telegram_upgrade"),
-                    "upgraded_at": int(time.time()),
-                }
-            elif "local_upgrade_state" in e:
-                e["local_upgrade_state"] = {
-                    "enabled": False,
-                    "cost_stars": int(LOCAL_VISUAL_UPGRADE_STARS),
-                    "animation_style": str(animation_style or e.get("local_upgrade_state", {}).get("animation_style", "telegram_upgrade")),
-                    "upgraded_at": int((e.get("local_upgrade_state", {}) or {}).get("upgraded_at", 0) or 0),
-                }
-        except:
-            pass
-        try:
-            base_id = int(e.get("base_gift_id", 0) or 0)
-        except:
-            base_id = 0
-        legacy_meta = get_legacy_gift_meta(base_id)
-        if legacy_meta:
-            try:
-                e["legacy_meta"] = dict(legacy_meta)
-            except:
-                pass
-        try:
-            e["updated_at"] = int(time.time())
-        except:
-            pass
-        self._library_dirty = True
-        return True
 
     def _get_gift_floor_stars(self, gift):
         """Best-effort: try to resolve current floor/min resale price in stars for a catalog gift."""
@@ -12775,13 +13193,6 @@ class NftClonerPlugin(BasePlugin):
                 icon="msg_emoji_gem",
                 on_click=lambda _: self._open_gift_library_menu(),
             ),
-            Text(
-                text="Мои подарки",
-                subtext=self._my_gifts_subtext(),
-                icon="msg_emoji_gem",
-                create_sub_fragment=self._create_my_gifts_subfragment,
-                link_alias="eblannft_my_gifts_subfragment",
-            ),
             Divider(),
             Text(
                 text="Профиль",
@@ -12876,884 +13287,27 @@ class NftClonerPlugin(BasePlugin):
                 on_click=lambda _: self._clear_cache(),
                 red=True,
             ),
-        ]
-
-    # ============================================================
-    # "Мои подарки" — отдельный раздел настроек
-    # Превью + Edit/Delete для NFT, редактируемые поля для обычных.
-    # ============================================================
-
-    def _my_gifts_subtext(self):
-        try:
-            entries = list(self.gift_library or [])
-        except:
-            entries = []
-        n = len(entries)
-        if n == 0:
-            return "пока пусто"
-        nft_kinds = (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
-        try:
-            nft_count = sum(1 for e in entries if self._classify_gift_kind(entry=e) in nft_kinds)
-        except:
-            nft_count = 0
-        plain_count = n - nft_count
-        parts = []
-        if nft_count:
-            parts.append(f"{nft_count} NFT")
-        if plain_count:
-            parts.append(f"{plain_count} обычных")
-        return " • ".join(parts) or f"{n} в коллекции"
-
-    def _resolve_build_attr_label(self, entry, group):
-        """Look up human-readable name and rarity % for an entry's build_config attribute.
-        Returns (name, rarity_text). Falls back gracefully to ('—', '') when pool is empty."""
-        try:
-            bc = entry.get("build_config") if isinstance(entry, dict) else None
-            if not isinstance(bc, dict):
-                return ("—", "")
-            attr_id = int(bc.get(group, 0) or 0)
-            if attr_id <= 0:
-                return ("—", "")
-        except:
-            return ("—", "")
-        try:
-            pool = getattr(self, "_upgrade_attr_pool", None) or {}
-            items = list(pool.get(group, []) or [])
-        except:
-            items = []
-        name = ""
-        rar_text = ""
-        for obj in items:
-            try:
-                oid = int(get_val(obj, "id", 0) or 0)
-            except:
-                oid = 0
-            if oid != attr_id:
-                continue
-            try:
-                nm = str(get_val(obj, "name", "") or "").strip()
-                if nm:
-                    name = nm
-            except:
-                pass
-            try:
-                rar = get_val(obj, "rarity_permille", None)
-                if rar is None:
-                    rar = get_val(obj, "rarityPermille", None)
-                if rar is not None:
-                    pct = float(int(rar)) / 10.0
-                    rar_text = (f"{pct:.1f}%" if (pct - int(pct)) else f"{int(pct)}%")
-            except:
-                pass
-            break
-        if not name:
-            name = f"ID {attr_id}"
-        return (name, rar_text)
-
-    def _create_my_gifts_subfragment(self, parent_view=None):
-        items = [Divider(text="Управление локальной коллекцией. Нажмите Edit/Delete для NFT, либо тапните по полю обычного подарка чтобы изменить его.")]
-        try:
-            entries = list(self.gift_library or [])
-        except:
-            entries = []
-        nft_kinds = (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
-        try:
-            def _sort_key(e):
-                try:
-                    kind = self._classify_gift_kind(entry=e)
-                except:
-                    kind = ""
-                is_nft = kind in nft_kinds
-                return (0 if is_nft else 1, -int(e.get("created_at", 0) or 0))
-            entries.sort(key=_sort_key)
-        except:
-            pass
-
-        if not entries:
-            items.append(Text(
-                text="Пока пусто",
-                subtext="Добавьте подарок из каталога ниже",
-                icon="msg_emoji_gem",
-            ))
-        else:
-            for entry in entries:
-                try:
-                    items.extend(self._render_my_gift_card_rows(entry))
-                except Exception as e:
-                    try:
-                        items.append(Divider())
-                        items.append(Text(text="Ошибка отрисовки подарка", subtext=str(e), icon="msg_delete"))
-                    except:
-                        pass
-
-        items.append(Divider(text="Добавить новый подарок."))
-        items.append(Text(
-            text="Добавить подарок",
-            subtext="NFT с улучшениями или обычный",
-            icon="msg_emoji_gem",
-            on_click=lambda _: self._open_add_gift_chooser(),
-        ))
-        return items
-
-    def _build_my_gift_header_view(self, entry, title_text, subtext_text):
-        """Native header for a 'Мои подарки' card: thumbnail + title + subtitle.
-        Returns an Android View suitable for ui.settings.Custom(view=...), or None on failure."""
-        try:
-            fragment = get_last_fragment()
-            if not fragment:
-                return None
-            ctx = fragment.getParentActivity()
-            if not ctx:
-                return None
-
-            row = LinearLayout(ctx)
-            row.setOrientation(LinearLayout.HORIZONTAL)
-            try:
-                row.setGravity(Gravity.CENTER_VERTICAL)
-            except:
-                pass
-            try:
-                hpad = AndroidUtilities.dp(16)
-                vpad = AndroidUtilities.dp(10)
-                row.setPadding(hpad, vpad, hpad, vpad)
-            except:
-                pass
-            try:
-                row.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite))
-            except:
-                pass
-
-            thumb = BackupImageView(ctx)
-            thumb_size = AndroidUtilities.dp(56)
-            try:
-                thumb.setRoundRadius(AndroidUtilities.dp(12))
-            except:
-                pass
-            try:
-                lp_thumb = LinearLayout.LayoutParams(thumb_size, thumb_size)
-                lp_thumb.rightMargin = AndroidUtilities.dp(14)
-                row.addView(thumb, lp_thumb)
-            except:
-                row.addView(thumb)
-
-            try:
-                key = entry.get("key") if isinstance(entry, dict) else None
-                w = self._library_get_wrapper(key) if key else None
-                g = self._extract_wrapper_gift(w) if w is not None else None
-                doc = None
-                if g is not None:
-                    doc = get_val(g, "sticker", None)
-                    if doc is None:
-                        doc = get_val(g, "document", None)
-                if doc is not None:
-                    il = ImageLocation.getForDocument(doc)
-                    if il is not None:
-                        thumb.setImage(il, "80_80", None, 0, doc)
-            except Exception as ex:
-                try:
-                    _log(f"my-gift thumb load fail: {ex}")
-                except:
-                    pass
-
-            text_col = LinearLayout(ctx)
-            text_col.setOrientation(LinearLayout.VERTICAL)
-            try:
-                text_col.setGravity(Gravity.CENTER_VERTICAL)
-            except:
-                pass
-
-            title_tv = TextView(ctx)
-            safe_title = str(title_text) if title_text is not None else ""
-            if not safe_title.strip() or safe_title.strip().lower() == "none":
-                safe_title = "Подарок"
-            try:
-                title_tv.setText(self._ui_text(safe_title, safe_title))
-            except:
-                title_tv.setText(safe_title)
-            try:
-                title_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.0)
-            except:
-                pass
-            try:
-                title_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
-            except:
-                pass
-            try:
-                title_tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-            except:
-                pass
-            try:
-                title_tv.setMaxLines(1)
-                title_tv.setEllipsize(jclass("android.text.TextUtils$TruncateAt").END)
-            except:
-                pass
-            try:
-                text_col.addView(title_tv, LinearLayout.LayoutParams(-2, -2))
-            except:
-                text_col.addView(title_tv)
-
-            if subtext_text:
-                sub_tv = TextView(ctx)
-                try:
-                    sub_tv.setText(self._ui_text(subtext_text, str(subtext_text)))
-                except:
-                    sub_tv.setText(str(subtext_text or ""))
-                try:
-                    sub_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13.0)
-                except:
-                    pass
-                try:
-                    sub_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
-                except:
-                    pass
-                try:
-                    sub_tv.setMaxLines(1)
-                    sub_tv.setEllipsize(jclass("android.text.TextUtils$TruncateAt").END)
-                except:
-                    pass
-                try:
-                    sp = LinearLayout.LayoutParams(-2, -2)
-                    sp.topMargin = AndroidUtilities.dp(2)
-                    text_col.addView(sub_tv, sp)
-                except:
-                    text_col.addView(sub_tv)
-
-            try:
-                row.addView(text_col, LinearLayout.LayoutParams(-1, -2))
-            except:
-                row.addView(text_col)
-            return row
-        except Exception as ex:
-            try:
-                _log(f"_build_my_gift_header_view fail: {ex}")
-            except:
-                pass
-            return None
-
-    def _render_my_gift_card_rows(self, entry):
-        if not isinstance(entry, dict):
-            return []
-        rows = []
-        key = entry.get("key")
-        raw_title = entry.get("title")
-        if raw_title is None or str(raw_title).strip() == "" or str(raw_title).strip().lower() == "none":
-            slug = str(entry.get("slug", "") or "").strip()
-            raw_title = slug or "Подарок"
-        title = self._ui_text(str(raw_title), "Подарок")
-        try:
-            num = int(entry.get("num", 0) or 0)
-        except:
-            num = 0
-        header = f"{title} #{num}" if num > 0 else title
-        try:
-            kind = self._classify_gift_kind(entry=entry)
-        except:
-            kind = ""
-        is_nft = kind in (GIFT_KIND_REAL_UPGRADED, GIFT_KIND_LOCAL_UPGRADED)
-        kind_label = ""
-        try:
-            kind_label = self._gift_kind_label(kind) or ""
-        except:
-            kind_label = ""
-
-        rows.append(Divider())
-        header_subtext = kind_label or ("NFT подарок" if is_nft else "Обычный подарок")
-        _header_view = None
-        if _UISettingsCustom is not None:
-            try:
-                _header_view = self._build_my_gift_header_view(entry, header, header_subtext)
-            except:
-                _header_view = None
-        if _header_view is not None:
-            try:
-                rows.append(_UISettingsCustom(view=_header_view))
-            except Exception as ex:
-                try:
-                    _log(f"Custom header row fail: {ex}")
-                except:
-                    pass
-                rows.append(Text(text=header, subtext=header_subtext, icon="msg_emoji_gem"))
-        else:
-            rows.append(Text(text=header, subtext=header_subtext, icon="msg_emoji_gem"))
-
-        if is_nft:
-            for label, group in (("Модель", "model"), ("Символ", "pattern"), ("Фон", "backdrop")):
-                try:
-                    name, rar = self._resolve_build_attr_label(entry, group)
-                except:
-                    name, rar = ("—", "")
-                if rar:
-                    subtext = f"{name}  •  {rar}"
-                else:
-                    subtext = name
-                rows.append(Text(text=label, subtext=subtext, icon="msg_stats_solar"))
-            rows.append(Text(
-                text="Изменить",
-                subtext="Открыть в конструкторе",
-                icon="msg_edit",
-                on_click=lambda _, k=key: self._open_constructor_for_library_key(k),
-            ))
-            rows.append(Text(
-                text="Удалить",
-                subtext="Убрать из коллекции",
+            Text(
+                text="Сбросить плагин полностью",
+                subtext="Удалить всё: подарки, профили, кэш, настройки",
                 icon="msg_delete",
+                on_click=lambda _: self._confirm_full_reset(),
                 red=True,
-                on_click=lambda _, k=key: self._confirm_delete_my_gift(k),
-            ))
-        else:
-            from_value = self._format_my_gift_from(entry)
-            date_value = self._format_my_gift_date(entry)
-            comment_value = str(entry.get("comment_text", "") or "").strip()
-            rows.append(Text(
-                text="От кого",
-                subtext=(from_value or "не задано"),
-                icon="msg_link",
-                on_click=lambda _, k=key: self._edit_my_gift_from(k),
-            ))
-            rows.append(Text(
-                text="Дата",
-                subtext=(date_value or "не задано"),
-                icon="msg_stats_solar",
-                on_click=lambda _, k=key: self._edit_my_gift_date(k),
-            ))
-            if comment_value:
-                rows.append(Text(
-                    text="Комментарий",
-                    subtext=comment_value,
-                    icon="msg_edit",
-                    on_click=lambda _, k=key: self._edit_my_gift_field(k, "comment_text", "Комментарий"),
-                ))
-            else:
-                rows.append(Text(
-                    text="+ Добавить комментарий",
-                    icon="msg_edit",
-                    on_click=lambda _, k=key: self._edit_my_gift_field(k, "comment_text", "Комментарий"),
-                ))
-            rows.append(Text(
-                text="Удалить",
-                subtext="Убрать из коллекции",
+            ),
+            Text(
+                text="Удалить плагин и все файлы",
+                subtext="Стереть рантайм и экспорт-конфиги — потом отключи плагин в клиенте",
                 icon="msg_delete",
+                on_click=lambda _: self._confirm_purge_plugin_files(),
                 red=True,
-                on_click=lambda _, k=key: self._confirm_delete_my_gift(k),
-            ))
-        return rows
-
-    def _format_my_gift_from(self, entry):
-        """Display string for the 'From' field of a plain gift card.
-        Prefers cached resolved user (first+last name); falls back to @username or plain text."""
-        if not isinstance(entry, dict):
-            return ""
-        try:
-            uname = str(entry.get("from_username", "") or "").strip().lstrip("@")
-        except:
-            uname = ""
-        try:
-            first = str(entry.get("from_first_name", "") or "").strip()
-            last = str(entry.get("from_last_name", "") or "").strip()
-            full = (first + " " + last).strip()
-        except:
-            full = ""
-        if full and uname:
-            return f"{full}  •  @{uname}"
-        if full:
-            return full
-        if uname:
-            return f"@{uname}"
-        try:
-            return str(entry.get("from_text", "") or "").strip()
-        except:
-            return ""
-
-    def _format_my_gift_date(self, entry):
-        """Display string for the 'Date' field of a plain gift card.
-        Prefers date_epoch (int seconds) formatted dd.mm.yyyy; falls back to legacy date_text."""
-        if not isinstance(entry, dict):
-            return ""
-        epoch = 0
-        try:
-            epoch = int(entry.get("date_epoch", 0) or 0)
-        except:
-            epoch = 0
-        if epoch > 0:
-            try:
-                t = time.localtime(epoch)
-                return time.strftime("%d.%m.%Y", t)
-            except:
-                pass
-        try:
-            return str(entry.get("date_text", "") or "").strip()
-        except:
-            return ""
-
-    def _edit_my_gift_date(self, key):
-        """Open Android DatePickerDialog and persist the picked date as date_epoch."""
-        e = self._library_find_entry(key)
-        if not e:
-            try:
-                BulletinHelper.show_error("Подарок не найден")
-            except:
-                pass
-            return
-        try:
-            fragment = get_last_fragment()
-            ctx = fragment.getParentActivity() if fragment else None
-            if not ctx:
-                try:
-                    BulletinHelper.show_error("Окно недоступно")
-                except:
-                    pass
-                return
-
-            Calendar = jclass("java.util.Calendar")
-            cal = Calendar.getInstance()
-            init_epoch = 0
-            try:
-                init_epoch = int(e.get("date_epoch", 0) or 0)
-            except:
-                init_epoch = 0
-            if init_epoch > 0:
-                try:
-                    cal.setTimeInMillis(int(init_epoch) * 1000)
-                except:
-                    pass
-            y = cal.get(Calendar.YEAR)
-            m = cal.get(Calendar.MONTH)
-            d = cal.get(Calendar.DAY_OF_MONTH)
-
-            plugin_self = self
-            target_key = str(key)
-
-            DatePickerDialog = jclass("android.app.DatePickerDialog")
-            OnDateSetListener = jclass("android.app.DatePickerDialog$OnDateSetListener")
-
-            class _OnDateSet(dynamic_proxy(OnDateSetListener)):
-                def onDateSet(self_obj, view, year, month, day):
-                    try:
-                        ent = plugin_self._library_find_entry(target_key)
-                        if not ent:
-                            return
-                        cal2 = Calendar.getInstance()
-                        try:
-                            cal2.set(int(year), int(month), int(day), 0, 0, 0)
-                        except:
-                            cal2.set(int(year), int(month), int(day))
-                        try:
-                            cal2.set(Calendar.MILLISECOND, 0)
-                        except:
-                            pass
-                        epoch_s = int(cal2.getTimeInMillis() // 1000)
-                        ent["date_epoch"] = int(epoch_s)
-                        try:
-                            ent["date_text"] = time.strftime("%d.%m.%Y", time.localtime(epoch_s))
-                        except:
-                            pass
-                        try:
-                            ent["updated_at"] = int(time.time())
-                        except:
-                            pass
-                        try:
-                            plugin_self._library_dirty = True
-                        except:
-                            pass
-                        try:
-                            plugin_self._save_cache()
-                        except:
-                            pass
-                        try:
-                            plugin_self._apply_overrides_to_entry_wrapper(target_key)
-                        except:
-                            pass
-                        try:
-                            BulletinHelper.show_success("Дата сохранена")
-                        except:
-                            pass
-                        try:
-                            plugin_self.reload_settings()
-                        except:
-                            pass
-                    except Exception as ex:
-                        try:
-                            BulletinHelper.show_error(f"Ошибка сохранения даты: {ex}")
-                        except:
-                            pass
-
-            def _open():
-                try:
-                    dlg = DatePickerDialog(ctx, _OnDateSet(), int(y), int(m), int(d))
-                    dlg.show()
-                except Exception as ex:
-                    try:
-                        BulletinHelper.show_error(f"Не открыть выбор даты: {ex}")
-                    except:
-                        pass
-
-            run_on_ui_thread(_open)
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Ошибка даты: {ex}")
-            except:
-                pass
-
-    def _edit_my_gift_from(self, key):
-        """Ask for a numeric TG user_id, look it up in the local MessagesController
-        cache for name+username, persist all three on the entry."""
-        e = self._library_find_entry(key)
-        if not e:
-            try:
-                BulletinHelper.show_error("Подарок не найден")
-            except:
-                pass
-            return
-        prefill = ""
-        try:
-            uid_cur = int(e.get("from_user_id", 0) or 0)
-            if uid_cur > 0:
-                prefill = str(uid_cur)
-        except:
-            prefill = ""
-
-        def _save(text):
-            raw = str(text or "").strip()
-            ent = self._library_find_entry(key)
-            if not ent:
-                return
-            if not raw:
-                ent.pop("from_username", None)
-                ent.pop("from_user_id", None)
-                ent.pop("from_first_name", None)
-                ent.pop("from_last_name", None)
-                ent["from_text"] = ""
-                try:
-                    ent["updated_at"] = int(time.time())
-                except:
-                    pass
-                try:
-                    self._library_dirty = True
-                except:
-                    pass
-                try:
-                    self._save_cache()
-                except:
-                    pass
-                try:
-                    self.reload_settings()
-                except:
-                    pass
-                try:
-                    BulletinHelper.show_success("Очищено")
-                except:
-                    pass
-                return
-
-            try:
-                uid = int("".join(ch for ch in raw if ch.isdigit() or ch == "-"))
-            except:
-                uid = 0
-            if uid <= 0:
-                try:
-                    BulletinHelper.show_error("Введите числовой user_id")
-                except:
-                    pass
-                return
-
-            ent["from_user_id"] = int(uid)
-            try:
-                ent["updated_at"] = int(time.time())
-            except:
-                pass
-
-            # Look up cached user (no network call — local cache only).
-            user_obj = None
-            try:
-                account = int(UserConfig.selectedAccount)
-            except:
-                account = 0
-            try:
-                mc = MessagesController.getInstance(account)
-                if mc is not None and hasattr(mc, "getUser"):
-                    Long = jclass("java.lang.Long")
-                    user_obj = mc.getUser(Long.valueOf(int(uid)))
-            except Exception as ex:
-                try:
-                    _log(f"getUser fail uid={uid}: {ex}")
-                except:
-                    pass
-                user_obj = None
-
-            if user_obj is not None:
-                try:
-                    first = str(get_val(user_obj, "first_name", "") or "")
-                except:
-                    first = ""
-                try:
-                    last = str(get_val(user_obj, "last_name", "") or "")
-                except:
-                    last = ""
-                try:
-                    uname = str(get_val(user_obj, "username", "") or "")
-                except:
-                    uname = ""
-                ent["from_first_name"] = first
-                ent["from_last_name"] = last
-                if uname:
-                    ent["from_username"] = uname
-                else:
-                    ent.pop("from_username", None)
-                display = (first + " " + last).strip() or (("@" + uname) if uname else f"id {uid}")
-                ent["from_text"] = display
-            else:
-                # Fall back to id-only display; the override hook still works via from_user_id.
-                ent.pop("from_first_name", None)
-                ent.pop("from_last_name", None)
-                ent.pop("from_username", None)
-                ent["from_text"] = f"id {uid}"
-
-            try:
-                self._library_dirty = True
-            except:
-                pass
-            try:
-                self._save_cache()
-            except:
-                pass
-            try:
-                self._apply_overrides_to_entry_wrapper(key)
-            except:
-                pass
-            try:
-                BulletinHelper.show_success("Отправитель сохранён")
-            except:
-                pass
-            try:
-                self.reload_settings()
-            except:
-                pass
-
-        # Numeric-keyboard input dialog (uses _show_text_input_dialog's numeric=True branch).
-        try:
-            self._show_text_input_dialog("User ID отправителя (число)", prefill, _save, numeric=True)
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Не удалось открыть редактор: {ex}")
-            except:
-                pass
-
-    def _edit_my_gift_field(self, key, field, title):
-        e = self._library_find_entry(key)
-        if not e:
-            try:
-                BulletinHelper.show_error("Подарок не найден")
-            except:
-                pass
-            return
-        prefill = str(e.get(field, "") or "")
-
-        def _save(text):
-            ent = self._library_find_entry(key)
-            if not ent:
-                return
-            ent[field] = str(text or "").strip()
-            try:
-                ent["updated_at"] = int(time.time())
-            except:
-                pass
-            try:
-                self._library_dirty = True
-            except:
-                pass
-            try:
-                self._save_cache()
-            except:
-                pass
-            try:
-                self._apply_overrides_to_entry_wrapper(key)
-            except:
-                pass
-            try:
-                BulletinHelper.show_success("Сохранено")
-            except:
-                pass
-            try:
-                self.reload_settings()
-            except:
-                pass
-
-        try:
-            self._show_text_input_dialog(title, prefill, _save)
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Не удалось открыть редактор: {ex}")
-            except:
-                pass
-
-    def _confirm_delete_my_gift(self, key):
-        e = self._library_find_entry(key)
-        if not e:
-            try:
-                BulletinHelper.show_error("Подарок не найден")
-            except:
-                pass
-            return
-        try:
-            label = self._format_library_entry_label(e)
-        except:
-            label = "подарок"
-        actions = [("Удалить", lambda k=key: self._do_delete_my_gift(k))]
-        try:
-            self._show_action_menu(f"Удалить «{label}»?", actions, negative_text="Отмена")
-        except:
-            self._do_delete_my_gift(key)
-
-    def _do_delete_my_gift(self, key):
-        try:
-            self._delete_library_gift_key(key)
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Ошибка удаления: {ex}")
-            except:
-                pass
-        try:
-            self.reload_settings()
-        except:
-            pass
-
-    def _open_add_gift_chooser(self):
-        actions = [
-            ("NFT подарок (с улучшениями)", lambda: self._open_catalog_nft_sheet()),
-            ("Обычный подарок (без улучшений)", lambda: self._open_catalog_plain_sheet()),
+            ),
+            Text(
+                text="О плагине",
+                subtext="Информация и поддержка",
+                icon="msg2_reactions2",
+                on_click=lambda _: self._on_about_click(),
+            ),
         ]
-        try:
-            self._show_action_menu("Добавить подарок", actions, negative_text="Отмена")
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Не удалось открыть выбор: {ex}")
-            except:
-                pass
-
-    def _open_catalog_plain_sheet(self):
-        """Каталог обычных подарков — без визуальных улучшений.
-        Использует тот же CatalogNftSheet, но с флагом is_plain=True;
-        тап по подарку добавляет его в библиотеку как обычный (без build_config).
-        """
-        try:
-            sheet = CatalogNftSheet(self)
-            try:
-                sheet.is_plain = True
-            except:
-                pass
-            sheet.show()
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Каталог недоступен: {ex}")
-            except:
-                pass
-
-    def _add_plain_gift_from_catalog(self, gift, gift_id):
-        """Создаёт TL_savedStarGift-обёртку из каталожного подарка и добавляет в библиотеку
-        как обычный (без build_config / без upgrade-флоу). Используется из CatalogNftSheet
-        в plain-режиме."""
-        try:
-            try:
-                self._ensure_gift_classes()
-            except:
-                pass
-            cls_saved = getattr(self, "cls_saved", None)
-            if cls_saved is None:
-                try:
-                    cls_saved = jclass("org.telegram.tgnet.tl.TL_stars$TL_savedStarGift")
-                    self.cls_saved = cls_saved
-                except:
-                    cls_saved = None
-            if cls_saved is None:
-                BulletinHelper.show_error("Не удалось создать обёртку подарка")
-                return False
-
-            wrapper = self._new_java_instance(cls_saved)
-            if not wrapper:
-                BulletinHelper.show_error("Не удалось создать TL_savedStarGift")
-                return False
-
-            try:
-                self._set_field(wrapper, "gift", gift)
-                self._set_field(wrapper, "date", int(time.time()))
-                self._set_field(wrapper, "pinned_to_top", True)
-            except Exception as ex:
-                _log(f"Plain wrap set fields error: {ex}")
-            try:
-                self._set_field(wrapper, "unsaved", False)
-            except:
-                pass
-            try:
-                self._set_field(wrapper, "saved_id", random.randint(1000, 9999))
-            except:
-                pass
-
-            try:
-                self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True)
-            except Exception as ex:
-                _log(f"Plain wrap normalize error: {ex}")
-
-            try:
-                base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
-            except:
-                base_id = int(gift_id or 0)
-            if base_id <= 0:
-                base_id = int(gift_id or 0)
-
-            key = self._library_upsert_wrapper(
-                wrapper,
-                base_gift_id=base_id,
-                key=None,
-                inject=True,
-                make_active=False,
-                build_config=None,
-                identity_config=None,
-                value_config=None,
-                gift_stars_config=None,
-            )
-
-            try:
-                self._save_cache()
-            except:
-                pass
-            try:
-                self._save_injection_cache()
-            except:
-                pass
-            try:
-                self._refresh_local_profile_gifts_section(reason="plain_catalog_add")
-            except Exception as ex:
-                _log(f"Plain catalog refresh error: {ex}")
-            # Stamp our overrides (can_upgrade=False at minimum) right after creation.
-            try:
-                self._apply_overrides_to_entry_wrapper(key)
-            except Exception as ex:
-                _log(f"plain catalog override stamp fail: {ex}")
-
-            try:
-                e = self._library_find_entry(key) if key else None
-                label = self._ui_text(e.get("title", "подарок"), "подарок") if isinstance(e, dict) else "подарок"
-            except:
-                label = "подарок"
-            try:
-                BulletinHelper.show_success(f"«{label}» добавлен как обычный")
-            except:
-                pass
-            try:
-                self.reload_settings()
-            except:
-                pass
-            return True
-        except Exception as ex:
-            try:
-                BulletinHelper.show_error(f"Ошибка добавления: {ex}")
-            except:
-                pass
-            try:
-                _log(f"_add_plain_gift_from_catalog error: {ex}")
-            except:
-                pass
-            return False
 
     def _create_username_settings_subfragment(self, parent_view=None):
         tokens = self._get_nft_username_tokens()
@@ -13879,7 +13433,8 @@ class NftClonerPlugin(BasePlugin):
             downloads = Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS
             ).getAbsolutePath()
-            target = os.path.join(downloads, "eblanNFT")
+            client_dir = self._detect_client_storage_dir_name()
+            target = os.path.join(str(downloads), client_dir, "eblannft_beta")
             ensure_dir_exists(target)
             return target
         except Exception as e:
@@ -13890,6 +13445,20 @@ class NftClonerPlugin(BasePlugin):
                 return target
             except:
                 return None
+
+    def _detect_client_storage_dir_name(self):
+        pkg = ""
+        try:
+            ctx = ApplicationLoader.applicationContext
+            if ctx is not None:
+                pkg = str(ctx.getPackageName() or "").lower()
+        except Exception:
+            pkg = ""
+        if "extera" in pkg:
+            return "exteraGram"
+        if "ayu" in pkg:
+            return "AyuGram"
+        return "eblannft_beta"
 
     def _sanitize_profile_name(self, raw_name):
         try:
@@ -15803,422 +15372,6 @@ class NftClonerPlugin(BasePlugin):
                     pass
         except:
             pass
-
-    def _normalize_update_repo(self, value):
-        try:
-            repo = str(value or "").strip()
-        except:
-            repo = ""
-        repo = repo.replace("https://github.com/", "").replace("http://github.com/", "").strip().strip("/")
-        if repo.endswith(".git"):
-            repo = repo[:-4]
-        if repo.count("/") != 1:
-            return ""
-        return repo
-
-    def _get_update_repo(self):
-        try:
-            raw = self.get_setting("eblannft_update_repo", EBLANNFT_UPDATE_REPO_DEFAULT)
-        except:
-            raw = EBLANNFT_UPDATE_REPO_DEFAULT
-        return self._normalize_update_repo(raw)
-
-    def _get_update_branch(self):
-        try:
-            raw = str(self.get_setting("eblannft_update_branch", EBLANNFT_UPDATE_BRANCH_DEFAULT) or "").strip()
-        except:
-            raw = EBLANNFT_UPDATE_BRANCH_DEFAULT
-        return raw or EBLANNFT_UPDATE_BRANCH_DEFAULT
-
-    def _is_auto_update_enabled(self):
-        try:
-            return bool(self.get_setting("eblannft_auto_update_enabled", True))
-        except:
-            return True
-
-    def _is_update_check_on_load_enabled(self):
-        try:
-            return bool(self.get_setting("eblannft_update_check_on_load", True))
-        except:
-            return True
-
-    def _version_key(self, version_text):
-        try:
-            parts = [int(x) for x in re.findall(r"\d+", str(version_text or ""))]
-        except:
-            parts = []
-        if not parts:
-            return (0,)
-        while len(parts) < 4:
-            parts.append(0)
-        return tuple(parts[:4])
-
-    def _is_remote_version_newer(self, remote_version, local_version=None):
-        local_version = local_version or __version__
-        return self._version_key(remote_version) > self._version_key(local_version)
-
-    def _fetch_url_bytes(self, url, timeout=20):
-        req = Request(
-            str(url),
-            headers={
-                "User-Agent": f"eblannft-updater/{__version__}",
-                "Accept": "application/json,text/plain,*/*",
-                "Cache-Control": "no-cache",
-            },
-        )
-        with urlopen(req, timeout=timeout) as resp:
-            return resp.read()
-
-    def _fetch_url_text(self, url, timeout=20):
-        raw = self._fetch_url_bytes(url, timeout=timeout)
-        try:
-            return raw.decode("utf-8")
-        except:
-            return raw.decode("utf-8", errors="ignore")
-
-    def _build_repo_raw_url(self, repo, branch, rel_path):
-        repo = self._normalize_update_repo(repo)
-        branch = str(branch or EBLANNFT_UPDATE_BRANCH_DEFAULT).strip() or EBLANNFT_UPDATE_BRANCH_DEFAULT
-        rel = str(rel_path or "").replace("\\", "/").lstrip("/")
-        return f"https://raw.githubusercontent.com/{repo}/{branch}/{rel}"
-
-    def _read_remote_update_manifest(self, repo, branch):
-        try:
-            manifest_url = self._build_repo_raw_url(repo, branch, EBLANNFT_UPDATE_MANIFEST_PATH)
-            raw = self._fetch_url_text(manifest_url, timeout=12)
-            data = json.loads(raw)
-            return data if isinstance(data, dict) else {}
-        except:
-            return {}
-
-    def _fetch_remote_update_info(self):
-        repo = self._get_update_repo()
-        if not repo:
-            return None
-        branch = self._get_update_branch()
-        manifest = self._read_remote_update_manifest(repo, branch)
-        version = str(manifest.get("version", "") or "").strip()
-        if not version:
-            loader_text = self._fetch_url_text(self._build_repo_raw_url(repo, branch, "eblannft.plugin"), timeout=15)
-            m = re.search(r'__version__\s*=\s*[\"\']([^\"\']+)[\"\']', loader_text or "")
-            version = str(m.group(1) if m else "").strip()
-        files = manifest.get("files", None)
-        if not isinstance(files, list) or not files:
-            files = list(EBLANNFT_UPDATE_DEFAULT_FILES)
-        notes = str(manifest.get("notes", "") or "").strip()
-        return {
-            "repo": repo,
-            "branch": branch,
-            "version": version or __version__,
-            "notes": notes,
-            "files": files,
-        }
-
-    def _resolve_update_entries(self, info):
-        entries = []
-        for raw_entry in list(info.get("files", []) or []):
-            rel_path = ""
-            source_path = ""
-            if isinstance(raw_entry, dict):
-                rel_path = str(raw_entry.get("path", "") or raw_entry.get("target", "") or "").strip()
-                source_path = str(raw_entry.get("source", "") or raw_entry.get("url_path", "") or "").strip()
-            else:
-                rel_path = str(raw_entry or "").strip()
-            if not rel_path:
-                continue
-            source_path = source_path or rel_path
-            entries.append({
-                "path": rel_path.replace("\\", "/"),
-                "url": self._build_repo_raw_url(info.get("repo"), info.get("branch"), source_path),
-            })
-        return entries
-
-    def _resolve_plugin_dir(self):
-        try:
-            return os.path.abspath(str(get_plugins_dir()))
-        except:
-            return os.path.abspath(os.path.dirname(__file__))
-
-    def _resolve_update_dest_path(self, rel_path):
-        base = self._resolve_plugin_dir()
-        rel = str(rel_path or "").replace("/", os.sep).replace("\\", os.sep).lstrip(os.sep)
-        dest = os.path.abspath(os.path.join(base, rel))
-        if dest != base and not dest.startswith(base + os.sep):
-            raise RuntimeError(f"Unsafe update path: {rel_path}")
-        return dest
-
-    def _download_and_apply_update(self, info, progress_cb=None):
-        entries = self._resolve_update_entries(info)
-        if not entries:
-            raise RuntimeError("Empty update file list")
-        payloads = []
-        total = len(entries)
-        for idx, entry in enumerate(entries, 1):
-            raw = self._fetch_url_bytes(entry["url"], timeout=25)
-            if not raw:
-                raise RuntimeError(f"Empty file: {entry['path']}")
-            payloads.append((entry["path"], raw))
-            if callable(progress_cb):
-                try:
-                    progress_cb(idx, total, entry["path"], False)
-                except:
-                    pass
-        for idx, (rel_path, raw) in enumerate(payloads, 1):
-            dest = self._resolve_update_dest_path(rel_path)
-            ensure_dir_exists(os.path.dirname(dest))
-            tmp_path = dest + ".tmp"
-            with open(tmp_path, "wb") as f:
-                f.write(raw)
-            os.replace(tmp_path, dest)
-            if callable(progress_cb):
-                try:
-                    progress_cb(idx, total, rel_path, True)
-                except:
-                    pass
-        try:
-            self.set_setting("eblannft_update_last_applied_version", str(info.get("version", "") or ""))
-        except:
-            pass
-        return True
-
-    def _show_update_bottom_sheet(self, info, auto_start=False):
-        frag = get_last_fragment()
-        ctx = frag.getParentActivity() if frag and frag.getParentActivity() else ApplicationLoader.applicationContext
-        if not ctx:
-            return
-        try:
-            from android_utils import OnClickListener
-        except:
-            OnClickListener = None
-        sheet = BottomSheet(ctx, True)
-        root = LinearLayout(ctx)
-        root.setOrientation(LinearLayout.VERTICAL)
-        try:
-            root.setPadding(AndroidUtilities.dp(18), AndroidUtilities.dp(18), AndroidUtilities.dp(18), AndroidUtilities.dp(14))
-        except:
-            pass
-
-        title = TextView(ctx)
-        title.setText("Обновление eblanNFT")
-        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20)
-        try:
-            title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
-            title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-        except:
-            pass
-        root.addView(title, LayoutHelper.createLinear(-1, -2))
-
-        repo_line = TextView(ctx)
-        try:
-            repo_line.setText(f"{info.get('repo', '')} • {info.get('branch', '')}")
-            repo_line.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
-            repo_line.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
-        except:
-            pass
-        root.addView(repo_line, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(4), 0, 0))
-
-        desc = TextView(ctx)
-        try:
-            desc.setText(f"Найдена версия {info.get('version', '?')}. Текущая версия: {__version__}.")
-            desc.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-            desc.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
-        except:
-            pass
-        root.addView(desc, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(12), 0, 0))
-
-        status = TextView(ctx)
-        try:
-            status.setText("Готово к загрузке.")
-            status.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
-            status.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
-        except:
-            pass
-        root.addView(status, LayoutHelper.createLinear(-1, -2, Gravity.START, 0, AndroidUtilities.dp(8), 0, 0))
-
-        progress = ProgressBar(ctx)
-        root.addView(progress, LayoutHelper.createLinear(-2, -2, Gravity.CENTER_HORIZONTAL, 0, AndroidUtilities.dp(12), 0, 0))
-
-        btn = TextView(ctx)
-        btn.setText("Скачать обновление")
-        btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
-        btn.setGravity(Gravity.CENTER)
-        try:
-            btn.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(10), AndroidUtilities.dp(16), AndroidUtilities.dp(10))
-            btn_bg = GradientDrawable()
-            btn_bg.setCornerRadius(AndroidUtilities.dp(20))
-            try:
-                btn_bg.setColor(Theme.getColor(Theme.key_featuredStickers_addButton))
-                btn.setTextColor(Theme.getColor(Theme.key_featuredStickers_buttonText))
-            except:
-                btn_bg.setColor(0xFF2B7FFF)
-                btn.setTextColor(0xFFFFFFFF)
-            btn.setBackground(btn_bg)
-        except:
-            pass
-        root.addView(btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(14), 0, 0))
-
-        close_btn = TextView(ctx)
-        close_btn.setText("Закрыть")
-        close_btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
-        close_btn.setGravity(Gravity.CENTER)
-        try:
-            close_btn.setPadding(AndroidUtilities.dp(14), AndroidUtilities.dp(10), AndroidUtilities.dp(14), AndroidUtilities.dp(10))
-            close_bg = GradientDrawable()
-            close_bg.setCornerRadius(AndroidUtilities.dp(16))
-            try:
-                close_bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray))
-                close_btn.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText))
-            except:
-                close_bg.setColor(0x22394B6A)
-                close_btn.setTextColor(0xFFFFFFFF)
-            close_btn.setBackground(close_bg)
-        except:
-            pass
-        root.addView(close_btn, LayoutHelper.createLinear(-1, -2, Gravity.TOP, 0, AndroidUtilities.dp(10), 0, 0))
-
-        state = {"started": False, "done": False}
-
-        def _apply_status(text, done=False):
-            try:
-                status.setText(str(text or ""))
-            except:
-                pass
-            if done:
-                try:
-                    progress.setVisibility(View.GONE)
-                except:
-                    pass
-
-        def _download():
-            if state["started"]:
-                return
-            state["started"] = True
-            try:
-                BulletinHelper.show_info(f"Загрузка обновления {info.get('version', '?')}...")
-            except:
-                pass
-            run_on_ui_thread(lambda: _apply_status("Скачивание файлов...", False))
-
-            def _progress(done_idx, total, path, written):
-                phase = "Применение" if written else "Загрузка"
-                run_on_ui_thread(lambda d=done_idx, t=total, p=path, ph=phase: _apply_status(f"{ph}: {d}/{t} • {p}", False))
-
-            def _worker():
-                try:
-                    self._download_and_apply_update(info, progress_cb=_progress)
-                    def _done_ok():
-                        state["done"] = True
-                        _apply_status("Обновление скачано. Выключи и включи плагин.", True)
-                        try:
-                            btn.setText("Готово")
-                            btn.setEnabled(False)
-                        except:
-                            pass
-                        try:
-                            BulletinHelper.show_success(f"eblanNFT обновлён до {info.get('version', '?')}")
-                        except:
-                            pass
-                    run_on_ui_thread(_done_ok)
-                except Exception as e:
-                    def _done_err():
-                        state["started"] = False
-                        _apply_status(f"Ошибка обновления: {e}", True)
-                        try:
-                            btn.setText("Повторить загрузку")
-                            btn.setEnabled(True)
-                        except:
-                            pass
-                        try:
-                            BulletinHelper.show_error(f"Обновление: {e}")
-                        except:
-                            pass
-                    run_on_ui_thread(_done_err)
-
-            threading.Thread(target=_worker, daemon=True).start()
-
-        if OnClickListener:
-            btn.setOnClickListener(OnClickListener(lambda _v: _download()))
-            close_btn.setOnClickListener(OnClickListener(lambda _v: sheet.dismiss()))
-        else:
-            btn.setOnClickListener(lambda _v: _download())
-            close_btn.setOnClickListener(lambda _v: sheet.dismiss())
-
-        sheet.setCustomView(root)
-        run_on_ui_thread(sheet.show)
-        if auto_start:
-            run_on_ui_thread(_download)
-
-    def _check_for_plugin_updates(self, show_no_updates=False, auto_download=None):
-        if getattr(self, "_eblannft_update_check_running", False):
-            return
-        self._eblannft_update_check_running = True
-
-        def _worker():
-            try:
-                info = self._fetch_remote_update_info()
-                try:
-                    self.set_setting("eblannft_update_last_check_ts", int(time.time()))
-                except:
-                    pass
-                if not info:
-                    if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_error("GitHub repo для обновлений не настроен"))
-                    return
-                if not self._is_remote_version_newer(info.get("version", __version__), __version__):
-                    if show_no_updates:
-                        run_on_ui_thread(lambda: BulletinHelper.show_info(f"У вас уже последняя версия: {__version__}"))
-                    return
-                auto_flag = self._is_auto_update_enabled() if auto_download is None else bool(auto_download)
-                run_on_ui_thread(lambda: self._show_update_bottom_sheet(info, auto_start=auto_flag))
-            except Exception as e:
-                if show_no_updates:
-                    run_on_ui_thread(lambda: BulletinHelper.show_error(f"Проверка обновления: {e}"))
-            finally:
-                self._eblannft_update_check_running = False
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _maybe_auto_check_updates(self):
-        if not self._is_update_check_on_load_enabled():
-            return
-        repo = self._get_update_repo()
-        if not repo:
-            return
-        try:
-            last_ts = int(self.get_setting("eblannft_update_last_check_ts", 0) or 0)
-        except:
-            last_ts = 0
-        if last_ts > 0 and (time.time() - last_ts) < EBLANNFT_UPDATE_CHECK_INTERVAL_SEC:
-            return
-        self._check_for_plugin_updates(show_no_updates=False, auto_download=self._is_auto_update_enabled())
-
-    def _create_update_settings_subfragment(self, parent_view=None):
-        return [
-            Divider(text="Настройка автообновления loader/runtime из GitHub репозитория."),
-            Divider(text=f"Источник обновлений: {self._get_update_repo()} • {self._get_update_branch()}"),
-            Switch(
-                key="eblannft_update_check_on_load",
-                text="Проверять при запуске",
-                subtext="Фоновая проверка новых версий при загрузке плагина",
-                default=self._is_update_check_on_load_enabled(),
-                icon="msg_retry",
-                on_change=lambda v: self.set_setting("eblannft_update_check_on_load", bool(v)),
-            ),
-            Switch(
-                key="eblannft_auto_update_enabled",
-                text="Скачивать автоматически",
-                subtext="Если найдена новая версия, сразу начать загрузку",
-                default=self._is_auto_update_enabled(),
-                icon="msg_download",
-                on_change=lambda v: self.set_setting("eblannft_auto_update_enabled", bool(v)),
-            ),
-            Text(
-                text="Проверить сейчас",
-                subtext=f"Текущая версия: {__version__}",
-                icon="msg_download",
-                on_click=lambda _: self._check_for_plugin_updates(show_no_updates=True, auto_download=False),
-            ),
-        ]
         return None
 
     def _open_gift_actions_menu(self, key):
@@ -16751,7 +15904,7 @@ class NftClonerPlugin(BasePlugin):
         self.gift_library = []
         self.gift_objects = {}
         self._gift_objects_order = []
-        self._gift_objects_max = GIFT_OBJECTS_CACHE_MIN
+        self._gift_objects_max = 12
         self._profile_saved_lists = []
         self._profile_saved_lists_frag_key = 0
         self.editing_gift_key = None
@@ -16816,6 +15969,175 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         BulletinHelper.show_success("\u041a\u044d\u0448 \u0441\u0431\u0440\u043e\u0448\u0435\u043d")
+
+    def _confirm_full_reset(self):
+        try:
+            activity = self._get_menu_activity()
+            if not activity:
+                self._full_reset()
+                return
+            builder = AlertDialogBuilder(activity)
+            builder.set_title("\u041f\u043e\u043b\u043d\u044b\u0439 \u0441\u0431\u0440\u043e\u0441")
+            builder.set_message(
+                "\u0411\u0443\u0434\u0443\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u044b \u0432\u0441\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 \u043f\u043b\u0430\u0433\u0438\u043d\u0430: "
+                "\u043f\u043e\u0434\u0430\u0440\u043a\u0438, \u043f\u0440\u043e\u0444\u0438\u043b\u0438, \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438, "
+                "\u043a\u044d\u0448 \u0438 \u0432\u0441\u0435 \u0444\u0430\u0439\u043b\u044b. "
+                "\u041f\u043b\u0430\u0433\u0438\u043d \u0432\u0435\u0440\u043d\u0451\u0442\u0441\u044f \u0432 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 "
+                "\u043f\u0435\u0440\u0432\u043e\u0439 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438. "
+                "\u042d\u0442\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u043d\u0435\u043b\u044c\u0437\u044f \u043e\u0442\u043c\u0435\u043d\u0438\u0442\u044c."
+            )
+            builder.set_positive_button(
+                "\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0432\u0441\u0451",
+                lambda d, w: run_on_ui_thread(self._full_reset),
+            )
+            builder.set_negative_button("\u041e\u0442\u043c\u0435\u043d\u0430", None)
+            run_on_ui_thread(builder.show)
+        except Exception:
+            self._full_reset()
+
+    def _full_reset(self):
+        # \u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0441\u0431\u0440\u043e\u0441 \u043f\u0430\u043c\u044f\u0442\u0438 \u0438 \u043e\u0441\u043d\u043e\u0432\u043d\u044b\u0445 \u0444\u0430\u0439\u043b\u043e\u0432 \u043a\u044d\u0448\u0430 \u0447\u0435\u0440\u0435\u0437 _clear_cache.
+        # Bulletin \u0438\u0437 _clear_cache \u0431\u0443\u0434\u0435\u0442 \u043f\u0435\u0440\u0435\u043a\u0440\u044b\u0442 \u043d\u0430\u0448\u0438\u043c \u0441\u043b\u0435\u0434\u043e\u043c.
+        try:
+            self._clear_cache()
+        except Exception:
+            pass
+        # \u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u043e \u2014 \u0443\u0434\u0430\u043b\u044f\u0435\u043c \u0412\u0421\u0401 \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u043c\u043e\u0435 \u043f\u0430\u043f\u043a\u0438 _cache_dir (\u043f\u0440\u043e\u0444\u0438\u043b\u0438, SVG \u0438 \u0442.\u0434.)
+        try:
+            import shutil as _shutil
+            _cd = _cache_dir()
+            if os.path.isdir(_cd):
+                for _entry in os.listdir(_cd):
+                    _ep = os.path.join(_cd, _entry)
+                    try:
+                        if os.path.isdir(_ep):
+                            _shutil.rmtree(_ep, ignore_errors=True)
+                        else:
+                            os.remove(_ep)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # \u0423\u0434\u0430\u043b\u044f\u0435\u043c legacy-\u0434\u0438\u0440\u0435\u043a\u0442\u043e\u0440\u0438\u0438, \u0435\u0441\u043b\u0438 \u043e\u043d\u0438 \u0435\u0449\u0451 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0442
+        try:
+            import shutil as _shutil
+            _base = get_plugins_dir()
+            for _ld in ["nft_architect_data"]:
+                _lp = os.path.join(_base, _ld)
+                if os.path.isdir(_lp):
+                    try:
+                        _shutil.rmtree(_lp, ignore_errors=True)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # \u0423\u0434\u0430\u043b\u044f\u0435\u043c \u0441\u043e\u0434\u0435\u0440\u0436\u0438\u043c\u043e\u0435 ~/.eblannft_cache
+        try:
+            import shutil as _shutil
+            _sup = EBLANNFT_SUPPORT_CACHE_DIR
+            if os.path.isdir(_sup):
+                for _entry in os.listdir(_sup):
+                    _ep = os.path.join(_sup, _entry)
+                    try:
+                        if os.path.isdir(_ep):
+                            _shutil.rmtree(_ep, ignore_errors=True)
+                        else:
+                            os.remove(_ep)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        # \u0421\u0431\u0440\u0430\u0441\u044b\u0432\u0430\u0435\u043c \u0444\u043b\u0430\u0433 \u043f\u0435\u0440\u0432\u043e\u0433\u043e \u0437\u0430\u043f\u0443\u0441\u043a\u0430 (\u043f\u043e\u043a\u0430\u0436\u0435\u0442 \u043f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0441\u043d\u043e\u0432\u0430)
+        try:
+            self.set_setting("eblannft_first_welcome_done", False)
+        except Exception:
+            pass
+        try:
+            self._cache_load_state = "missing"
+        except Exception:
+            pass
+        BulletinHelper.show_success("\u041f\u043b\u0430\u0433\u0438\u043d \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u0441\u0431\u0440\u043e\u0448\u0435\u043d")
+
+    def _confirm_purge_plugin_files(self):
+        try:
+            activity = self._get_menu_activity()
+            if not activity:
+                self._purge_plugin_files()
+                return
+            builder = AlertDialogBuilder(activity)
+            builder.set_title("Удалить файлы плагина?")
+            builder.set_message(
+                "Будут стёрты: рантайм плагина, экспорт-конфиги (.profile), "
+                "кэш и настройки. Это действие нельзя отменить.\n\n"
+                "После удаления плагин надо отключить и убрать в настройках клиента — "
+                "сам себя плагин из списка убрать не может."
+            )
+            builder.set_positive_button(
+                "Удалить",
+                lambda d, w: run_on_ui_thread(self._purge_plugin_files),
+            )
+            builder.set_negative_button("Отмена", None)
+            run_on_ui_thread(builder.show)
+        except Exception:
+            self._purge_plugin_files()
+
+    def _purge_plugin_files(self):
+        import shutil as _shutil
+        try:
+            self._full_reset()
+        except Exception:
+            pass
+        # Стираем папку экспорт-конфигов (Download/<client>/eblannft и legacy Download/eblanNFT).
+        try:
+            Environment = jclass("android.os.Environment")
+            downloads = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_DOWNLOADS
+            ).getAbsolutePath()
+            for sub in (
+                os.path.join(str(downloads), self._detect_client_storage_dir_name(), "eblannft_beta"),
+                os.path.join(str(downloads), "eblannft_beta"),
+            ):
+                try:
+                    if os.path.isdir(sub):
+                        _shutil.rmtree(sub, ignore_errors=True)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        # Стираем рантайм-папку (eblannft_runtime/) и её родителя — это сам инсталл-рут бутстрапа.
+        try:
+            runtime_dir = os.path.dirname(os.path.abspath(__file__))
+            install_root = os.path.dirname(runtime_dir)
+            if os.path.isdir(runtime_dir):
+                _shutil.rmtree(runtime_dir, ignore_errors=True)
+            # install_root удаляем только если это наша поддиректория eblannft_beta/ (имя совпадает),
+            # чтобы не задеть Download/, files/ и прочие чужие папки.
+            try:
+                if install_root and os.path.basename(install_root).lower() == "eblannft_beta":
+                    _shutil.rmtree(install_root, ignore_errors=True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        # Финальный диалог — попросить пользователя добить .plugin вручную.
+        try:
+            activity = self._get_menu_activity()
+            if activity is not None:
+                builder = AlertDialogBuilder(activity)
+                builder.set_title("Файлы удалены")
+                builder.set_message(
+                    "Готово. Теперь отключи и удали плагин в настройках клиента — "
+                    "сам файл .plugin плагин из списка убрать не может."
+                )
+                builder.set_positive_button("Ок", None)
+                run_on_ui_thread(builder.show)
+            else:
+                BulletinHelper.show_success("Файлы плагина удалены — теперь отключи его в клиенте")
+        except Exception:
+            try:
+                BulletinHelper.show_success("Файлы плагина удалены — теперь отключи его в клиенте")
+            except Exception:
+                pass
 
     def _to_float(self, value, default=0.0):
         try:
@@ -17377,7 +16699,7 @@ class NftClonerPlugin(BasePlugin):
 
             if self._is_java_list_like(obj):
                 try:
-                    size = self._list_walk_limit(obj)
+                    size = min(int(obj.size() or 0), 12)
                 except:
                     size = 0
                 for i in range(size):
@@ -19129,8 +18451,14 @@ class NftClonerPlugin(BasePlugin):
                     has_changes = True
 
                 if has_changes:
+                    # putUser(user, fromCache=False) early-returns when oldUser==user
+                    # (in-place patch). force=true bypasses that so the cache actually
+                    # re-broadcasts. Fallback for older builds without 3-arg overload.
                     try:
-                        ctrl.putUser(user_obj, False)
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            ctrl.putUser(user_obj, False)
                         _log(f"UI Forced Update for {my_id}")
                     except:
                         pass
@@ -19144,7 +18472,10 @@ class NftClonerPlugin(BasePlugin):
                 if (self._is_nft_username_active() or self._is_nft_number_active()):
                     if not has_changes:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
                         try:
@@ -19806,22 +19137,46 @@ class NftClonerPlugin(BasePlugin):
         try:
             for m in UC.getDeclaredMethods():
                 try:
-                    if m.getName() != "setCurrentUser":
-                        continue
-                    params = m.getParameterTypes()
-                    if len(params) < 1:
-                        continue
-                    if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
-                        continue
+                    name = m.getName()
                 except:
                     continue
-                m.setAccessible(True)
-                self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
-                hooked += 1
+                if name == "setCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) < 1:
+                            continue
+                        if "org.telegram.tgnet.TLRPC$User" not in params[0].getName():
+                            continue
+                    except:
+                        continue
+                    m.setAccessible(True)
+                    self.hooks_refs.append(self.hook_method(m, SetCurrentUserWearHook(self)))
+                    hooked += 1
+                    continue
+                # Re-apply identity / wear / rating overrides on EVERY
+                # getCurrentUser read — that's the strongest possible anchor:
+                # the drawer header, the account chooser and various profile
+                # rows all read the spoofed values directly from this getter,
+                # so any path that mutates UserConfig.currentUser between our
+                # patches gets transparently re-overridden on the next read.
+                if name == "getCurrentUser":
+                    try:
+                        params = m.getParameterTypes()
+                        if len(params) != 0:
+                            continue
+                    except:
+                        continue
+                    try:
+                        m.setAccessible(True)
+                    except:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GetCurrentUserOverrideHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"UserConfig wear hook scan failed: {e}")
         if hooked:
-            _log(f"UserConfig setCurrentUser wear hooks installed: {hooked}")
+            _log(f"UserConfig wear hooks installed: {hooked}")
 
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
@@ -19866,6 +19221,18 @@ class NftClonerPlugin(BasePlugin):
                     m.setAccessible(True)
                     self.hooks_refs.append(self.hook_method(m, GetAnyWearHook(self)))
                     hooked += 1
+                    # For getUserFull only, also install a foreign-profile
+                    # sync patcher: applies remote stars_rating + stargifts_count
+                    # to the returned UserFull on every read. This is the
+                    # bulletproof path — the response-wrapper patch (in
+                    # _sync_apply_remote_user_overrides) only runs on fresh
+                    # network responses, missing cache hits.
+                    if name == "getUserFull":
+                        try:
+                            self.hooks_refs.append(self.hook_method(m, GetUserFullForeignSyncHook(self)))
+                            hooked += 1
+                        except Exception as _ge:
+                            _log(f"GetUserFullForeignSyncHook install fail: {_ge}")
                     continue
 
                 if name in ["putUser", "putUserFull"]:
@@ -20247,7 +19614,63 @@ class NftClonerPlugin(BasePlugin):
                 hooked += 1
         except Exception as e:
             _log(f"ProfileGiftsContainer hook scan failed: {e}")
-            return
+            # Do NOT return: even if the hash-guard scan fails, the column
+            # hooks below should still attempt to install.
+
+        # Force 3-column gift grid: bump totalCount before fillItems and force
+        # setSpanCount(3) after, plus a setSpanCount interceptor below to catch
+        # the queued runOnUIThread call inside fillItems.
+        try:
+            Page = jclass("org.telegram.ui.Gifts.ProfileGiftsContainer$Page")
+            for m in Page.getDeclaredMethods():
+                try:
+                    n = m.getName()
+                except Exception:
+                    continue
+                if n != "fillItems":
+                    continue
+                try:
+                    m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(m, ProfileGiftsColumnsHook(self, columns=3)))
+                    _log("ProfileGiftsContainer$Page.fillItems hook installed (force 3 columns)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"Page.fillItems hook fail: {e}")
+        except Exception as e:
+            _log(f"ProfileGiftsContainer$Page hook skipped: {e}")
+
+        try:
+            URV = jclass("org.telegram.ui.Components.UniversalRecyclerView")
+            int_cls = jclass("java.lang.Integer").TYPE
+            setSpanCount_m = None
+            try:
+                setSpanCount_m = URV.getDeclaredMethod("setSpanCount", int_cls)
+            except Exception:
+                for m in URV.getDeclaredMethods():
+                    try:
+                        if m.getName() == "setSpanCount":
+                            setSpanCount_m = m
+                            break
+                    except Exception:
+                        continue
+            if setSpanCount_m is not None:
+                try:
+                    setSpanCount_m.setAccessible(True)
+                except Exception:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(setSpanCount_m, UniversalRecyclerSpanForceHook(self, columns=3)))
+                    _log("UniversalRecyclerView.setSpanCount hook installed (forces 3 on tagged listViews)")
+                    hooked += 1
+                except Exception as e:
+                    _log(f"UniversalRecyclerView.setSpanCount hook fail: {e}")
+            else:
+                _log("UniversalRecyclerView.setSpanCount method NOT found")
+        except Exception as e:
+            _log(f"UniversalRecyclerView hook skipped: {e}")
 
         if hooked:
             _log(f"ProfileGiftsContainer guard hooks installed: {hooked}")
@@ -20454,30 +19877,53 @@ class NftClonerPlugin(BasePlugin):
                     params = list(m.getParameterTypes() or [])
                 except:
                     continue
-                if len(params) != 2:
-                    continue
                 try:
-                    p0 = str(params[0].getName() or "")
-                    p1 = str(params[1].getName() or "")
-                except:
+                    p_names = [str(p.getName() or "") for p in params]
+                except Exception:
                     continue
-                # Hook two gift-entry overloads on StarGiftSheet:
-                #  - set(TL_starGiftUnique, boolean)                   — upgraded gift path (existing)
-                #  - set(SavedStarGift,    StarsController$IGiftsList) — saved (plain) path (NEW in 1.2.2)
-                is_unique = ("TL_stars$TL_starGiftUnique" in p0) and ("boolean" in p1.lower())
-                is_saved = ("TL_stars$SavedStarGift" in p0) and ("IGiftsList" in p1)
-                if not (is_unique or is_saved):
+
+                # Variant A: set(TL_starGiftUnique gift, boolean refunded)
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_starGiftUnique" in p_names[0]
+                    and "boolean" in p_names[1].lower()
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
+                    hooked += 1
                     continue
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                self.hooks_refs.append(self.hook_method(m, GiftSheetLocalValueHook(self)))
-                hooked += 1
-                try:
-                    _log(f"Hooked StarGiftSheet.set({p0.split('.')[-1].split('$')[-1]}, {p1.split('.')[-1].split('$')[-1]})")
-                except:
-                    pass
+
+                # Variant B: set(TL_savedStarGift saved, IGiftsList list)
+                # — entry point for the profile-grid tap path. Patches
+                # saved.gift before Telegram casts it to TL_starGiftUnique.
+                if (
+                    len(params) == 2
+                    and "TL_stars$TL_savedStarGift" in p_names[0]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSavedSetHook(self)))
+                    hooked += 1
+                    continue
+
+                # Variant C: set(String slug, TL_starGiftUnique gift, IGiftsList list)
+                if (
+                    len(params) == 3
+                    and "java.lang.String" in p_names[0]
+                    and "TL_stars$TL_starGiftUnique" in p_names[1]
+                ):
+                    try:
+                        m.setAccessible(True)
+                    except Exception:
+                        pass
+                    self.hooks_refs.append(self.hook_method(m, GiftSheetSlugSetHook(self)))
+                    hooked += 1
+                    continue
         except Exception as e:
             _log(f"Local gift value hook error: {e}")
             return
@@ -20715,272 +20161,6 @@ class NftClonerPlugin(BasePlugin):
                 self._gift_objects_order.remove(key)
         except:
             pass
-
-    def _extract_saved_gift_wrapper_from_sheet(self, sheet):
-        if sheet is None:
-            return None
-        for name in ["savedGift", "saved_gift", "savedStarGift", "saved_star_gift", "saved", "savedGiftItem"]:
-            try:
-                v = get_val(sheet, name, None)
-            except:
-                v = None
-            if v is not None and self._looks_like_saved_gift_wrapper(v):
-                return v
-        try:
-            cls = sheet.getClass()
-            for f in cls.getDeclaredFields():
-                try:
-                    f.setAccessible(True)
-                except:
-                    pass
-                try:
-                    v = f.get(sheet)
-                except:
-                    continue
-                if v is not None and self._looks_like_saved_gift_wrapper(v):
-                    return v
-        except:
-            pass
-        return None
-
-    def _extract_visible_gift_from_sheet(self, sheet):
-        if sheet is None:
-            return None
-        wrapper = self._extract_saved_gift_wrapper_from_sheet(sheet)
-        if wrapper is not None:
-            try:
-                gift = self._extract_wrapper_gift(wrapper)
-                if gift is not None:
-                    return gift
-            except:
-                pass
-        for name in ["gift", "starGift", "currentGift", "giftUnique", "uniqueGift"]:
-            try:
-                v = get_val(sheet, name, None)
-                if v is not None:
-                    return v
-            except:
-                pass
-        return None
-
-    def _build_saved_wrapper_from_gift(self, gift, owner_user_id=0):
-        if gift is None:
-            return None
-        try:
-            if not self.cls_saved and not self._ensure_gift_classes():
-                return None
-        except:
-            return None
-        try:
-            wrapper = self._new_java_instance(self.cls_saved)
-        except:
-            wrapper = None
-        if wrapper is None:
-            return None
-        try:
-            self._set_field(wrapper, "gift", gift)
-        except:
-            return None
-        try:
-            self._set_field(wrapper, "date", int(time.time()))
-        except:
-            pass
-        try:
-            self._set_field(wrapper, "pinned_to_top", True)
-        except:
-            pass
-        try:
-            self._set_field(wrapper, "unsaved", False)
-        except:
-            pass
-        self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_user_id)
-        return wrapper
-
-    def _import_gift_to_library(self, gift=None, wrapper=None, inject=True, official_import=False, gift_kind="", local_only=False, original_b64=""):
-        if wrapper is None and gift is None:
-            return None
-        if wrapper is None and gift is not None:
-            wrapper = self._build_saved_wrapper_from_gift(gift, owner_user_id=self._get_my_user_id())
-        if wrapper is None:
-            return None
-        if gift is None:
-            try:
-                gift = self._extract_wrapper_gift(wrapper)
-            except:
-                gift = None
-        try:
-            base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
-        except:
-            base_id = 0
-        key = self._library_upsert_wrapper(
-            wrapper,
-            base_gift_id=base_id,
-            key=None,
-            inject=bool(inject),
-            make_active=False,
-            build_config=(self.build_config.copy() if isinstance(self.build_config, dict) else None),
-            identity_config=(self.identity_config.copy() if isinstance(self.identity_config, dict) else None),
-            value_config=(self.value_config.copy() if isinstance(self.value_config, dict) else None),
-            gift_stars_config=(self.gift_stars_config.copy() if isinstance(self.gift_stars_config, dict) else None),
-        )
-        if not key:
-            return None
-        src_b64 = str(original_b64 or "")
-        if not src_b64:
-            try:
-                src_b64 = str(serialize_tl_object(wrapper) or "")
-            except:
-                src_b64 = ""
-        resolved_kind = str(gift_kind or "").strip() or self._classify_gift_kind(
-            gift=gift,
-            official_import=bool(official_import),
-            local_only=bool(local_only),
-        )
-        self._annotate_library_entry_kind(
-            key,
-            gift_kind=resolved_kind,
-            official_import=bool(official_import),
-            local_only=bool(local_only),
-            original_b64=src_b64,
-            animation_style="telegram_upgrade",
-        )
-        self._save_cache()
-        try:
-            self._save_injection_cache()
-        except:
-            pass
-        try:
-            self._schedule_profile_gifts_refresh([80, 260], min_interval=0.2, force=True)
-        except:
-            pass
-        return key
-
-    def _import_gift_from_sheet(self, sheet):
-        wrapper = self._extract_saved_gift_wrapper_from_sheet(sheet)
-        gift = self._extract_visible_gift_from_sheet(sheet)
-        key = self._import_gift_to_library(
-            gift=gift,
-            wrapper=wrapper,
-            inject=True,
-            official_import=True,
-            local_only=False,
-        )
-        if not key:
-            BulletinHelper.show_error("Не удалось добавить подарок в eblanNFT")
-            return False
-        entry = self._library_find_entry(key)
-        kind_label = self._gift_kind_label(self._classify_gift_kind(entry=entry))
-        BulletinHelper.show_success(f"Подарок добавлен в eblanNFT{(': ' + kind_label) if kind_label else ''}")
-        return True
-
-    def _import_catalog_gift(self, gift, mode="normal"):
-        if gift is None:
-            BulletinHelper.show_error("Подарок не найден")
-            return False
-        if str(mode or "") == "local_upgrade":
-            return bool(self._open_local_upgrade_for_gift(gift))
-        key = self._import_gift_to_library(
-            gift=gift,
-            wrapper=None,
-            inject=True,
-            official_import=False,
-            gift_kind=GIFT_KIND_NORMAL,
-            local_only=False,
-        )
-        if not key:
-            BulletinHelper.show_error("Не удалось сохранить обычный подарок")
-            return False
-        BulletinHelper.show_success("Обычный подарок добавлен в eblanNFT")
-        return True
-
-    def _clear_pending_local_upgrade(self):
-        self._pending_local_upgrade_key = None
-        self._pending_local_upgrade_source_b64 = ""
-        self._pending_local_upgrade_source_kind = ""
-        self._pending_local_upgrade_animation = "telegram_upgrade"
-
-    def _open_local_upgrade_for_entry(self, key):
-        e = self._library_find_entry(key)
-        if not e:
-            BulletinHelper.show_error("Подарок не найден")
-            return False
-        w = self._library_get_wrapper(key)
-        g = self._extract_wrapper_gift(w) if w is not None else None
-        if g is None:
-            BulletinHelper.show_error("Не удалось прочитать подарок")
-            return False
-        if not self._entry_can_local_upgrade(e, gift=g):
-            BulletinHelper.show_info("Этот подарок уже улучшен или не поддерживает локальный апгрейд")
-            return False
-        try:
-            self._pending_local_upgrade_key = str(key)
-            self._pending_local_upgrade_source_b64 = str(e.get("original_b64", "") or e.get("b64", "") or "")
-            self._pending_local_upgrade_source_kind = str(e.get("gift_kind", "") or self._classify_gift_kind(entry=e))
-            self._pending_local_upgrade_animation = "telegram_upgrade"
-        except:
-            pass
-        self.editing_gift_key = str(key)
-        self.stolen_gift_wrapper = w
-        self.stolen_gift_inner = g
-        try:
-            self.cached_gift_id = int(self._get_gift_base_id(g, fallback=int(e.get("base_gift_id", 0) or 0)) or 0)
-        except:
-            self.cached_gift_id = int(e.get("base_gift_id", 0) or 0)
-        AttrLoader(self, int(self.cached_gift_id or 0), allow_generic_fallback=True).start()
-        return True
-
-    def _open_local_upgrade_for_gift(self, gift):
-        if gift is None:
-            return False
-        self._clear_pending_local_upgrade()
-        try:
-            base_id = int(self._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
-        except:
-            base_id = int(get_val(gift, "id", 0) or 0)
-        self.editing_gift_key = None
-        self.stolen_gift_wrapper = None
-        self.stolen_gift_inner = gift
-        self.cached_gift_id = int(base_id or 0)
-        AttrLoader(self, int(self.cached_gift_id or 0), allow_generic_fallback=True).start()
-        return True
-
-    def _revert_local_upgrade(self, key):
-        e = self._library_find_entry(key)
-        if not e:
-            BulletinHelper.show_error("Подарок не найден")
-            return False
-        raw_b64 = str(e.get("original_b64", "") or "")
-        if len(raw_b64) < 16:
-            BulletinHelper.show_info("Для этого подарка нет исходного состояния")
-            return False
-        wrapper = deserialize_tl_saved_gift(raw_b64)
-        if wrapper is None:
-            BulletinHelper.show_error("Не удалось восстановить исходный подарок")
-            return False
-        try:
-            base_id = int(e.get("base_gift_id", 0) or 0)
-        except:
-            base_id = 0
-        self._library_upsert_wrapper(wrapper, base_gift_id=base_id, key=key, inject=bool(e.get("inject", False)), make_active=False)
-        self._annotate_library_entry_kind(
-            key,
-            gift_kind=str(self._pending_local_upgrade_source_kind or e.get("source_gift_kind", "") or GIFT_KIND_NORMAL),
-            official_import=bool(e.get("official_import", False)),
-            local_only=False,
-            original_b64=raw_b64,
-            animation_style=str((e.get("local_upgrade_state", {}) or {}).get("animation_style", "telegram_upgrade")),
-        )
-        self._save_cache()
-        try:
-            self._save_injection_cache()
-        except:
-            pass
-        try:
-            self._schedule_profile_gifts_refresh([80, 260], min_interval=0.2, force=True)
-        except:
-            pass
-        BulletinHelper.show_success("Локальный апгрейд сброшен")
-        return True
 
     def _save_library_gift_stars_config(self, key, value, refresh_ui=True):
         e = self._library_find_entry(key)
@@ -21258,21 +20438,119 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry — preferred path with editable menu.
+        e = self._library_find_entry(key) if key else None
+        # Remote-sync fallback — gift came from another user's snapshot via
+        # the VPS sync. We have its value_config / gift_stars_config in the
+        # meta cache. Render the row read-only (no "подробнее" callback).
+        is_remote = False
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
+            if e:
+                is_remote = True
         if not e:
+            try:
+                gid_dbg = int(get_val(gift, "id", 0) or 0) if gift is not None else 0
+                slug_dbg = str(get_val(gift, "slug", "") or "") if gift is not None else ""
+                _log(f"value row skip: no entry resolved (key={key!r}, gid={gid_dbg}, slug={slug_dbg!r})")
+            except Exception:
+                pass
             return False
-        try:
-            table = get_val(sheet, "tableView", None)
-        except:
-            table = None
+        # tableView is normally a direct field on StarGiftSheet, but on some
+        # Telegram-fork builds the field name is mangled (R8 keep rules vary).
+        # Walk a small allowlist of likely names, then fall back to scanning
+        # declared fields for the first TableView-typed one. Without this the
+        # «Ценность» row silently vanished on certain installs.
+        table = None
+        for tv_name in ("tableView", "table", "infoTable", "tableViewBottom"):
+            try:
+                v = get_val(sheet, tv_name, None)
+            except Exception:
+                v = None
+            if v is None:
+                continue
+            try:
+                cls_name = str(v.getClass().getName() or "")
+            except Exception:
+                cls_name = ""
+            if "TableView" in cls_name or hasattr(v, "addRow"):
+                table = v
+                break
         if table is None:
+            try:
+                cls = sheet.getClass()
+                while cls is not None:
+                    for f in cls.getDeclaredFields():
+                        try:
+                            f.setAccessible(True)
+                            v = f.get(sheet)
+                        except Exception:
+                            continue
+                        if v is None:
+                            continue
+                        try:
+                            cls_name = str(v.getClass().getName() or "")
+                        except Exception:
+                            cls_name = ""
+                        if "TableView" in cls_name and hasattr(v, "addRow"):
+                            table = v
+                            break
+                    if table is not None:
+                        break
+                    try:
+                        cls = cls.getSuperclass()
+                    except Exception:
+                        cls = None
+            except Exception:
+                pass
+        if table is None:
+            try:
+                _log("value row skip: tableView not found on StarGiftSheet")
+            except Exception:
+                pass
             return False
         cfg = self._sanitize_value_config(e.get("value_config", None))
         stars_cfg = self._sanitize_gift_stars_config(e.get("gift_stars_config", None))
+        # If our before-hook successfully wrote native value fields the
+        # gift's `flags & 256` is set and `slug` is non-empty — Telegram's
+        # own GiftValue2 row at StarGiftSheet:4194 will render, so the
+        # plugin row would just be a duplicate ("Value ~€1,337 learn more"
+        # immediately followed by "Ценность ~1 337 € подробнее"). Skip
+        # ours when the native one is going to render and there is no
+        # extra info we add (custom stars line). The custom-stars case
+        # still goes through our row since native one only shows currency.
+        try:
+            native_value_amount = int(self._to_int(get_val(gift, "value_amount", 0), 0) or 0) if gift is not None else 0
+        except Exception:
+            native_value_amount = 0
+        try:
+            native_flags = int(self._to_int(get_val(gift, "flags", 0), 0) or 0) if gift is not None else 0
+        except Exception:
+            native_flags = 0
+        try:
+            native_slug = str(get_val(gift, "slug", "") or "") if gift is not None else ""
+        except Exception:
+            native_slug = ""
+        native_will_render = bool(
+            native_slug
+            and (native_flags & 256)
+            and native_value_amount > 0
+        )
+        stars_active = self._is_gift_stars_config_active(stars_cfg)
+        if native_will_render and not stars_active:
+            try:
+                _log(
+                    f"value row skipped (native will render): value_amount={native_value_amount} "
+                    f"slug={native_slug!r} flags&256={bool(native_flags & 256)}"
+                )
+            except Exception:
+                pass
+            return False
         value_text = self._format_local_value_text(cfg, placeholder="не задана")
-        if self._is_gift_stars_config_active(stars_cfg):
+        if stars_active:
             value_text = f"{value_text} • {self._format_gift_stars_text(stars_cfg)}"
         button_text = "подробнее"
 
@@ -21283,7 +20561,23 @@ class NftClonerPlugin(BasePlugin):
                 BulletinHelper.show_error(f"Не удалось открыть меню ценности: {ex}")
 
         try:
-            table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
+            if is_remote:
+                # Remote sync: render read-only, no "подробнее" link (the
+                # editor menu manipulates local library state we don't have).
+                value_active = self._is_value_config_active(cfg)
+                if not value_active and not stars_active:
+                    try:
+                        _log(f"remote gift value row skipped (empty cfg): value_cfg={cfg} stars_cfg={stars_cfg}")
+                    except Exception:
+                        pass
+                    return False
+                table.addRow(self._ui_text("Ценность"), self._ui_text(value_text))
+                try:
+                    _log(f"remote gift value row added: text={value_text!r}")
+                except Exception:
+                    pass
+            else:
+                table.addRow(self._ui_text("Ценность"), self._ui_text(value_text), self._ui_text(button_text), JRunnable(_open_menu))
             return True
         except Exception as e:
             _log(f"Local gift value row inject error: {e}")
@@ -21302,9 +20596,13 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback.
+        e = self._library_find_entry(key) if key else None
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -21336,9 +20634,13 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        if not key:
-            return False
-        e = self._library_find_entry(key)
+        # Local library entry preferred; remote-sync cache as fallback.
+        e = self._library_find_entry(key) if key else None
+        if not e and gift is not None:
+            try:
+                e = self._get_remote_gift_meta_for_gift(gift)
+            except Exception:
+                e = None
         if not e:
             return False
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
@@ -21464,7 +20766,11 @@ class NftClonerPlugin(BasePlugin):
                 key = self._resolve_library_key_for_gift(gift)
             except:
                 key = None
-        e = self._library_find_entry(key) if key else None
+        if not key:
+            return False
+        e = self._library_find_entry(key)
+        if not e:
+            return False
 
         text = self._resolve_local_gift_release_badge_text(e, gift=gift)
         if not text:
@@ -23892,6 +23198,64 @@ class NftClonerPlugin(BasePlugin):
                     target_user_id = 0
                 manage_self = bool(self._should_manage_self_saved_gifts(req_user_id=req_user_id, owner_user_id=owner_user_id, target_user_id=target_user_id))
                 if not manage_self:
+                    # Foreign profile + sync: inject the remote user's gifts
+                    # from the VPS cache and schedule wear-status patches so
+                    # other beta/prod clients see each other's NFTs.
+                    try:
+                        remote_uid = int(target_user_id or owner_user_id or req_user_id or 0)
+                    except Exception:
+                        remote_uid = 0
+                    if remote_uid > 0 and remote_uid != my_id:
+                        # Honor remote owner's "hide official gifts" toggle:
+                        # if the foreign user enabled it locally, their snapshot
+                        # carries hide_official_gifts=True, and we strip all
+                        # server-returned (= real Telegram) gifts before our
+                        # _sync_inject_remote_gifts re-populates the list with
+                        # only the plugin/synced ones. This makes the hide
+                        # toggle visible to other plugin users, not just to
+                        # the owner.
+                        try:
+                            self._sync_apply_remote_hide_official(gifts_list, remote_uid)
+                        except Exception as _hoe:
+                            _log(f"  Remote sync hide-official error: {_hoe}")
+                        try:
+                            inj = self._sync_inject_remote_gifts(gifts_list, remote_uid)
+                            if inj > 0:
+                                _log(f"  Remote sync inject for uid={remote_uid}: +{inj}")
+                        except Exception as _re:
+                            _log(f"  Remote sync inject error: {_re}")
+                        try:
+                            self._sync_schedule_remote_user_patch(remote_uid)
+                        except Exception as _re2:
+                            _log(f"  Remote sync schedule error: {_re2}")
+                        # Bump response.count >= max(3, gifts_list.size()). Telegram's
+                        # ProfileGiftsContainer$Page.fillItems() computes the grid
+                        # spanCount as Math.min(3, list.totalCount), and totalCount is
+                        # later assigned from rez.count in StarsController.GiftsList.
+                        # Without this bump a foreign profile with 1 real gift renders
+                        # injected gifts as full-width banners (1 column) instead of
+                        # the expected 3x3 grid.
+                        try:
+                            try:
+                                _gs = int(gifts_list.size() or 0)
+                            except Exception:
+                                _gs = 0
+                            _desired_count = max(3, _gs)
+                            self._sync_saved_gifts_owner_count_fields(
+                                response,
+                                gifts_list=gifts_list,
+                                field_names=["count"],
+                                desired_min=_desired_count,
+                            )
+                        except Exception as _ce:
+                            _log(f"  Remote sync count bump error: {_ce}")
+                        # Belt-and-suspenders: also bump totalCount on any cached
+                        # StarsController.GiftsList for this dialog so a fillItems()
+                        # racing the response delivery still gets spanCount=3.
+                        try:
+                            self._bump_remote_gifts_list_total_count(remote_uid, desired_min=_desired_count)
+                        except Exception as _be:
+                            _log(f"  Remote GiftsList totalCount bump error: {_be}")
                     _log(f"  Skip saved gifts patch: req_uid={req_user_id}, owner_uid={owner_user_id}, target_uid={target_user_id}, my_id={my_id}")
                     return
 
@@ -24093,7 +23457,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             owner_uid = 0
         self._normalize_saved_gift_for_actions(wrapper, force_pin=True, update_date=True, owner_user_id=owner_uid)
-        entry_key = self._library_upsert_wrapper(
+        self._library_upsert_wrapper(
             wrapper,
             base_gift_id=self.cached_gift_id or 0,
             key=self.editing_gift_key,
@@ -24105,40 +23469,6 @@ class NftClonerPlugin(BasePlugin):
             value_config=(self.value_config.copy() if isinstance(self.value_config, dict) else None),
             gift_stars_config=(self.gift_stars_config.copy() if isinstance(self.gift_stars_config, dict) else None),
         )
-        try:
-            pending_key = str(getattr(self, "_pending_local_upgrade_key", None) or "")
-        except:
-            pending_key = ""
-        try:
-            entry_key_s = str(entry_key or "")
-        except:
-            entry_key_s = ""
-        try:
-            if entry_key_s:
-                if pending_key and pending_key == entry_key_s:
-                    self._annotate_library_entry_kind(
-                        entry_key_s,
-                        gift_kind=GIFT_KIND_LOCAL_UPGRADED,
-                        official_import=False,
-                        local_only=True,
-                        original_b64=str(getattr(self, "_pending_local_upgrade_source_b64", "") or ""),
-                        animation_style=str(getattr(self, "_pending_local_upgrade_animation", "telegram_upgrade") or "telegram_upgrade"),
-                    )
-                    e2 = self._library_find_entry(entry_key_s)
-                    if isinstance(e2, dict):
-                        e2["source_gift_kind"] = str(getattr(self, "_pending_local_upgrade_source_kind", "") or GIFT_KIND_NORMAL)
-                else:
-                    self._annotate_library_entry_kind(
-                        entry_key_s,
-                        gift_kind=GIFT_KIND_LOCAL_UPGRADED,
-                        official_import=False,
-                        local_only=True,
-                        original_b64="",
-                        animation_style="telegram_upgrade",
-                    )
-        except Exception as e:
-            _log(f"Local upgrade annotate failed: {e}")
-        self._clear_pending_local_upgrade()
         self.editing_gift_key = None
         self._save_cache()
         self._save_injection_cache()
@@ -24207,15 +23537,10 @@ class NftClonerPlugin(BasePlugin):
         n = int(e.get("num", 0) or 0)
         title = f"{t} #{n}" if n > 0 else t
         ton_cfg = self._sanitize_ton_display_config(e.get("ton_display_config", None))
-        kind = self._classify_gift_kind(entry=e)
         actions = [
             ("\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", lambda: self._open_constructor_for_library_key(key)),
+            (f"TON \u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)),
         ]
-        if self._entry_can_local_upgrade(e):
-            actions.append((f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", lambda: self._open_local_upgrade_for_entry(key)))
-        elif str(kind or "") == GIFT_KIND_LOCAL_UPGRADED and str(e.get("original_b64", "") or ""):
-            actions.append(("\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u0439 \u0430\u043f\u0433\u0440\u0435\u0439\u0434", lambda: self._revert_local_upgrade(key)))
-        actions.append((f"TON \u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u2022 {self._state_short_text(bool(ton_cfg.get('enabled', False)))}", lambda: self._toggle_library_ton_display(key)))
         if bool(ton_cfg.get("enabled", False)):
             actions.insert(2, (f"\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446 TON \u2022 {self._format_visual_ton_owner_text(e, ton_cfg)}", lambda: self._open_library_ton_owner_menu(key)))
         actions.append(("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0438\u0437 \u0431\u0438\u0431\u043b\u0438\u043e\u0442\u0435\u043a\u0438", lambda: self._delete_library_gift_key(key)))
@@ -24236,43 +23561,134 @@ class GiftSheetLocalValueHook(MethodHook):
                 gift = None
             if gift is None:
                 return
-            # Detect overload: TL_starGiftUnique (inner gift) vs TL_savedStarGift (wrapper).
+            self.plugin._apply_local_ton_display_to_gift(gift)
+            # Native value patch — Telegram reads gift.value_amount /
+            # gift.value_currency / (gift.flags & 256) at StarGiftSheet:4194
+            # *during* set(), so mutating those fields in the after-hook is
+            # too late. We must patch them here, in before, so Telegram sees
+            # the spoofed value when it builds the table. Source of truth:
+            # local library entry for own gifts, sync meta cache for foreign.
             try:
-                cls_name = str(gift.getClass().getName() or "")
-            except:
-                cls_name = ""
-            is_wrapper = "TL_savedStarGift" in cls_name
-            if is_wrapper:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
                 try:
-                    self.plugin._apply_local_overrides_to_wrapper(gift)
-                except Exception as e:
-                    _log(f"GiftSheetLocalValueHook wrapper override error: {e}")
-                # Also forward to TON-display hook in case inner gift wants it.
-                try:
-                    inner = get_val(gift, "gift", None)
-                    if inner is not None:
-                        self.plugin._apply_local_ton_display_to_gift(inner)
-                except:
+                    _log(f"native value pre-patch error: {_ne}")
+                except Exception:
                     pass
-            else:
-                self.plugin._apply_local_ton_display_to_gift(gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook before error: {e}")
 
     def after_hooked_method(self, param):
+        sheet = None
+        gift = None
         try:
             sheet = getattr(param, "thisObject", None)
-            gift = None
             try:
                 if param.args and len(param.args) >= 1:
                     gift = param.args[0]
-            except:
+            except Exception:
                 gift = None
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook after preamble error: {e}")
+            return
+        # Each side-effect lives in its own try so an exception in the TON
+        # blockchain row doesn't suppress the «Ценность» row injection
+        # (and vice versa). Earlier they shared a try/except — a single
+        # throw in the first call meant the «Ценность» row silently never
+        # rendered, which surfaced as "plugin gifts missing the Value row
+        # like real Telegram gifts have".
+        try:
             self.plugin._apply_local_ton_blockchain_line(sheet, gift=gift)
-            self.plugin._inject_local_gift_release_badge(sheet, gift=gift)
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook ton-line error: {e}")
+        try:
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
-            _log(f"GiftSheetLocalValueHook error: {e}")
+            _log(f"GiftSheetLocalValueHook value-row error: {e}")
+
+class GiftSheetSavedSetHook(MethodHook):
+    """Hook StarGiftSheet.set(TL_savedStarGift, IGiftsList).
+
+    Fires on every profile-grid tap. Pre-patches saved.gift (value_amount /
+    value_currency / flags|256) BEFORE Telegram's body casts it to
+    TL_starGiftUnique and reads those fields.
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            saved = None
+            try:
+                if param.args and len(param.args) >= 1:
+                    saved = param.args[0]
+            except Exception:
+                saved = None
+            if saved is None:
+                return
+            try:
+                gift = get_val(saved, "gift", None)
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"saved-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSavedSetHook before error: {e}")
+            except Exception:
+                pass
+
+
+class GiftSheetSlugSetHook(MethodHook):
+    """Hook StarGiftSheet.set(String slug, TL_starGiftUnique, IGiftsList).
+
+    Used by the slug-deeplink path (getUniqueStarGift response).
+    """
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            gift = None
+            try:
+                if param.args and len(param.args) >= 2:
+                    gift = param.args[1]
+            except Exception:
+                gift = None
+            if gift is None:
+                return
+            try:
+                self.plugin._apply_local_ton_display_to_gift(gift)
+            except Exception:
+                pass
+            try:
+                self.plugin._apply_native_value_to_gift_for_sheet(gift)
+            except Exception as _ne:
+                try:
+                    _log(f"slug-set native value pre-patch error: {_ne}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GiftSheetSlugSetHook before error: {e}")
+            except Exception:
+                pass
+
 
 class GiftMenuPressedHook(MethodHook):
     """
@@ -24339,30 +23755,17 @@ class GiftItemOptionsShowHook(MethodHook):
             if bool(getattr(self.plugin, "_gift_menu_injected_once", False)):
                 return
             key = getattr(self.plugin, "_gift_menu_entry_key", None)
+            if not key:
+                return
 
             item_options = param.thisObject
-            sheet = getattr(self.plugin, "_gift_menu_sheet_ref", None)
-            importable_wrapper = None
-            importable_gift = None
-            try:
-                importable_wrapper = self.plugin._extract_saved_gift_wrapper_from_sheet(sheet)
-            except:
-                importable_wrapper = None
-            try:
-                importable_gift = self.plugin._extract_visible_gift_from_sheet(sheet)
-            except:
-                importable_gift = None
-            if not key and importable_wrapper is None and importable_gift is None:
-                return
 
             try:
                 R_drawable = jclass("org.telegram.messenger.R$drawable")
                 icon_edit = int(getattr(R_drawable, "msg_edit", 0) or 0)
                 icon_delete = int(getattr(R_drawable, "msg_delete", 0) or 0)
-                icon_add = int(getattr(R_drawable, "msg_add", 0) or 0)
-                icon_upgrade = int(getattr(R_drawable, "msg_retry", 0) or 0)
             except:
-                icon_edit, icon_delete, icon_add, icon_upgrade = 0, 0, 0, 0
+                icon_edit, icon_delete = 0, 0
 
             def _on_edit():
                 run_on_ui_thread(lambda: self.plugin._open_constructor_for_library_key(key))
@@ -24370,29 +23773,9 @@ class GiftItemOptionsShowHook(MethodHook):
             def _on_delete():
                 run_on_ui_thread(lambda: self.plugin._delete_library_gift_key(key))
 
-            def _on_add():
-                run_on_ui_thread(lambda: self.plugin._import_gift_from_sheet(sheet))
-
-            def _on_local_upgrade():
-                if key:
-                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_entry(key))
-                elif importable_gift is not None:
-                    run_on_ui_thread(lambda: self.plugin._open_local_upgrade_for_gift(importable_gift))
-
             try:
-                if key:
-                    item_options.add(icon_edit, "\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", JRunnable(_on_edit))
-                    try:
-                        entry = self.plugin._library_find_entry(key)
-                    except:
-                        entry = None
-                    if entry is not None and self.plugin._entry_can_local_upgrade(entry):
-                        item_options.add(icon_upgrade, f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", JRunnable(_on_local_upgrade))
-                    item_options.add(icon_delete, "\u0423\u0434\u0430\u043b\u0438\u0442\u044c", JRunnable(_on_delete))
-                else:
-                    item_options.add(icon_add, "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u0432 eblanNFT", JRunnable(_on_add))
-                    if importable_gift is not None and (not self.plugin._looks_like_unique_gift(importable_gift)):
-                        item_options.add(icon_upgrade, f"\u041b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0443\u043b\u0443\u0447\u0448\u0438\u0442\u044c \u2022 {LOCAL_VISUAL_UPGRADE_STARS}\u2605", JRunnable(_on_local_upgrade))
+                item_options.add(icon_edit, "\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0432 \u043a\u043e\u043d\u0441\u0442\u0440\u0443\u043a\u0442\u043e\u0440\u0435", JRunnable(_on_edit))
+                item_options.add(icon_delete, "\u0423\u0434\u0430\u043b\u0438\u0442\u044c", JRunnable(_on_delete))
                 self.plugin._gift_menu_injected_once = True
                 self.plugin._inside_gift_menu = False
                 self.plugin._gift_menu_entry_key = None
@@ -24590,16 +23973,22 @@ class NetworkHook(MethodHook):
             req_name = req.getClass().getSimpleName()
             req_name_l = str(req_name).lower()
 
-            if "gift" in req_name_l and "get" in req_name_l and self.plugin._has_local_gifts_overrides():
+            if "gift" in req_name_l and "get" in req_name_l:
                 req_user_id = self.plugin._extract_request_user_id(req)
-                if self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
+                is_self = bool(self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id))
+                has_local_overrides = bool(self.plugin._has_local_gifts_overrides())
+                sync_enabled = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+                # Self profile + own NFTs → original behaviour. Any saved-gifts
+                # response → also wrap so we can inject remote NFTs of *other*
+                # users when the sync client is alive.
+                if (is_self and has_local_overrides) or (sync_enabled and "saved" in req_name_l):
                     allow_inject = True
                     try:
                         if self.plugin._is_non_first_saved_gifts_page(req):
                             allow_inject = False
                     except:
                         allow_inject = True
-                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}")
+                    _log(f">>> Hooking: {req_name}, req_user_id={req_user_id}, is_self={is_self}, has_local={has_local_overrides}, sync={sync_enabled}")
                     param.args[1] = WrapperDelegate(self.plugin, param.args[1], req_user_id, req_name, allow_inject)
 
             # Channel gifts injection: getSavedStarGifts for a channel peer
@@ -24658,26 +24047,13 @@ class NetworkHook(MethodHook):
                 except:
                     pass
 
-            # payments.upgradeStarGift — for already-converted / not-found gifts
-            # Telegram replies with STARGIFT_ALREADY_CONVERTED. We suppress that
-            # error and reroute the user into the local visual upgrade flow.
-            if ("upgrade" in req_name_l) and ("stargift" in req_name_l):
-                entry_key = ""
-                try:
-                    entry = self.plugin._resolve_library_entry_for_saved_action(req)
-                    if entry is not None:
-                        entry_key = str(entry.get("key", "") or "")
-                except Exception as e:
-                    _log(f"Upgrade hook resolve entry failed: {e}")
-                _log(f">>> Hooking UPGRADE_STARGIFT: {req_name} entry_key='{entry_key}'")
-                param.args[1] = UpgradeStarGiftDelegate(self.plugin, param.args[1], req_name, entry_key)
-
             if "emojistatus" in req_name_l and "update" in req_name_l:
                 cid = self.plugin._on_update_emoji_status_request(req)
                 _log(f">>> Hooking STATUS: {req_name}, collectible_id={cid}")
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active()) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            sync_active = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
@@ -24685,6 +24061,10 @@ class NetworkHook(MethodHook):
                 elif self.plugin._should_apply_local_rating_for_target(req_user_id):
                     should_hook_user = True
                 elif self.plugin._is_local_rating_active() and ("getfulluser" in req_name_l) and int(req_user_id or -1) <= 0:
+                    should_hook_user = True
+                elif sync_active and int(req_user_id or 0) > 0:
+                    # Foreign profile + sync: wrap so we can patch wear status,
+                    # NFT username and number using the remote record from VPS.
                     should_hook_user = True
                 if should_hook_user:
                     _log(f">>> Hooking USER: {req_name}")
@@ -24752,74 +24132,6 @@ class WrapperDelegate(dynamic_proxy(RequestDelegate)):
                 _log(f"WrapperDelegate error: {e}")
         if self.original:
             self.original.run(response, error)
-
-class UpgradeStarGiftDelegate(dynamic_proxy(RequestDelegate)):
-    """Intercept payments.upgradeStarGift. If Telegram returns
-    STARGIFT_ALREADY_CONVERTED (or similar terminal upgrade errors), suppress
-    the toast and reroute the user into eblanNFT's free local visual upgrade
-    on the matching library entry. Real successful upgrades pass through.
-    """
-    _UPGRADE_REROUTE_TOKENS = (
-        "STARGIFT_ALREADY_CONVERTED",
-        "STARGIFT_NOT_FOUND",
-        "STARGIFT_NOT_MODIFIED",
-        "STARGIFT_UPGRADE_UNAVAILABLE",
-        "STARGIFT_RESELLABLE",
-    )
-
-    def __init__(self, plugin, original, req_name="", entry_key=""):
-        super().__init__()
-        self.plugin = plugin
-        self.original = original
-        self.req_name = str(req_name or "")
-        self.entry_key = str(entry_key or "")
-
-    def run(self, response, error):
-        try:
-            err_text = ""
-            if error is not None:
-                try:
-                    err_text = str(getattr(error, "text", "") or "")
-                except:
-                    err_text = ""
-            should_local = False
-            if error is not None:
-                up = err_text.upper()
-                for tok in self._UPGRADE_REROUTE_TOKENS:
-                    if tok in up:
-                        should_local = True
-                        break
-            if should_local:
-                # Don't fabricate a Updates response — Telegram's gift-sheet
-                # handler casts it; passing the wrong type would crash. Just
-                # silently drop both response and error: the sheet stays put
-                # and we open our own local-upgrade UI on top of it.
-                response = None
-                error = None
-                key = self.entry_key
-                def _open():
-                    try:
-                        opened = False
-                        if key:
-                            opened = bool(self.plugin._open_local_upgrade_for_entry(key))
-                        if not opened:
-                            BulletinHelper.show_info(
-                                "Подарок уже сконвертирован в звёзды — используй локальный апгрейд из меню eblanNFT"
-                            )
-                    except Exception as e:
-                        _log(f"UpgradeStarGiftDelegate reroute open failed: {e}")
-                try:
-                    run_on_ui_thread(_open)
-                except Exception as e:
-                    _log(f"UpgradeStarGiftDelegate run_on_ui_thread failed: {e}")
-                _log(f"UpgradeStarGiftDelegate: rerouted to local upgrade (err='{err_text}', key='{key}')")
-        except Exception as e:
-            _log(f"UpgradeStarGiftDelegate error: {e}")
-        if self.original is not None:
-            try:
-                self.original.run(response, error)
-            except Exception as e:
-                _log(f"UpgradeStarGiftDelegate original.run failed: {e}")
 
 class StatusWrapperDelegate(dynamic_proxy(RequestDelegate)):
     def __init__(self, plugin, original, collectible_id=0, req_name=""):
@@ -24949,6 +24261,26 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                     _log(f"USER response patched ({self.req_name}): {patched}")
             except Exception as e:
                 _log(f"UserWrapperDelegate patch error: {e}")
+            # Sync: apply remote-cached overrides for a *foreign* uid.
+            try:
+                tuid = int(self.target_user_id or 0)
+            except Exception:
+                tuid = 0
+            try:
+                my_id = int(self.plugin._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if tuid > 0 and tuid != my_id:
+                try:
+                    rpatched = int(self.plugin._sync_apply_remote_user_overrides(response, tuid) or 0)
+                    if rpatched:
+                        _log(f"USER remote sync patched ({self.req_name}) uid={tuid}: {rpatched}")
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote patch error: {e}")
+                try:
+                    self.plugin._sync_schedule_remote_user_patch(tuid)
+                except Exception as e:
+                    _log(f"UserWrapperDelegate remote schedule error: {e}")
         if self.original:
             self.original.run(response, error)
 
@@ -24960,15 +24292,6 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
 
         if (self.plugin.wear_active and self.plugin.wear_collectible_id > 0) or self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active():
             try:
-                # Always re-schedule, including in early-profile mode: the
-                # loadFullUser response delivered above is itself the trigger
-                # that overwrites our cached User in MessagesController, so
-                # skipping the patch here is what was leaving wear-or-identity
-                # in a half-patched state on the next render.
-                # Use a delegate-specific batch key so this schedule does NOT
-                # share a token with the on_plugin_load primer (which used the
-                # default key) — otherwise each delegate run would cancel that
-                # primer (or vice versa) instead of running additively.
                 self.plugin._schedule_cached_user_patch(
                     [80, 220, 520],
                     patch_userconfig=True,
@@ -25134,6 +24457,205 @@ class GiftLookupDelegate(dynamic_proxy(RequestDelegate)):
 
         if self.original:
             self.original.run(response, error)
+
+class ProfileGiftsColumnsHook(MethodHook):
+    """Force gift grid to N columns.
+
+    Two-pronged: (1) before fillItems we bump list.totalCount so Telegram's
+    Math.min(N, totalCount) evaluates to N. (2) after fillItems we directly
+    call listView.setSpanCount(N) as a belt-and-suspenders fallback.
+    """
+
+    _tracked_listview_ids = set()
+    _force_in_progress = False
+
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+        self._field_cache = {}
+
+    def _find_field(self, obj, name):
+        try:
+            cls = obj.getClass()
+            cache_key = (cls.getName(), name)
+            f = self._field_cache.get(cache_key)
+            if f is not None:
+                return f
+        except Exception:
+            cls = None
+            cache_key = None
+        c = cls
+        while c is not None:
+            try:
+                f = c.getDeclaredField(name)
+                f.setAccessible(True)
+                if cache_key is not None:
+                    self._field_cache[cache_key] = f
+                return f
+            except Exception:
+                pass
+            try:
+                c = c.getSuperclass()
+            except Exception:
+                c = None
+        return None
+
+    def _bump_total_count(self, page):
+        list_field = self._find_field(page, "list")
+        if list_field is None:
+            return False
+        try:
+            lst = list_field.get(page)
+        except Exception:
+            return False
+        if lst is None:
+            return False
+        tc_field = self._find_field(lst, "totalCount")
+        if tc_field is None:
+            return False
+        try:
+            current = int(tc_field.getInt(lst) or 0)
+        except Exception:
+            current = 0
+        if current >= self.columns:
+            return False
+        try:
+            tc_field.setInt(lst, int(self.columns))
+            return True
+        except Exception:
+            return False
+
+    def _force_span_count(self, page):
+        lv_field = self._find_field(page, "listView")
+        if lv_field is None:
+            return False
+        try:
+            listView = lv_field.get(page)
+        except Exception:
+            return False
+        if listView is None:
+            return False
+        try:
+            cur = int(listView.getSpanCount() or 0)
+        except Exception:
+            cur = 0
+        if cur == self.columns:
+            return False
+        try:
+            listView.setSpanCount(int(self.columns))
+            return True
+        except Exception:
+            return False
+
+    def _track_listview(self, page):
+        try:
+            lv_field = self._find_field(page, "listView")
+            if lv_field is None:
+                return
+            try:
+                listView = lv_field.get(page)
+            except Exception:
+                return
+            if listView is None:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(listView))
+            except Exception:
+                lvid = id(listView)
+            ProfileGiftsColumnsHook._tracked_listview_ids.add(lvid)
+            if len(ProfileGiftsColumnsHook._tracked_listview_ids) > 64:
+                try:
+                    extra = len(ProfileGiftsColumnsHook._tracked_listview_ids) - 64
+                    for k in list(ProfileGiftsColumnsHook._tracked_listview_ids)[:extra]:
+                        ProfileGiftsColumnsHook._tracked_listview_ids.discard(k)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def before_hooked_method(self, param):
+        try:
+            page = getattr(param, "thisObject", None)
+            if page is None:
+                return
+            self._bump_total_count(page)
+            self._track_listview(page)
+        except Exception as e:
+            try:
+                _log(f"ProfileGiftsColumnsHook before error: {e}")
+            except Exception:
+                pass
+
+    def after_hooked_method(self, param):
+        try:
+            page = getattr(param, "thisObject", None)
+            if page is None:
+                return
+            self._track_listview(page)
+            forced = self._force_span_count(page)
+            if forced:
+                _log(f"ProfileGiftsColumnsHook setSpanCount={self.columns} forced")
+        except Exception as e:
+            try:
+                _log(f"ProfileGiftsColumnsHook after error: {e}")
+            except Exception:
+                pass
+
+
+class UniversalRecyclerSpanForceHook(MethodHook):
+    """Force setSpanCount(3) on any UniversalRecyclerView tagged as belonging
+    to a ProfileGiftsContainer$Page. Catches the queued runOnUIThread call
+    inside Page.fillItems that would otherwise reset our 3-column override.
+    """
+    def __init__(self, plugin, columns=3):
+        super().__init__()
+        self.plugin = plugin
+        self.columns = int(columns or 3)
+
+    def before_hooked_method(self, param):
+        try:
+            this = getattr(param, "thisObject", None)
+            args = getattr(param, "args", None)
+            if this is None or args is None or len(args) < 1:
+                return
+            try:
+                System = jclass("java.lang.System")
+                lvid = int(System.identityHashCode(this))
+            except Exception:
+                lvid = id(this)
+            if lvid not in ProfileGiftsColumnsHook._tracked_listview_ids:
+                return
+            try:
+                req = int(args[0] or 0)
+            except Exception:
+                req = 0
+            if req == self.columns:
+                return
+            try:
+                args[0] = int(self.columns)
+            except Exception:
+                try:
+                    param.setResult(None)
+                    if not ProfileGiftsColumnsHook._force_in_progress:
+                        ProfileGiftsColumnsHook._force_in_progress = True
+                        try:
+                            this.setSpanCount(int(self.columns))
+                        finally:
+                            ProfileGiftsColumnsHook._force_in_progress = False
+                except Exception:
+                    pass
+            try:
+                _log(f"UniversalRecyclerSpanForceHook overrode setSpanCount({req}) -> {self.columns}")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                _log(f"UniversalRecyclerSpanForceHook error: {e}")
+            except Exception:
+                pass
+
 
 class ProfileGiftsHashGuardHook(MethodHook):
     """Sanitize broken saved gift wrappers before Telegram recomputes emoji hash/tabs."""
@@ -25579,7 +25101,10 @@ class LoadFullUserWearHook(MethodHook):
                     pass
             try:
                 if user_obj is not None:
-                    ctrl.putUser(user_obj, False)
+                    try:
+                        ctrl.putUser(user_obj, False, True)
+                    except Exception:
+                        ctrl.putUser(user_obj, False)
             except:
                 pass
             try:
@@ -25723,6 +25248,81 @@ class GetAnyWearHook(MethodHook):
                 param.setResult(user_obj)
         except Exception as e:
             _log(f"GetAnyWearHook error: {e}")
+
+class GetUserFullForeignSyncHook(MethodHook):
+    """Patch foreign UserFull on every getUserFull read with synced rating
+    and stargifts_count. Catches cases where the response-wrapper patch
+    (_sync_apply_remote_user_overrides) didn't fire — e.g. cache hit, no
+    fresh network round-trip."""
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def after_hooked_method(self, param):
+        try:
+            full_obj = param.getResult()
+            if full_obj is None:
+                return
+            try:
+                args = param.args
+            except Exception:
+                args = None
+            if not args or len(args) < 1:
+                return
+            try:
+                uid = int(args[0] or 0)
+            except Exception:
+                uid = 0
+            if uid <= 0:
+                return
+            try:
+                my_id = int(self.plugin._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if uid == my_id:
+                return
+            client = getattr(self.plugin, "_eblannft_sync_client", None)
+            if client is None:
+                return
+            record = None
+            try:
+                record = client.get_cached(uid)
+            except Exception:
+                record = None
+            if not isinstance(record, dict):
+                return
+            changed = False
+            try:
+                gifts_count = int(self.plugin._sync_get_remote_gifts_count(record) or 0)
+                if gifts_count > 0:
+                    if self.plugin._apply_remote_stargifts_count_to_obj(full_obj, gifts_count):
+                        changed = True
+            except Exception:
+                pass
+            try:
+                rs = record.get("rating_state") or {}
+                if isinstance(rs, dict) and rs.get("enabled") and int(rs.get("value", 0) or 0) > 0:
+                    rating_args = (
+                        int(rs.get("value", 0) or 0),
+                        int(rs.get("level", 1) or 1),
+                        int(rs.get("next_goal", 0) or 0),
+                    )
+                    if self.plugin._apply_remote_rating_to_full_user(full_obj, *rating_args):
+                        changed = True
+            except Exception:
+                pass
+            if changed:
+                try:
+                    param.setResult(full_obj)
+                    _log(f"GetUserFullForeignSync patched uid={uid}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                _log(f"GetUserFullForeignSyncHook error: {e}")
+            except Exception:
+                pass
+
 
 class PutAnyWearHook(MethodHook):
     def __init__(self, plugin):
@@ -25926,7 +25526,10 @@ class ProcessUserInfoCacheHook(MethodHook):
                     self.plugin._apply_profile_overrides_to_obj(user_obj)
                     if ctrl is not None:
                         try:
-                            ctrl.putUser(user_obj, False)
+                            try:
+                                ctrl.putUser(user_obj, False, True)
+                            except Exception:
+                                ctrl.putUser(user_obj, False)
                         except:
                             pass
             except:
@@ -26247,14 +25850,68 @@ class SetCurrentUserWearHook(MethodHook):
         except Exception as e:
             _log(f"SetCurrentUserWearHook error: {e}")
 
-class AttrLoader:
-    def __init__(self, plugin, gift_id, allow_generic_fallback=False):
+
+class GetCurrentUserOverrideHook(MethodHook):
+    """Re-apply identity / wear / rating overrides on every getCurrentUser
+    read. Closes the residual race where a server-side update mutates
+    UserConfig.currentUser between our scheduled patches and a UI render.
+    The drawer header, the account list and several profile rows pull from
+    this getter — patching here guarantees they never see a non-spoofed
+    snapshot, regardless of what update path raced ours.
+
+    Performance: short-circuits when no override is active. When overrides
+    are on, we run the patcher in-place; the cached User object is the
+    same reference the UI is about to render against, so an in-place mutation
+    is enough — no setResult() needed.
+    """
+
+    def __init__(self, plugin):
         self.plugin = plugin
-        self.base_gift_id = int(gift_id or 0)
-        self.gift_id = int(gift_id or 0)
+        self._reentry_guard = False
+
+    def after_hooked_method(self, param):
+        try:
+            if self._reentry_guard:
+                return
+            p = self.plugin
+            try:
+                if (not p._has_profile_overrides()) and (not p._is_local_rating_active()):
+                    return
+            except Exception:
+                return
+            user_obj = None
+            try:
+                user_obj = param.getResult()
+            except Exception:
+                user_obj = None
+            if user_obj is None:
+                return
+            try:
+                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
+            except Exception:
+                uid = 0
+            try:
+                my_id = int(p._get_my_user_id() or 0)
+            except Exception:
+                my_id = 0
+            if my_id <= 0 or (uid > 0 and uid != my_id):
+                return
+            self._reentry_guard = True
+            try:
+                p._apply_profile_overrides_to_obj(user_obj)
+            finally:
+                self._reentry_guard = False
+        except Exception as e:
+            try:
+                _log(f"GetCurrentUserOverrideHook error: {e}")
+            except Exception:
+                pass
+
+class AttrLoader:
+    def __init__(self, plugin, gift_id):
+        self.plugin = plugin
+        self.gift_id = gift_id
         self.req_callback = None
-        self.allow_generic_fallback = bool(allow_generic_fallback)
-        self._fallback_requested = False
 
     def start(self):
         try:
@@ -26271,31 +25928,10 @@ class AttrLoader:
     def on_done(self, response, error):
         if error:
             _log(f"AttrLoader net error: {error.text}")
-            if self.allow_generic_fallback:
-                try:
-                    if self.plugin._has_generic_upgrade_attrs():
-                        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, None).show())
-                        return
-                except:
-                    pass
-                try:
-                    if not self._fallback_requested:
-                        seed_id = int(self.plugin._get_fallback_upgrade_seed_gift_id(exclude_gift_id=self.gift_id) or 0)
-                        if seed_id > 0:
-                            self._fallback_requested = True
-                            self.gift_id = int(seed_id)
-                            self.start()
-                            return
-                except Exception as e:
-                    _log(f"AttrLoader fallback seed error: {e}")
             run_on_ui_thread(lambda: BulletinHelper.show_error(f"\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438: {error.text}"))
             return
         _log("AttrLoader: attributes received")
-        try:
-            self.plugin._remember_upgrade_attrs(self.gift_id, response)
-        except Exception as e:
-            _log(f"AttrLoader cache error: {e}")
-        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
+        run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.gift_id, response).show())
 
 class ResaleGridController:
     def __init__(self, plugin, is_catalog=False):
@@ -26550,23 +26186,6 @@ class ResaleGridController:
             gift = getattr(item, "object", None)
             if not gift:
                 return
-            try:
-                is_unique = bool(self.plugin._looks_like_unique_gift(gift))
-            except:
-                is_unique = False
-            if not is_unique:
-                try:
-                    self.plugin._show_action_menu(
-                        "Обычный подарок",
-                        [
-                            ("Добавить как обычный", lambda: self.plugin._import_catalog_gift(gift, mode="normal")),
-                            (f"Локально улучшить • {LOCAL_VISUAL_UPGRADE_STARS}★", lambda: self.plugin._import_catalog_gift(gift, mode="local_upgrade")),
-                        ],
-                        negative_text="Назад",
-                    )
-                    return
-                except Exception as e:
-                    _log(f"ResaleGridController normal gift menu error: {e}")
             self.plugin.stolen_gift_inner = gift
             try:
                 self.plugin.cached_gift_id = int(self.plugin._get_gift_base_id(gift, fallback=int(get_val(gift, "id", 0) or 0)) or 0)
@@ -26580,7 +26199,7 @@ class ResaleGridController:
             except:
                 pass
             self._release()
-            AttrLoader(self.plugin, self.plugin.cached_gift_id, allow_generic_fallback=True).start()
+            AttrLoader(self.plugin, self.plugin.cached_gift_id).start()
         except Exception as e:
             _log(f"ResaleGridController click error: {e}")
 
@@ -28186,19 +27805,6 @@ class NftBuilderSheet:
 
         if attr_response:
             self._sort_by_classes(attr_response)
-        if (not self.models) and (not self.patterns) and (not self.backdrops):
-            try:
-                pool = getattr(self.plugin, "_upgrade_attr_pool", None) or {}
-                self.models = list(pool.get("model", []) or [])
-                self.patterns = list(pool.get("pattern", []) or [])
-                self.backdrops = list(pool.get("backdrop", []) or [])
-                if self.models or self.patterns or self.backdrops:
-                    _log(
-                        "NftBuilderSheet: using generic attr pool "
-                        f"m={len(self.models)} p={len(self.patterns)} b={len(self.backdrops)}"
-                    )
-            except Exception as e:
-                _log(f"NftBuilderSheet generic attr pool error: {e}")
 
         # Keep user's last/active build config (loaded from cache/library).
         self._apply_initial_build_config()
@@ -30778,11 +30384,6 @@ class NftBuilderSheet:
                     self.plugin._set_field(gift, name, val)
                 except:
                     pass
-            try:
-                if str(getattr(self.plugin, "_pending_local_upgrade_key", "") or ""):
-                    self.plugin._set_field(gift, "upgrade_stars", int(LOCAL_VISUAL_UPGRADE_STARS))
-            except:
-                pass
 
             cfg = self.plugin.build_config
             try:
@@ -31336,14 +30937,6 @@ def _catalog_sheet_on_click_clean(self, item, view, pos, x, y):
         if self.sheet:
             self.sheet.dismiss()
 
-        # Plain mode: skip upgrade flow, add catalog gift as-is to library.
-        if bool(getattr(self, "is_plain", False)):
-            try:
-                self.plugin._add_plain_gift_from_catalog(g, gift_id)
-            except Exception as ex:
-                BulletinHelper.show_error(f"\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0434\u043e\u0431\u0430\u0432\u0438\u0442\u044c: {ex}")
-            return
-
         self.plugin.stolen_gift_inner = g
         self.plugin.stolen_gift_wrapper = None
         self.plugin.cached_gift_id = gift_id
@@ -31366,34 +30959,3 @@ CatalogNftSheet._refresh = _catalog_sheet_refresh_clean
 CatalogNftSheet.show = _catalog_sheet_show_clean
 CatalogNftSheet.fill_items = _catalog_sheet_fill_items_clean
 CatalogNftSheet.on_click = _catalog_sheet_on_click_clean
-
-
-def _service_settings_subfragment_with_updates(self, parent_view=None):
-    rating_status = self._get_local_rating_label()
-    return [
-        Divider(text=f"Обслуживание локального каталога и быстрые системные действия. Рейтинг сейчас: {rating_status}."),
-        Text(
-            text="Обновления",
-            subtext=f"v{__version__} • GitHub loader/runtime",
-            icon="msg_download",
-            create_sub_fragment=self._create_update_settings_subfragment,
-            link_alias="eblannft_update_subfragment",
-        ),
-        Text(
-            text="Обновить каталог",
-            subtext="Загрузить актуальный список подарков",
-            icon="msg_retry",
-            on_click=lambda _: self._force_load_catalog(),
-        ),
-        Text(
-            text="Очистить кэш",
-            subtext="Сбросить локальные временные данные плагина",
-            icon="msg_delete",
-            on_click=lambda _: self._clear_cache(),
-            red=True,
-        ),
-    ]
-
-
-NftClonerPlugin._create_service_settings_subfragment = _service_settings_subfragment_with_updates
-EblanNftPlugin = NftClonerPlugin

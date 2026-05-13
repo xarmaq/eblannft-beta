@@ -1,0 +1,10 @@
+{
+  "version": "1.0.4",
+  "notes": "beta v1.0.4 — копия основного eblanNFT, оформленная как параллельная установка: __id__ = eblannft_beta, отдельный рантайм (eblannft_beta_runtime), отдельные папки данных и экспорта (Download/<client>/eblannft_beta), отдельный кэш ~/.eblannft_beta_cache. Можно ставить рядом с прод-версией — ничего не конфликтует.",
+  "files": [
+    "eblannft_beta.plugin",
+    "eblannft_beta_runtime/__init__.py",
+    "eblannft_beta_runtime/plugin.py",
+    "eblannft_beta_runtime/sync_client.py"
+  ]
+}
