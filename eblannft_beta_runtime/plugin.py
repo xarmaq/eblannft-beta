@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.60"
+__version__ = "1.0.61"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -13552,15 +13552,41 @@ class NftClonerPlugin(BasePlugin):
             parts.append(f"{reg_n} обычных")
         return " • ".join(parts)
 
+    def _my_gifts_entry_kind(self, entry):
+        """Classify a gift_library entry as 'nft' or 'regular'. Honors the
+        explicit gift_kind field (set by _library_upsert_wrapper / catalog
+        picker), then falls back to wrapper-shape heuristics."""
+        if not isinstance(entry, dict):
+            return "nft"
+        try:
+            k = str(entry.get("gift_kind", "") or "").lower()
+        except:
+            k = ""
+        if k in ("standard", "normal", "legacy", "plain", "regular"):
+            return "regular"
+        if k == "nft" or k == "unique":
+            return "nft"
+        # Heuristic: NFT entries always have non-zero unique_id.
+        try:
+            if int(entry.get("unique_id", 0) or 0) > 0:
+                return "nft"
+        except:
+            pass
+        return "regular" if k else "nft"
+
     def _my_gifts_list_entries(self):
-        """Return [(source, entry)] for all gifts. source: 'nft' or 'regular'."""
+        """Return [(source, entry)] for all gifts. Reads from gift_library
+        (the unified store) and discriminates by gift_kind. The legacy V1-only
+        self.regular_gifts list is migrated lazily in _load_cache so we don't
+        need a second iteration here."""
         out = []
         try:
             for e in (self.gift_library or []):
                 if isinstance(e, dict):
-                    out.append(("nft", e))
+                    out.append((self._my_gifts_entry_kind(e), e))
         except:
             pass
+        # Any leftover V1-only entries (if migration didn't run, e.g. tests).
         try:
             for e in (getattr(self, "regular_gifts", []) or []):
                 if isinstance(e, dict):
@@ -13569,16 +13595,14 @@ class NftClonerPlugin(BasePlugin):
             pass
         return out
 
-    def _my_gifts_find_entry(self, gift_id, source):
+    def _my_gifts_find_entry(self, gift_id, source=None):
         gid = str(gift_id or "")
-        if source == "nft":
-            for e in (self.gift_library or []):
-                if isinstance(e, dict) and str(e.get("key", "")) == gid:
-                    return e
-        elif source == "regular":
-            for e in (getattr(self, "regular_gifts", []) or []):
-                if isinstance(e, dict) and str(e.get("key", "")) == gid:
-                    return e
+        for e in (self.gift_library or []):
+            if isinstance(e, dict) and str(e.get("key", "")) == gid:
+                return e
+        for e in (getattr(self, "regular_gifts", []) or []):
+            if isinstance(e, dict) and str(e.get("key", "")) == gid:
+                return e
         return None
 
     def _my_gifts_entry_title(self, source, entry):
@@ -13671,44 +13695,270 @@ class NftClonerPlugin(BasePlugin):
                 pass
 
     def _add_regular_gift_via_template(self):
-        # V1: regular-gift catalog (regular_only mode in ResaleGridController) is
-        # not wired yet — see commit a241f49 in history for prior approach. For
-        # now create a placeholder regular gift the user can rename / annotate.
+        """Open the regular-gift catalog picker. Each entry is a real gift from
+        StarsController.gifts filtered to non-unique / non-upgradable. Click →
+        wrap into TL_savedStarGift and upsert into gift_library with
+        gift_kind='standard'."""
         try:
+            items = self._get_catalog_standard_gifts()
+        except Exception as e:
+            items = []
             try:
-                self._regular_gifts_seq = int(getattr(self, "_regular_gifts_seq", 0) or 0) + 1
+                BulletinHelper.show_error(f"Каталог: {e}")
             except:
-                self._regular_gifts_seq = 1
-            import time
-            new_key = f"reg_{self._regular_gifts_seq}_{int(time.time())}"
-            entry = {
-                "key": new_key,
-                "title": "Подарок",
-                "custom_from": "",
-                "custom_date": "",
-                "custom_comment": "",
-                "created_at": int(time.time()),
-            }
-            if not isinstance(getattr(self, "regular_gifts", None), list):
-                self.regular_gifts = []
-            self.regular_gifts.append(entry)
+                pass
+        if not items:
+            # Kick off a catalog load and tell the user to retry.
             try:
-                self._save_cache()
+                self._force_load_catalog()
             except:
                 pass
             try:
-                BulletinHelper.show_success("Обычный подарок добавлен")
+                BulletinHelper.show_error("Каталог пуст. Открой магазин подарков и попробуй снова.")
             except:
                 pass
+            return
+
+        actions = []
+        for g in items:
             try:
-                self._show_text_input_dialog("Название подарка", "Подарок", lambda v: self._my_gifts_set_title(new_key, "regular", v))
+                title = self._regular_gift_picker_label(g)
             except:
-                pass
+                title = "Подарок"
+            actions.append((title, (lambda gg=g: self._add_regular_gift_from_template(gg))))
+        try:
+            self._show_action_menu("Обычный подарок", actions, negative_text="Отмена")
         except Exception as e:
             try:
-                BulletinHelper.show_error(f"Не удалось добавить: {e}")
+                BulletinHelper.show_error(f"Меню каталога: {e}")
             except:
                 pass
+
+    def _regular_gift_picker_label(self, gift):
+        try:
+            title = str(get_val(gift, "title", "") or "")
+        except:
+            title = ""
+        if not title:
+            try:
+                slug = str(get_val(gift, "slug", "") or "")
+                if slug:
+                    title = slug.replace("_", " ").strip().title()
+            except:
+                pass
+        if not title:
+            title = "Подарок"
+        try:
+            stars = int(get_val(gift, "stars", 0) or 0)
+        except:
+            stars = 0
+        return f"{title} • {stars}⭐" if stars > 0 else title
+
+    def _get_catalog_standard_gifts(self):
+        """Return TL_starGift list filtered to regular (non-unique / no upgrade)."""
+        out = []
+        try:
+            lst = self._get_catalog_gifts_from_memory()
+        except:
+            lst = None
+        if lst is None:
+            return out
+        try:
+            size = int(lst.size() or 0)
+        except:
+            return out
+        for i in range(size):
+            try:
+                g = lst.get(i)
+            except:
+                continue
+            if g is None:
+                continue
+            try:
+                cls_name = str(g.getClass().getName() or "").lower()
+            except:
+                cls_name = ""
+            if "unique" in cls_name:
+                continue
+            try:
+                upg = int(get_val(g, "upgrade_stars", 0) or 0)
+            except:
+                upg = 0
+            # A non-unique gift with no upgrade_stars is a plain regular gift.
+            # Gifts that DO have upgrade_stars > 0 are still added without
+            # upgrades (per spec: "у которых улучшения существуют, но при
+            # выборе из этого каталога они добавляются без улучшений").
+            out.append(g)
+        try:
+            out.sort(key=lambda gg: int(get_val(gg, "stars", 0) or 0))
+        except:
+            pass
+        return out
+
+    def _copy_tl_public_fields(self, src, dst):
+        """Shallow-copy public fields from one TL object to another of the
+        same class. Used to detach a catalog gift template from StarsController's
+        shared instance so our mutations don't bleed back."""
+        if src is None or dst is None:
+            return 0
+        copied = 0
+        try:
+            for f in src.getClass().getFields():
+                try:
+                    mods = int(f.getModifiers())
+                    if Modifier.isStatic(mods):
+                        continue
+                except:
+                    pass
+                try:
+                    name = str(f.getName() or "")
+                except:
+                    continue
+                if not name:
+                    continue
+                try:
+                    val = f.get(src)
+                except:
+                    continue
+                try:
+                    if self._set_field(dst, name, val):
+                        copied += 1
+                except:
+                    pass
+        except:
+            pass
+        return copied
+
+    def _create_standard_saved_wrapper_from_template(self, template_gift):
+        """Build a TL_savedStarGift wrapper around a regular catalog gift.
+        Copies the template (so we own the inner object), then sets the
+        minimum saved-gift fields needed for the gift to display in profile
+        without going through the upgrade flow."""
+        if template_gift is None:
+            return None
+        if not self._ensure_gift_classes():
+            return None
+
+        gift_obj = template_gift
+        try:
+            g_new = self._new_java_instance(template_gift.getClass())
+            if g_new is not None:
+                self._copy_tl_public_fields(template_gift, g_new)
+                gift_obj = g_new
+        except:
+            pass
+
+        wrapper = None
+        try:
+            wrapper = self._new_java_instance(self.cls_saved)
+        except:
+            wrapper = None
+        if wrapper is None:
+            return None
+
+        try:
+            self._set_field(wrapper, "gift", gift_obj)
+            try:
+                self._set_field(wrapper, "date", int(time.time()))
+            except:
+                pass
+            try:
+                self._set_field(wrapper, "unsaved", False)
+            except:
+                pass
+            try:
+                self._set_field(wrapper, "can_transfer_at", 0)
+            except:
+                pass
+            try:
+                self._set_field(wrapper, "can_resell_at", 0)
+            except:
+                pass
+            try:
+                sid = int(self._new_saved_id())
+                self._set_saved_id_on_wrapper(wrapper, sid)
+            except:
+                pass
+        except:
+            pass
+        return wrapper
+
+    def _add_regular_gift_from_template(self, template_gift):
+        """Wrap a catalog gift template into a saved-gift wrapper and add it to
+        gift_library as a 'standard' (regular, non-upgradable) entry."""
+        if template_gift is None:
+            try:
+                BulletinHelper.show_error("Пустой шаблон подарка")
+            except:
+                pass
+            return
+        wrapper = None
+        try:
+            wrapper = self._create_standard_saved_wrapper_from_template(template_gift)
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Создание подарка: {e}")
+            except:
+                pass
+            return
+        if wrapper is None:
+            try:
+                BulletinHelper.show_error("Не удалось создать обычный подарок")
+            except:
+                pass
+            return
+        try:
+            base_id = int(get_val(template_gift, "id", 0) or 0)
+        except:
+            base_id = 0
+        try:
+            key = self._library_upsert_wrapper(
+                wrapper,
+                base_gift_id=base_id,
+                key=None,
+                inject=True,
+                make_active=False,
+                wear_override=None,
+                build_config=None,
+            )
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Библиотека: {e}")
+            except:
+                pass
+            return
+        if not key:
+            try:
+                BulletinHelper.show_error("Не удалось добавить подарок в библиотеку")
+            except:
+                pass
+            return
+        entry = self._library_find_entry(key)
+        if entry is not None:
+            # _library_upsert_wrapper already classifies regular gifts as
+            # gift_kind='standard'. We force it here too in case the heuristic
+            # missed (e.g. unusual TL class names on some forks).
+            entry["gift_kind"] = "standard"
+            try:
+                entry["num"] = int(entry.get("num", 0) or 0)
+            except:
+                entry["num"] = 0
+            # Initialise editable fields so the detail screen lands on a stable shape.
+            for fname in ("custom_from", "custom_date", "custom_comment"):
+                if fname not in entry:
+                    entry[fname] = ""
+        try:
+            self._save_cache()
+        except:
+            pass
+        try:
+            ttl = str(get_val(template_gift, "title", "Подарок") or "Подарок")
+        except:
+            ttl = "Подарок"
+        try:
+            BulletinHelper.show_success(f"Обычный подарок добавлен: {ttl}")
+        except:
+            pass
 
     def _create_my_gift_detail_subfragment(self, gift_id, source, parent_view=None):
         entry = self._my_gifts_find_entry(gift_id, source)
@@ -13813,15 +14063,19 @@ class NftClonerPlugin(BasePlugin):
     def _my_gifts_delete(self, gift_id, source):
         try:
             gid = str(gift_id or "")
-            if source == "nft":
-                # Route to existing NFT deletion path so injection_payloads etc.
-                # stay consistent. Falls back to plain list mutation if absent.
-                try:
+            # After V2 migration both kinds live in gift_library. Route
+            # everything through _delete_library_gift_key so injection_payloads
+            # and downstream caches stay consistent.
+            removed_via_lib = False
+            try:
+                if any(str(x.get("key", "")) == gid for x in (self.gift_library or []) if isinstance(x, dict)):
                     self._delete_library_gift_key(gid)
-                    return
-                except:
-                    self.gift_library = [x for x in (self.gift_library or []) if str(x.get("key", "")) != gid]
-            else:
+                    removed_via_lib = True
+            except:
+                removed_via_lib = False
+            if not removed_via_lib:
+                # Fallback: strip from either list directly.
+                self.gift_library = [x for x in (self.gift_library or []) if str(x.get("key", "")) != gid]
                 self.regular_gifts = [x for x in (getattr(self, "regular_gifts", []) or []) if str(x.get("key", "")) != gid]
             try:
                 self._save_cache()
@@ -16252,6 +16506,34 @@ class NftClonerPlugin(BasePlugin):
                     self._regular_gifts_seq = int(data.get("_regular_gifts_seq", 0) or 0)
                 except:
                     self._regular_gifts_seq = 0
+                # V1 → V2 migration: V1 stored regular gifts in a separate list,
+                # detached from gift_library. V2 unifies storage under
+                # gift_library with gift_kind='standard'. Move any pre-V2 entries
+                # over so the user sees them in the new picker output too.
+                try:
+                    if self.regular_gifts:
+                        migrated = 0
+                        for r in list(self.regular_gifts):
+                            if not isinstance(r, dict):
+                                continue
+                            rk = str(r.get("key", "") or "")
+                            if rk and any(str(x.get("key", "")) == rk for x in (self.gift_library or []) if isinstance(x, dict)):
+                                continue
+                            r["gift_kind"] = "standard"
+                            r.setdefault("custom_from", "")
+                            r.setdefault("custom_date", "")
+                            r.setdefault("custom_comment", "")
+                            r.setdefault("inject", False)
+                            self.gift_library.append(r)
+                            migrated += 1
+                        if migrated:
+                            self.regular_gifts = []
+                            _log(f"[my_gifts] migrated {migrated} V1 regular_gifts to gift_library")
+                except Exception as _mig_e:
+                    try:
+                        _log(f"[my_gifts] regular_gifts migration failed: {_mig_e}")
+                    except:
+                        pass
                 self.gift_objects = {}
                 self._gift_objects_order = []
                 self._profile_saved_lists = []
