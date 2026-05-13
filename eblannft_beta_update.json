@@ -1,6 +1,6 @@
 {
-  "version": "1.0.64",
-  "notes": "Beta 1.0.64 — «Мои подарки» V4: «От кого», «Дата» и «Комментарий» теперь видны прямо в плитке подарка в профиле, а не только в настройках. (1) Числовой uid в «От кого» автоматически уходит в identity_config.from_user_id — существующий пайплайн правит from_id у wrapper'а, и StarGiftSheet рисует отправителя с аватаром. (2) Дата парсится из DD.MM.YYYY (и нескольких других форматов) в epoch и пишется в wrapper.date — StarGiftSheet показывает выбранную дату вместо текущей. (3) Комментарий рефлекшн-патчит все message/text/caption/comment/note/signature поля wrapper'а и внутреннего gift'а — поле «Comment» в StarGiftSheet получает значение. (4) Backfill при загрузке: уже сохранённые «От кого / Дата» из V1–V3 автоматически разворачиваются в новое представление. (5) Косметика: заголовок «None» в детальном экране заменён на «Подарок» (читабельный fallback).",
+  "version": "1.0.65",
+  "notes": "Beta 1.0.65 — «Мои подарки» V5: «От», «Дата», «Комментарий» теперь точно видны в StarGiftSheet. В V4 from_id и message патчились на wrapper'е, но без соответствующих TL-флагов и без TL_textWithEntities — native sheet всё равно показывал «Hidden User» и не рисовал комментарий. (1) При патче from_id выставляется flags |= 2 (TL bit для from_id). При патче комментария собирается полноценный TL_textWithEntities и выставляется flags |= 4. (2) Добавлен инжектор кастомных строк в таблицу StarGiftSheet: «От» (читаемое имя из MessagesController, либо @username, либо id:N) и «Комментарий» — теперь видны независимо от того что рисует native renderer.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

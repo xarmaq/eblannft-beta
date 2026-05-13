@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.64"
+__version__ = "1.0.65"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -14171,15 +14171,37 @@ class NftClonerPlugin(BasePlugin):
         return False
 
     def _apply_my_gifts_meta_overrides_to_wrapper(self, wrapper, entry):
-        """Mutate the wrapper in-place with custom_date and custom_comment
-        from a gift_library entry. Called from _library_get_wrapper after the
-        wrapper has been deserialized. From/sender is handled separately via
-        identity_config, not here."""
+        """Mutate the wrapper in-place with custom_date / custom_comment and
+        the corresponding TL flag bits. From/sender is handled separately via
+        identity_config (called by _library_get_wrapper before this).
+
+        TL flags reference (TL_savedStarGift):
+          flag bit 1 (value 2) — from_id field is present
+          flag bit 2 (value 4) — message field is present
+        Without these bits the wrapper deserializer / UI renderer may treat
+        the field as absent even though our reflection-write succeeded.
+        """
         if wrapper is None or not isinstance(entry, dict):
             return 0
         patched = 0
 
-        # 1) Date: write wrapper.date (epoch) if user-set.
+        # Read current flags (may be missing on some forks).
+        try:
+            cur_flags = int(get_val(wrapper, "flags", 0) or 0)
+        except:
+            cur_flags = 0
+        new_flags = cur_flags
+
+        # 1) Set flags bit 1 (from_id presence) if identity_config has a uid.
+        try:
+            ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
+            from_uid = int(ic.get("from_user_id", 0) or 0) if isinstance(ic, dict) else 0
+        except:
+            from_uid = 0
+        if from_uid > 0:
+            new_flags |= 2
+
+        # 2) Date: write wrapper.date (epoch). date is unconditional — no flag.
         try:
             ts = int(entry.get("custom_date_ts", 0) or 0)
         except:
@@ -14191,20 +14213,70 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
 
-        # 2) Comment: walk fields, patch message-like ones with custom_comment.
+        # 3) Comment: build a proper TL_textWithEntities and set wrapper.message.
+        #    Also fan out a plain String patch over message-like fields so any
+        #    fork-specific shadow field also gets the text.
         try:
             comment_raw = str(entry.get("custom_comment", "") or "").strip()
         except:
             comment_raw = ""
         if comment_raw:
-            patched += self._apply_comment_text_to_obj(wrapper, comment_raw)
+            twe = self._build_text_with_entities(comment_raw)
+            if twe is not None:
+                for fname in ("message", "text"):
+                    try:
+                        if self._set_field(wrapper, fname, twe):
+                            patched += 1
+                            new_flags |= 4
+                    except:
+                        pass
+            # Defensive: also patch any String fields that look like a note.
+            try:
+                patched += self._apply_comment_text_to_obj(wrapper, comment_raw)
+            except:
+                pass
             try:
                 gift = self._extract_wrapper_gift(wrapper)
                 if gift is not None:
                     patched += self._apply_comment_text_to_obj(gift, comment_raw)
             except:
                 pass
+
+        # Write back flags if anything changed.
+        if new_flags != cur_flags:
+            try:
+                if self._set_field(wrapper, "flags", int(new_flags)):
+                    patched += 1
+            except:
+                pass
+
         return patched
+
+    def _build_text_with_entities(self, text):
+        """Construct TL_textWithEntities(text=text, entities=[]). Returns
+        None if the class isn't available (very old TG forks)."""
+        if not text:
+            return None
+        try:
+            TwE = jclass("org.telegram.tgnet.TLRPC$TL_textWithEntities")
+        except:
+            return None
+        try:
+            obj = self._new_java_instance(TwE)
+            if obj is None:
+                return None
+            try:
+                self._set_field(obj, "text", str(text))
+            except:
+                return None
+            try:
+                from java.util import ArrayList
+                self._set_field(obj, "entities", ArrayList())
+            except:
+                pass
+            return obj
+        except:
+            return None
 
     def _apply_comment_text_to_obj(self, obj, text):
         """Reflection-patch all message-like string fields on a TL object."""
@@ -22017,6 +22089,128 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Local gift value row inject error: {e}")
             return False
 
+    def _inject_local_gift_my_gifts_rows(self, sheet, gift=None):
+        """«Мои подарки» V5: add «От» and «Комментарий» rows to the
+        StarGiftSheet table when the gift has user-set custom_from /
+        custom_comment overrides. Native sheet doesn't always render
+        from_id correctly (Hidden User fallback) and never shows a
+        comment field at all — these rows are the durable channel."""
+        if sheet is None:
+            return False
+        key = None
+        try:
+            key = self._resolve_library_key_from_gift_sheet(sheet)
+        except:
+            key = None
+        if not key and gift is not None:
+            try:
+                key = self._resolve_library_key_for_gift(gift)
+            except:
+                key = None
+        e = self._library_find_entry(key) if key else None
+        if not e:
+            return False
+        try:
+            cf_raw = str(e.get("custom_from", "") or "").strip()
+        except:
+            cf_raw = ""
+        try:
+            cc_raw = str(e.get("custom_comment", "") or "").strip()
+        except:
+            cc_raw = ""
+        try:
+            ic = e.get("identity_config") if isinstance(e.get("identity_config"), dict) else {}
+            from_uid = int(ic.get("from_user_id", 0) or 0) if isinstance(ic, dict) else 0
+        except:
+            from_uid = 0
+        if not cf_raw and not cc_raw and from_uid <= 0:
+            return False
+        # Locate the table view (same allowlist + reflection walk pattern
+        # used by _inject_local_gift_value_row).
+        table = None
+        for tv_name in ("tableView", "table", "infoTable", "tableViewBottom"):
+            try:
+                v = get_val(sheet, tv_name, None)
+            except:
+                v = None
+            if v is None:
+                continue
+            try:
+                cls_name = str(v.getClass().getName() or "")
+            except:
+                cls_name = ""
+            if "TableView" in cls_name or hasattr(v, "addRow"):
+                table = v
+                break
+        if table is None:
+            try:
+                cls = sheet.getClass()
+                while cls is not None:
+                    for f in cls.getDeclaredFields():
+                        try:
+                            f.setAccessible(True)
+                            v = f.get(sheet)
+                        except:
+                            continue
+                        if v is None:
+                            continue
+                        try:
+                            cls_name = str(v.getClass().getName() or "")
+                        except:
+                            cls_name = ""
+                        if "TableView" in cls_name and hasattr(v, "addRow"):
+                            table = v
+                            break
+                    if table is not None:
+                        break
+                    try:
+                        cls = cls.getSuperclass()
+                    except:
+                        cls = None
+            except:
+                pass
+        if table is None:
+            return False
+
+        added = 0
+        # «От» — display the user-typed value (or a clean uid label as fallback).
+        from_text = ""
+        if cf_raw and not cf_raw.isdigit():
+            from_text = cf_raw
+        elif from_uid > 0:
+            try:
+                ctrl = MessagesController.getInstance(to_java_int(get_user_config().selectedAccount))
+                u = ctrl.getUser(to_java_int(from_uid))
+                first = str(get_val(u, "first_name", "") or "") if u is not None else ""
+                last = str(get_val(u, "last_name", "") or "") if u is not None else ""
+                un = str(get_val(u, "username", "") or "") if u is not None else ""
+                if first or last:
+                    from_text = (first + " " + last).strip()
+                elif un:
+                    from_text = "@" + un
+            except:
+                from_text = ""
+            if not from_text:
+                from_text = f"id:{from_uid}"
+        elif cf_raw:
+            from_text = cf_raw
+
+        if from_text:
+            try:
+                table.addRow(self._ui_text("От"), self._ui_text(from_text))
+                added += 1
+            except Exception as ex:
+                _log(f"my-gifts «От» row inject error: {ex}")
+
+        if cc_raw:
+            try:
+                table.addRow(self._ui_text("Комментарий"), self._ui_text(cc_raw))
+                added += 1
+            except Exception as ex:
+                _log(f"my-gifts «Комментарий» row inject error: {ex}")
+
+        return added > 0
+
     def _inject_local_gift_ton_owner_row(self, sheet, gift=None):
         if sheet is None:
             return False
@@ -25074,6 +25268,10 @@ class GiftSheetLocalValueHook(MethodHook):
             self.plugin._inject_local_gift_value_row(sheet, gift=gift)
         except Exception as e:
             _log(f"GiftSheetLocalValueHook value-row error: {e}")
+        try:
+            self.plugin._inject_local_gift_my_gifts_rows(sheet, gift=gift)
+        except Exception as e:
+            _log(f"GiftSheetLocalValueHook my-gifts-rows error: {e}")
         try:
             run_on_ui_thread(lambda s=sheet: self.plugin._install_local_upgrade_button_override(s))
             AndroidUtilities.runOnUIThread(JRunnable(lambda: self.plugin._install_local_upgrade_button_override(sheet)), 180)
