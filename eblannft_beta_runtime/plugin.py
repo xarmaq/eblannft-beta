@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.76"
+__version__ = "1.0.77"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2953,6 +2953,24 @@ class NftClonerPlugin(BasePlugin):
             tuid = 0
         if tuid <= 0:
             return None
+        # Throttle: each scheduled run walks the cached User / UserFull
+        # objects with reflection and posts NotificationCenter events that
+        # wake the UI thread (ProfileActivity repaints). Without a guard,
+        # snapshots arriving every 6s × 5 default delays produces 5 UI runs
+        # per cycle, surfacing as a ~1s tick freeze even off-profile.
+        # Cap to one scheduling pass per 10s per uid.
+        try:
+            ts_map = getattr(self, "_sync_user_patch_ts", None)
+            if not isinstance(ts_map, dict):
+                ts_map = {}
+                self._sync_user_patch_ts = ts_map
+            last = float(ts_map.get(tuid, 0.0) or 0.0)
+            now = time.time()
+            if (now - last) < 10.0:
+                return None
+            ts_map[tuid] = now
+        except Exception:
+            pass
         if delays is None:
             delays = [0, 80, 220, 520, 1100]
 

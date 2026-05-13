@@ -1,6 +1,6 @@
 {
-  "version": "1.0.76",
-  "notes": "Beta 1.0.76 — фикс «фризит каждую секунду» на чужом профиле. Был tight loop на стороне получателя: getSavedStarGifts → _sync_inject_remote_gifts → client.request_remote_state(force=True) → pull tick (1с) → snapshot arrives → _sync_on_remote_state → identity_changed → invalidateProfileGifts → TG re-fetches → ... и UI thread получал по 2 reflection-патча юзера каждую секунду, фризя экран ровно с этим интервалом. Лупа продолжалась даже после выхода из профиля, потому что invalidate триггерил фоновые fetch'и. Два throttle'а по 5с на uid: (1) request_remote_state(force=True) внутри inject; (2) _sync_invalidate_remote_gifts_list при identity_changed. Реальные изменения identity дольше 5с всё равно подхватятся следующим pull-tick'ом.",
+  "version": "1.0.77",
+  "notes": "Beta 1.0.77 — третий throttle для устранения микро-фризов. 1.0.76 разорвал tight loop, но при каждом штатном pull-tick'е (по умолчанию 6с) всё ещё вызывался _sync_schedule_remote_user_patch с 5 отложенными UI-патчами (0/80/220/520/1100мс). Reflection-walk юзера + NotificationCenter события заставляли ProfileActivity перерисовываться, что и ощущалось как микро-фризы каждую секунду (1100мс отложка плюс staggered runs от соседних снапшотов). Throttle на 10с per uid: повторные вызовы schedule в этом окне возвращают None, не планируя дополнительные UI-runs. Изменения identity всё равно обработаются на следующем тике после окна.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
