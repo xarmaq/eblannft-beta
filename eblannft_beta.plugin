@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.61"
+__version__ = "1.0.62"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -49,7 +49,7 @@ _RUNTIME_FILES = (
 )
 _DOWNLOAD_TIMEOUT_SEC = 35
 
-_UPDATE_MANIFEST_PATH = "eblannft_update.json"
+_UPDATE_MANIFEST_PATH = "eblannft_beta_update.json"
 _UPDATE_CHECK_RESUME_THROTTLE_SEC = 30         # 30s between resume-triggered polls (was 2 min)
 
 # User-selectable load-time check intervals (key in settings:

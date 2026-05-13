@@ -1,0 +1,11 @@
+{
+  "version": "1.0.62",
+  "notes": "Beta 1.0.62 — фикс HTTP 404 при проверке обновлений. Установленный bootstrap v1.0.4 ждёт файлы с _beta_ префиксом (eblannft_beta.plugin / eblannft_beta_update.json), а в репозитории они лежали под старыми именами (eblannft.plugin / eblannft_update.json). Файлы переименованы под конвенцию beta-сборки. Содержимое v1.0.61 («Мои подарки» V2 — реальный каталог обычных подарков из StarsController) сохранено.",
+  "files": [
+    "eblannft_beta.plugin",
+    "eblannft_beta_runtime/__init__.py",
+    "eblannft_beta_runtime/plugin.py",
+    "eblannft_beta_runtime/sync_client.py",
+    "eblannft_beta_runtime/legacy_gifts.py"
+  ]
+}
