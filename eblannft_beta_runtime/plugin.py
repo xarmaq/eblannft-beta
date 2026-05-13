@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.80"
+__version__ = "1.0.81"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -28346,23 +28346,55 @@ class MyGiftsCardSheet:
             outer.setLayoutParams(FrameLayout.LayoutParams(-1, sheet_h))
         except:
             pass
-        # Inset top padding so the «← Мои подарки     +» bar clears the
-        # system status bar / notch. AndroidUtilities.statusBarHeight is
-        # the standard inset; fall back to 26dp if the field isn't
-        # exposed on this exteraGram fork.
+        # Inset top so the «← Мои подарки     +» bar clears the system
+        # status bar / notch. Multi-source resolve:
+        #   1. AndroidUtilities.statusBarHeight (exposed on most forks)
+        #   2. Activity's WindowInsets.getSystemWindowInsetTop()
+        #   3. Resource lookup for the android:status_bar_height dimen
+        #   4. Fallback 48dp (covers MIUI/Honor notches comfortably)
+        top_inset = 0
         try:
-            top_inset = int(getattr(AndroidUtilities, "statusBarHeight", 0) or 0)
-        except Exception:
-            top_inset = 0
-        if top_inset <= 0:
-            try:
-                top_inset = AndroidUtilities.dp(26)
-            except Exception:
-                top_inset = 0
-        try:
-            outer.setPadding(0, top_inset, 0, 0)
+            v = int(getattr(AndroidUtilities, "statusBarHeight", 0) or 0)
+            if v > 0:
+                top_inset = v
         except Exception:
             pass
+        if top_inset <= 0:
+            try:
+                deco = ctx.getWindow().getDecorView()
+                insets = deco.getRootWindowInsets()
+                if insets is not None:
+                    v = int(insets.getSystemWindowInsetTop() or 0)
+                    if v > 0:
+                        top_inset = v
+            except Exception:
+                pass
+        if top_inset <= 0:
+            try:
+                res = ctx.getResources()
+                rid = res.getIdentifier("status_bar_height", "dimen", "android")
+                if rid > 0:
+                    v = int(res.getDimensionPixelSize(rid) or 0)
+                    if v > 0:
+                        top_inset = v
+            except Exception:
+                pass
+        if top_inset <= 0:
+            try:
+                top_inset = AndroidUtilities.dp(48)
+            except Exception:
+                top_inset = 0
+        # Use a spacer view rather than setPadding — some exteraGram fork
+        # BottomSheet containers re-apply padding after we set it.
+        try:
+            spacer = View(ctx)
+            lp_sp = LinearLayout.LayoutParams(-1, max(int(top_inset), AndroidUtilities.dp(20)))
+            outer.addView(spacer, lp_sp)
+        except Exception:
+            try:
+                outer.setPadding(0, top_inset, 0, 0)
+            except Exception:
+                pass
 
         # ---- Top bar: back arrow + title + (+) add button -----------------
         bar = LinearLayout(ctx)

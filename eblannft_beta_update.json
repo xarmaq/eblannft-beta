@@ -1,6 +1,6 @@
 {
-  "version": "1.0.80",
-  "notes": "Beta 1.0.80 — топ-бар «Моих подарков» теперь не залезает под статус-бар. Раньше верх sheet'а упирался прямо в нотч / часы / индикаторы, back-стрелку и кнопку + было трудно нажать. Добавлен top-inset в outer-LinearLayout равный AndroidUtilities.statusBarHeight (с fallback 26dp для форков где поле не экспонировано). Контент сдвигается вниз ровно на высоту статус-бара.",
+  "version": "1.0.81",
+  "notes": "Beta 1.0.81 — повтор фикса top-inset. В 1.0.80 padding не сработал: AndroidUtilities.statusBarHeight = 0 на этом форке, fallback был 26dp которого не хватило, и сам padding вероятно перетирался BottomSheet-контейнером. Сейчас inset резолвится из четырёх источников по очереди: AndroidUtilities.statusBarHeight → Activity.getWindow().getDecorView().getRootWindowInsets().getSystemWindowInsetTop() → resource android:status_bar_height → fixed 48dp. Inset применяется через явный spacer-View в начале LinearLayout (не через setPadding), чтобы BottomSheet не мог его перетереть. Минимум 20dp гарантирован.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
