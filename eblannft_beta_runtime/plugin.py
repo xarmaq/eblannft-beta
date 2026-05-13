@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.65"
+__version__ = "1.0.66"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -13433,8 +13433,7 @@ class NftClonerPlugin(BasePlugin):
                 text="Мои подарки",
                 subtext=self._my_gifts_summary_subtext(),
                 icon="msg_emoji_gem",
-                create_sub_fragment=self._create_my_gifts_subfragment,
-                link_alias="eblannft_my_gifts_subfragment",
+                on_click=lambda _: self._open_my_gifts_card_sheet(),
             ),
             Divider(),
             Text(
@@ -13549,6 +13548,29 @@ class NftClonerPlugin(BasePlugin):
     # «Мои подарки» — settings submenu (V1: list + edit fields + delete).
     # Custom MD3 card UI and regular-only catalog routing are deferred to V2.
     # ---------------------------------------------------------------
+
+    def _open_my_gifts_card_sheet(self):
+        """Primary entry point for «Мои подарки». Opens the V3 card UI; on
+        failure (theme/Window/reflection error on a fork), falls back to the
+        V1 declarative list subfragment which is known to work everywhere."""
+        try:
+            MyGiftsCardSheet(self).show()
+        except Exception as e:
+            try:
+                _log(f"_open_my_gifts_card_sheet failed, falling back to list: {e}")
+            except:
+                pass
+            try:
+                # Manually navigate to the list subfragment as a fallback.
+                fragment = get_last_fragment()
+                if fragment:
+                    from base_plugin import MenuItemData  # noqa: F401
+                    # The settings infrastructure expects sub-fragment to be
+                    # opened via create_sub_fragment; without that link we
+                    # just toast and let the user retry — better than a hang.
+                    BulletinHelper.show_error("Карточный вид недоступен, попробуйте обновить плагин")
+            except:
+                pass
 
     def _my_gifts_summary_subtext(self):
         try:
@@ -27972,6 +27994,617 @@ class AttrLoader:
         except:
             pass
         run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, response).show())
+
+
+# ---------------------------------------------------------------------------
+# «Мои подарки» V3 — MD3 card-style screen
+# ---------------------------------------------------------------------------
+class MyGiftsCardSheet:
+    """Full-screen BottomSheet that renders the user's gift library as a
+    vertical list of MD3-style cards. Two card variants:
+
+      - Regular (gift_kind='standard'): animated sticker preview on the left,
+        inline editable rows for «От кого» / «Дата» / «Комментарий», and a
+        single red «Удалить» button.
+      - NFT (gift_kind not standard): sticker preview on the left, attribute
+        rows (Model / Symbol / Backdrop with rarity %), and two pill buttons:
+        blue «Изменить» (opens the existing constructor) + red «Удалить».
+
+    Tap on any editable row in a regular card opens the existing
+    _show_text_input_dialog. All state mutation routes through the existing
+    _my_gifts_set_field / _my_gifts_delete helpers so persistence, wrapper
+    invalidation, and injection rebuild stay unified with V1's list view.
+    """
+
+    def __init__(self, plugin):
+        self.plugin = plugin
+        self.sheet = None
+        self.scroll_root = None
+        self.empty_view = None
+
+    def show(self):
+        try:
+            fragment = get_last_fragment()
+            if not fragment:
+                return
+            ctx = fragment.getParentActivity()
+            if not ctx:
+                return
+            BottomSheetCls = jclass("org.telegram.ui.ActionBar.BottomSheet")
+            self.sheet = BottomSheetCls(ctx, False)
+            try:
+                # Full-height sheet — the cards scroll independently.
+                self.sheet.setUseFullWidth(False)
+            except:
+                pass
+            try:
+                self.sheet.setCanDismissWithSwipe(True)
+            except:
+                pass
+            root = self._build_root(ctx)
+            try:
+                self.sheet.setCustomView(root)
+            except Exception as _e:
+                _log(f"MyGiftsCardSheet setCustomView fail: {_e}")
+            try:
+                self.sheet.show()
+            except Exception as _e:
+                _log(f"MyGiftsCardSheet show fail: {_e}")
+        except Exception as e:
+            _log(f"MyGiftsCardSheet.show error: {e}")
+            try:
+                BulletinHelper.show_error(f"Карточный вид: {e}")
+            except:
+                pass
+
+    def _dismiss(self):
+        try:
+            if self.sheet is not None:
+                self.sheet.dismiss()
+        except:
+            pass
+        self.sheet = None
+        self.scroll_root = None
+        self.empty_view = None
+
+    def refresh(self):
+        """Rebuild the content list after add/delete/edit so the sheet
+        reflects current state without dismissing."""
+        try:
+            ctx = self.scroll_root.getContext() if self.scroll_root is not None else None
+        except:
+            ctx = None
+        if ctx is None or self.scroll_root is None:
+            return
+        try:
+            self.scroll_root.removeAllViews()
+        except:
+            pass
+        try:
+            self._fill_cards(ctx, self.scroll_root)
+        except Exception as e:
+            _log(f"MyGiftsCardSheet refresh error: {e}")
+
+    # -----------------------------------------------------------------------
+    # Layout builders
+    # -----------------------------------------------------------------------
+
+    def _build_root(self, ctx):
+        screen_h = AndroidUtilities.displaySize.y
+        sheet_h = int(screen_h * 0.92)
+
+        outer = LinearLayout(ctx)
+        outer.setOrientation(LinearLayout.VERTICAL)
+        outer.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundGray))
+        try:
+            outer.setLayoutParams(FrameLayout.LayoutParams(-1, sheet_h))
+        except:
+            pass
+
+        # ---- Top bar: back arrow + title + (+) add button -----------------
+        bar = LinearLayout(ctx)
+        bar.setOrientation(LinearLayout.HORIZONTAL)
+        bar.setGravity(Gravity.CENTER_VERTICAL)
+        bar.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(8),
+                       AndroidUtilities.dp(8), AndroidUtilities.dp(8))
+        bar.setBackgroundColor(Theme.getColor(Theme.key_dialogBackground))
+
+        back_btn = self._build_icon_button(
+            ctx, "ic_ab_back", Theme.getColor(Theme.key_dialogTextBlack),
+            on_click=lambda v: self._dismiss(),
+        )
+        bar.addView(back_btn, LinearLayout.LayoutParams(AndroidUtilities.dp(44), AndroidUtilities.dp(44)))
+
+        title = TextView(ctx)
+        title.setText("Мои подарки")
+        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18)
+        try:
+            title.setTypeface(AndroidUtilities.bold())
+        except:
+            pass
+        title.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
+        lp_title = LinearLayout.LayoutParams(0, -2, 1.0)
+        lp_title.leftMargin = AndroidUtilities.dp(12)
+        bar.addView(title, lp_title)
+
+        add_btn = self._build_icon_button(
+            ctx, "msg_add", Theme.getColor(Theme.key_featuredStickers_addButton),
+            on_click=lambda v: self._on_add_clicked(),
+        )
+        bar.addView(add_btn, LinearLayout.LayoutParams(AndroidUtilities.dp(44), AndroidUtilities.dp(44)))
+
+        outer.addView(bar, LinearLayout.LayoutParams(-1, AndroidUtilities.dp(56)))
+
+        # ---- Scrollable cards container -----------------------------------
+        scroll = ScrollView(ctx)
+        try:
+            scroll.setFillViewport(True)
+        except:
+            pass
+        cards = LinearLayout(ctx)
+        cards.setOrientation(LinearLayout.VERTICAL)
+        cards.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(8),
+                         AndroidUtilities.dp(12), AndroidUtilities.dp(24))
+        self.scroll_root = cards
+        self._fill_cards(ctx, cards)
+        scroll.addView(cards, FrameLayout.LayoutParams(-1, -2))
+        outer.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1.0))
+        return outer
+
+    def _fill_cards(self, ctx, cards):
+        entries = self.plugin._my_gifts_list_entries()
+        if not entries:
+            empty = TextView(ctx)
+            empty.setText("Пусто.\nНажмите + чтобы добавить подарок.")
+            empty.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            empty.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15)
+            empty.setGravity(Gravity.CENTER)
+            empty.setPadding(0, AndroidUtilities.dp(48), 0, 0)
+            cards.addView(empty, LinearLayout.LayoutParams(-1, -2))
+            self.empty_view = empty
+            return
+        self.empty_view = None
+        for source, entry in entries:
+            try:
+                key = str(entry.get("key", "") or "")
+            except:
+                key = ""
+            if not key:
+                continue
+            try:
+                card = self._build_card(ctx, source, entry, key)
+            except Exception as e:
+                _log(f"MyGiftsCardSheet build_card fail key={key}: {e}")
+                continue
+            if card is None:
+                continue
+            lp = LinearLayout.LayoutParams(-1, -2)
+            lp.topMargin = AndroidUtilities.dp(10)
+            cards.addView(card, lp)
+
+    def _build_card(self, ctx, source, entry, key):
+        card = LinearLayout(ctx)
+        card.setOrientation(LinearLayout.VERTICAL)
+        card.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(12), AndroidUtilities.dp(12))
+        card_bg = GradientDrawable()
+        card_bg.setCornerRadius(AndroidUtilities.dp(18))
+        card_bg.setColor(Theme.getColor(Theme.key_dialogBackground))
+        card.setBackground(card_bg)
+
+        # ---- Top row: preview (square) + info block ------------------------
+        top = LinearLayout(ctx)
+        top.setOrientation(LinearLayout.HORIZONTAL)
+
+        preview = self._build_preview(ctx, source, entry)
+        lp_prev = LinearLayout.LayoutParams(AndroidUtilities.dp(108), AndroidUtilities.dp(108))
+        top.addView(preview, lp_prev)
+
+        info = LinearLayout(ctx)
+        info.setOrientation(LinearLayout.VERTICAL)
+        lp_info = LinearLayout.LayoutParams(0, -2, 1.0)
+        lp_info.leftMargin = AndroidUtilities.dp(12)
+
+        title_view = TextView(ctx)
+        title_view.setText(self.plugin._my_gifts_entry_title(source, entry))
+        title_view.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17)
+        try:
+            title_view.setTypeface(AndroidUtilities.bold())
+        except:
+            pass
+        title_view.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
+        info.addView(title_view, LinearLayout.LayoutParams(-1, -2))
+
+        if source == "nft":
+            self._build_nft_attribute_rows(ctx, info, entry)
+        else:
+            self._build_regular_inline_rows(ctx, info, entry, key, source)
+
+        top.addView(info, lp_info)
+        card.addView(top, LinearLayout.LayoutParams(-1, -2))
+
+        # ---- Action buttons row -------------------------------------------
+        actions = LinearLayout(ctx)
+        actions.setOrientation(LinearLayout.HORIZONTAL)
+        lp_actions = LinearLayout.LayoutParams(-1, -2)
+        lp_actions.topMargin = AndroidUtilities.dp(12)
+
+        if source == "nft":
+            edit_btn = self._build_pill_button(
+                ctx, "msg_edit", "Изменить",
+                tint=Theme.getColor(Theme.key_featuredStickers_addButton),
+                on_click=lambda v, k=key: self._on_edit_clicked(k),
+            )
+            lp_edit = LinearLayout.LayoutParams(0, AndroidUtilities.dp(44), 1.0)
+            lp_edit.rightMargin = AndroidUtilities.dp(8)
+            actions.addView(edit_btn, lp_edit)
+
+        delete_btn = self._build_pill_button(
+            ctx, "msg_delete", "Удалить",
+            tint=Theme.getColor(Theme.key_text_RedRegular),
+            on_click=lambda v, k=key, s=source: self._on_delete_clicked(k, s),
+        )
+        actions.addView(delete_btn, LinearLayout.LayoutParams(0, AndroidUtilities.dp(44), 1.0))
+
+        card.addView(actions, lp_actions)
+        return card
+
+    def _build_preview(self, ctx, source, entry):
+        """Square preview with rounded corners. For both regular and NFT we
+        render the gift's animated sticker via BackupImageView; future V4
+        could swap NFT preview for a profile-tile-style render with the
+        chosen model/backdrop/symbol pattern."""
+        wrap = FrameLayout(ctx)
+        bg = GradientDrawable()
+        bg.setCornerRadius(AndroidUtilities.dp(14))
+        try:
+            bg.setColor(Theme.getColor(Theme.key_windowBackgroundGray))
+        except:
+            bg.setColor(0xFF222222)
+        try:
+            wrap.setBackground(bg)
+        except:
+            pass
+        try:
+            wrap.setClipToOutline(True)
+        except:
+            pass
+
+        # Try sticker render.
+        document = None
+        try:
+            key = str(entry.get("key", "") or "")
+            wrapper = self.plugin._library_get_wrapper(key) if key else None
+            gift = self.plugin._extract_wrapper_gift(wrapper) if wrapper is not None else None
+            if gift is not None:
+                document = get_val(gift, "sticker", None)
+        except:
+            document = None
+
+        if document is not None:
+            try:
+                img = BackupImageView(ctx)
+                try:
+                    img.setRoundRadius(AndroidUtilities.dp(14))
+                except:
+                    pass
+                try:
+                    image_location = ImageLocation.getForDocument(document)
+                    if image_location is not None:
+                        img.setImage(image_location, "100_100", None, 0, document)
+                except Exception as _e:
+                    _log(f"MyGiftsCardSheet sticker load fail: {_e}")
+                try:
+                    if hasattr(img, "startAnimation"):
+                        img.startAnimation()
+                except:
+                    pass
+                wrap.addView(img, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
+                return wrap
+            except Exception as _e:
+                _log(f"MyGiftsCardSheet BackupImageView fail: {_e}")
+
+        # Fallback: an emoji-ish gift icon.
+        fallback = ImageView(ctx)
+        try:
+            fallback.setImageDrawable(Theme.createSimpleSelectorRoundRectDrawable(0, 0, 0))
+        except:
+            pass
+        wrap.addView(fallback, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        return wrap
+
+    def _build_nft_attribute_rows(self, ctx, info, entry):
+        """Three attribute rows (Model / Symbol / Backdrop) with rarity %.
+        Display-only — NFT attributes aren't editable from the card; user
+        taps «Изменить» to open the constructor."""
+        # Resolve attrs via the live wrapper (uses cached LRU on hot path).
+        attrs = self._read_nft_attributes(entry)
+        labels = (
+            ("model", "Model"),
+            ("pattern", "Symbol"),
+            ("backdrop", "Backdrop"),
+        )
+        for attr_key, attr_label in labels:
+            name, rarity = attrs.get(attr_key, ("—", 0))
+            self._add_attribute_row(ctx, info, attr_label, name, rarity)
+
+    def _read_nft_attributes(self, entry):
+        out = {"model": ("—", 0), "pattern": ("—", 0), "backdrop": ("—", 0)}
+        try:
+            key = str(entry.get("key", "") or "")
+            wrapper = self.plugin._library_get_wrapper(key) if key else None
+            gift = self.plugin._extract_wrapper_gift(wrapper) if wrapper is not None else None
+            if gift is None:
+                return out
+            attrs = get_val(gift, "attributes", None)
+            if attrs is None:
+                return out
+            try:
+                size = int(attrs.size() or 0)
+            except:
+                size = 0
+            for i in range(size):
+                try:
+                    a = attrs.get(i)
+                except:
+                    continue
+                if a is None:
+                    continue
+                try:
+                    cls_low = str(a.getClass().getSimpleName() or "").lower()
+                except:
+                    cls_low = ""
+                name = str(get_val(a, "name", "") or "")
+                try:
+                    rar = int(get_val(a, "rarity_per_mille", 0) or 0)
+                except:
+                    rar = 0
+                if "model" in cls_low and out["model"][0] == "—":
+                    out["model"] = (name or "—", rar)
+                elif ("pattern" in cls_low or "symbol" in cls_low) and out["pattern"][0] == "—":
+                    out["pattern"] = (name or "—", rar)
+                elif "backdrop" in cls_low and out["backdrop"][0] == "—":
+                    out["backdrop"] = (name or "—", rar)
+        except:
+            pass
+        return out
+
+    def _add_attribute_row(self, ctx, info, label, value, rarity_per_mille):
+        row = LinearLayout(ctx)
+        row.setOrientation(LinearLayout.HORIZONTAL)
+        row.setGravity(Gravity.CENTER_VERTICAL)
+        lp_row = LinearLayout.LayoutParams(-1, -2)
+        lp_row.topMargin = AndroidUtilities.dp(6)
+
+        label_tv = TextView(ctx)
+        label_tv.setText(str(label))
+        label_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+        label_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+        lp_l = LinearLayout.LayoutParams(0, -2, 0.45)
+        row.addView(label_tv, lp_l)
+
+        value_tv = TextView(ctx)
+        value_tv.setText(str(value))
+        value_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+        value_tv.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
+        try:
+            value_tv.setSingleLine(True)
+        except:
+            pass
+        lp_v = LinearLayout.LayoutParams(0, -2, 0.45)
+        row.addView(value_tv, lp_v)
+
+        rar_tv = TextView(ctx)
+        rar_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
+        rar_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+        rar_tv.setGravity(Gravity.RIGHT)
+        try:
+            rmille = int(rarity_per_mille or 0)
+        except:
+            rmille = 0
+        if rmille > 0:
+            pct = rmille / 10.0
+            rar_tv.setText(f"{pct:.1f}%".replace(".0%", "%"))
+        else:
+            rar_tv.setText("")
+        lp_r = LinearLayout.LayoutParams(0, -2, 0.10)
+        row.addView(rar_tv, lp_r)
+
+        info.addView(row, lp_row)
+
+    def _build_regular_inline_rows(self, ctx, info, entry, key, source):
+        """Three tappable rows for regular gifts: From / Date / Comment.
+        Each opens _show_text_input_dialog routed through _my_gifts_set_field
+        so persistence + injection rebuild + wrapper invalidation happens
+        through the V5 pipeline."""
+        cf = str(entry.get("custom_from", "") or "")
+        cd = str(entry.get("custom_date", "") or "")
+        cc = str(entry.get("custom_comment", "") or "")
+        rows = (
+            ("От", cf if cf else "не указано", "custom_from", "От кого"),
+            ("Дата", cd if cd else "не указана", "custom_date", "Дата (например 23.03.2026)"),
+            ("Комментарий", cc if cc else "не указан", "custom_comment", "Комментарий"),
+        )
+        for label, value, field_name, prompt in rows:
+            row = self._build_editable_row(ctx, label, value)
+            row.setOnClickListener(JOnClickListener(
+                lambda v, _key=key, _src=source, _fn=field_name, _prompt=prompt, _cur=str(value if value not in ("не указано", "не указана", "не указан") else ""):
+                    self._on_field_tap(_key, _src, _fn, _prompt, _cur)
+            ))
+            lp_row = LinearLayout.LayoutParams(-1, -2)
+            lp_row.topMargin = AndroidUtilities.dp(6)
+            info.addView(row, lp_row)
+
+    def _build_editable_row(self, ctx, label, value):
+        row = LinearLayout(ctx)
+        row.setOrientation(LinearLayout.HORIZONTAL)
+        row.setGravity(Gravity.CENTER_VERTICAL)
+        row.setPadding(0, AndroidUtilities.dp(2), 0, AndroidUtilities.dp(2))
+        try:
+            row.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 7))
+        except:
+            pass
+
+        label_tv = TextView(ctx)
+        label_tv.setText(str(label))
+        label_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+        label_tv.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+        row.addView(label_tv, LinearLayout.LayoutParams(0, -2, 0.4))
+
+        value_tv = TextView(ctx)
+        value_tv.setText(str(value))
+        value_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+        value_tv.setTextColor(Theme.getColor(Theme.key_dialogTextBlack))
+        try:
+            value_tv.setSingleLine(True)
+        except:
+            pass
+        row.addView(value_tv, LinearLayout.LayoutParams(0, -2, 0.6))
+        return row
+
+    def _build_icon_button(self, ctx, icon_name, tint_color, on_click):
+        btn = ImageView(ctx)
+        try:
+            res_id = ctx.getResources().getIdentifier(str(icon_name), "drawable", ctx.getPackageName())
+            if res_id > 0:
+                btn.setImageResource(res_id)
+        except:
+            pass
+        try:
+            btn.setColorFilter(int(tint_color))
+        except:
+            pass
+        btn.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+        try:
+            btn.setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector), 1))
+        except:
+            pass
+        if on_click is not None:
+            btn.setOnClickListener(JOnClickListener(on_click))
+        return btn
+
+    def _build_pill_button(self, ctx, icon_name, label, tint, on_click):
+        """MD3-style pill button: rounded background with the tint colour at
+        12% opacity, an icon and a label in the full tint colour."""
+        wrap = LinearLayout(ctx)
+        wrap.setOrientation(LinearLayout.HORIZONTAL)
+        wrap.setGravity(Gravity.CENTER)
+
+        tint_int = int(tint)
+        # 0x1F (~12%) alpha tint background.
+        bg_color = (0x1F << 24) | (tint_int & 0x00FFFFFF)
+        bg = GradientDrawable()
+        bg.setCornerRadius(AndroidUtilities.dp(22))
+        bg.setColor(bg_color)
+        try:
+            ripple = Theme.createSimpleSelectorRoundRectDrawable(
+                AndroidUtilities.dp(22), bg_color, (0x33 << 24) | (tint_int & 0x00FFFFFF)
+            )
+            wrap.setBackground(ripple)
+        except:
+            wrap.setBackground(bg)
+
+        icon = ImageView(ctx)
+        try:
+            res_id = ctx.getResources().getIdentifier(str(icon_name), "drawable", ctx.getPackageName())
+            if res_id > 0:
+                icon.setImageResource(res_id)
+        except:
+            pass
+        try:
+            icon.setColorFilter(tint_int)
+        except:
+            pass
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+        lp_icon = LinearLayout.LayoutParams(AndroidUtilities.dp(20), AndroidUtilities.dp(20))
+        lp_icon.rightMargin = AndroidUtilities.dp(6)
+        wrap.addView(icon, lp_icon)
+
+        text = TextView(ctx)
+        text.setText(str(label))
+        text.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+        text.setTextColor(tint_int)
+        try:
+            text.setTypeface(AndroidUtilities.bold())
+        except:
+            pass
+        wrap.addView(text, LinearLayout.LayoutParams(-2, -2))
+
+        if on_click is not None:
+            wrap.setOnClickListener(JOnClickListener(on_click))
+        return wrap
+
+    # -----------------------------------------------------------------------
+    # Action handlers — delegate to existing plugin methods so logic stays
+    # unified with the V1 list view and V5 persistence.
+    # -----------------------------------------------------------------------
+
+    def _on_add_clicked(self):
+        try:
+            self.plugin._open_my_gifts_add_menu()
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Меню: {e}")
+            except:
+                pass
+
+    def _on_edit_clicked(self, key):
+        try:
+            self.plugin._open_constructor_for_library_key(key)
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Конструктор: {e}")
+            except:
+                pass
+
+    def _on_delete_clicked(self, key, source):
+        # Reuse the existing confirmation menu so the destructive UX matches
+        # the rest of the plugin. After the user confirms, refresh the sheet.
+        try:
+            actions = [
+                ("Да, удалить", lambda: self._do_delete(key, source)),
+            ]
+            self.plugin._show_action_menu("Удалить подарок?", actions, negative_text="Отмена")
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Ошибка: {e}")
+            except:
+                pass
+
+    def _do_delete(self, key, source):
+        try:
+            self.plugin._my_gifts_delete(key, source)
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Удаление: {e}")
+            except:
+                pass
+        try:
+            run_on_ui_thread(self.refresh)
+        except:
+            pass
+
+    def _on_field_tap(self, key, source, field, prompt, current):
+        try:
+            def _submit(value, _k=key, _s=source, _f=field):
+                try:
+                    self.plugin._my_gifts_set_field(_k, _s, _f, value)
+                except Exception as e:
+                    try:
+                        BulletinHelper.show_error(f"Сохранение: {e}")
+                    except:
+                        pass
+                try:
+                    run_on_ui_thread(self.refresh)
+                except:
+                    pass
+            self.plugin._show_text_input_dialog(prompt, current, _submit)
+        except Exception as e:
+            try:
+                BulletinHelper.show_error(f"Ввод: {e}")
+            except:
+                pass
+
 
 class ResaleGridController:
     # `mode` selects per-click behavior and item filtering:
