@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.63"
+__version__ = "1.0.64"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -10890,6 +10890,18 @@ class NftClonerPlugin(BasePlugin):
                 self._apply_gift_stars_config_to_objects(gift=gift, wrapper=obj, stars_config=e.get("gift_stars_config", None))
             except:
                 pass
+            # «Мои подарки» V4: write custom_date / custom_comment overrides
+            # into the wrapper so they show up in the native StarGiftSheet.
+            # custom_from is routed separately through identity_config (handled
+            # above by _apply_identity_config_to_objects) when the user types
+            # a numeric uid.
+            try:
+                self._apply_my_gifts_meta_overrides_to_wrapper(obj, e)
+            except Exception as _mgo_e:
+                try:
+                    _log(f"_apply_my_gifts_meta_overrides_to_wrapper: {_mgo_e}")
+                except:
+                    pass
             self._remember_wrapper(key, obj)
             return obj
         except Exception as ex:
@@ -13608,11 +13620,14 @@ class NftClonerPlugin(BasePlugin):
         return None
 
     def _my_gifts_entry_title(self, source, entry):
+        raw = entry.get("title", None) if isinstance(entry, dict) else None
         try:
-            t = str(entry.get("title", "") or "")
+            t = str(raw or "").strip()
         except:
             t = ""
-        if not t:
+        # Guard against literal "None" (from str(None)) or whitespace-only
+        # titles — _library_upsert_wrapper sometimes lands on missing title.
+        if not t or t.lower() == "none":
             t = "NFT" if source == "nft" else "Подарок"
         try:
             n = int(entry.get("num", 0) or 0)
@@ -13922,6 +13937,28 @@ class NftClonerPlugin(BasePlugin):
             for fname in ("custom_from", "custom_date", "custom_comment"):
                 if fname not in entry:
                     entry[fname] = ""
+            # Ensure title is a usable string for the «Мои подарки» list. The
+            # catalog template's title field can be empty on some Telegram
+            # forks; fall back to the slug or a generic label.
+            try:
+                cur_t = str(entry.get("title", "") or "").strip()
+            except:
+                cur_t = ""
+            if not cur_t or cur_t.lower() == "none":
+                try:
+                    cur_t = str(get_val(template_gift, "title", "") or "").strip()
+                except:
+                    cur_t = ""
+                if not cur_t or cur_t.lower() == "none":
+                    try:
+                        slug = str(get_val(template_gift, "slug", "") or "")
+                        if slug:
+                            cur_t = slug.replace("_", " ").strip().title()
+                    except:
+                        cur_t = ""
+                if not cur_t:
+                    cur_t = "Подарок"
+                entry["title"] = cur_t
         try:
             self._save_cache()
         except:
@@ -13971,12 +14008,15 @@ class NftClonerPlugin(BasePlugin):
             ),
         ]
         if source == "regular":
+            cur_title = str(entry.get("title", "") or "").strip()
+            if not cur_title or cur_title.lower() == "none":
+                cur_title = ""
             items.append(Text(
                 text="Название",
-                subtext=str(entry.get("title", "") or "Подарок"),
+                subtext=cur_title if cur_title else "Подарок",
                 icon="msg_edit",
                 on_click=lambda _: self._show_text_input_dialog(
-                    "Название подарка", str(entry.get("title", "") or ""),
+                    "Название подарка", cur_title,
                     lambda v: self._my_gifts_set_title(gift_id, source, v)
                 ),
             ))
@@ -14002,7 +14042,56 @@ class NftClonerPlugin(BasePlugin):
             if not entry:
                 BulletinHelper.show_error("Подарок не найден")
                 return
-            entry[str(field)] = str(value or "")
+            fname = str(field)
+            raw = str(value or "")
+            entry[fname] = raw
+
+            # «От кого»: route numeric uid into identity_config.from_user_id
+            # so the existing _apply_identity_config_to_objects pipeline patches
+            # the wrapper's from_id-like fields and the StarGiftSheet shows the
+            # sender peer (with avatar). Plain text values are kept in
+            # custom_from for display but don't override the peer.
+            if fname == "custom_from":
+                ic = entry.get("identity_config") if isinstance(entry.get("identity_config"), dict) else {}
+                if not isinstance(ic, dict):
+                    ic = {}
+                uid = self._my_gifts_parse_from_uid(raw)
+                if uid > 0:
+                    ic["from_user_id"] = int(uid)
+                else:
+                    # Clearing the numeric override when the user typed text.
+                    try:
+                        ic.pop("from_user_id", None)
+                    except:
+                        pass
+                entry["identity_config"] = ic
+
+            # «Дата»: parse and store epoch so wrapper.date is overridable.
+            if fname == "custom_date":
+                ts = self._my_gifts_parse_date(raw)
+                if ts > 0:
+                    entry["custom_date_ts"] = int(ts)
+                else:
+                    try:
+                        entry.pop("custom_date_ts", None)
+                    except:
+                        pass
+
+            # Invalidate cached wrapper so the next _library_get_wrapper run
+            # re-deserializes from b64 and re-applies the override pipeline.
+            try:
+                gk = str(entry.get("key", "") or "")
+                if gk and gk in (self.gift_objects or {}):
+                    try:
+                        del self.gift_objects[gk]
+                    except:
+                        pass
+            except:
+                pass
+            try:
+                self._rebuild_injection_payloads()
+            except:
+                pass
             try:
                 self._save_cache()
             except:
@@ -14016,6 +14105,150 @@ class NftClonerPlugin(BasePlugin):
                 BulletinHelper.show_error(f"Ошибка: {e}")
             except:
                 pass
+
+    def _my_gifts_parse_from_uid(self, raw):
+        """Return a positive user_id for «От кого», else 0. Accepts a bare
+        integer string. @username resolution is deferred to V5 (requires
+        async lookup against MessagesController/UsersController).
+        """
+        try:
+            s = str(raw or "").strip()
+        except:
+            return 0
+        if not s:
+            return 0
+        # Strip leading @ in case user typed "@123" by mistake.
+        if s.startswith("@"):
+            s_num = s[1:]
+            if s_num.isdigit():
+                try:
+                    return int(s_num)
+                except:
+                    return 0
+            return 0
+        if s.isdigit():
+            try:
+                return int(s)
+            except:
+                return 0
+        # Future: try MessagesController.getUserByUsername(s) for @-style.
+        return 0
+
+    def _my_gifts_parse_date(self, raw):
+        """Parse 'DD.MM.YYYY' / 'DD.MM.YY' / 'YYYY-MM-DD' into epoch (int).
+        Returns 0 if the input can't be parsed.
+        """
+        try:
+            s = str(raw or "").strip()
+        except:
+            return 0
+        if not s:
+            return 0
+        formats = ("%d.%m.%Y", "%d.%m.%y", "%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y")
+        import datetime as _dt
+        for fmt in formats:
+            try:
+                dt = _dt.datetime.strptime(s, fmt)
+                return int(dt.timestamp())
+            except:
+                continue
+        return 0
+
+    def _my_gifts_comment_field_match(self, field_name):
+        """Heuristic for message-like fields on TL_savedStarGift / inner gift
+        that hold the recipient-visible note. Mirrors the matcher from the
+        v0.1 Preview plugin but tuned to current TL field names. Excludes
+        title / slug / owner-related fields (which contain unrelated text)."""
+        low = str(field_name or "").lower()
+        if not low:
+            return False
+        if "title" in low or "slug" in low or "owner" in low:
+            return False
+        if low in ("message", "text", "caption", "comment", "note", "signature"):
+            return True
+        if ("message" in low or "caption" in low or "comment" in low or "signature" in low) and "id" not in low:
+            return True
+        return False
+
+    def _apply_my_gifts_meta_overrides_to_wrapper(self, wrapper, entry):
+        """Mutate the wrapper in-place with custom_date and custom_comment
+        from a gift_library entry. Called from _library_get_wrapper after the
+        wrapper has been deserialized. From/sender is handled separately via
+        identity_config, not here."""
+        if wrapper is None or not isinstance(entry, dict):
+            return 0
+        patched = 0
+
+        # 1) Date: write wrapper.date (epoch) if user-set.
+        try:
+            ts = int(entry.get("custom_date_ts", 0) or 0)
+        except:
+            ts = 0
+        if ts > 0:
+            try:
+                if self._set_field(wrapper, "date", int(ts)):
+                    patched += 1
+            except:
+                pass
+
+        # 2) Comment: walk fields, patch message-like ones with custom_comment.
+        try:
+            comment_raw = str(entry.get("custom_comment", "") or "").strip()
+        except:
+            comment_raw = ""
+        if comment_raw:
+            patched += self._apply_comment_text_to_obj(wrapper, comment_raw)
+            try:
+                gift = self._extract_wrapper_gift(wrapper)
+                if gift is not None:
+                    patched += self._apply_comment_text_to_obj(gift, comment_raw)
+            except:
+                pass
+        return patched
+
+    def _apply_comment_text_to_obj(self, obj, text):
+        """Reflection-patch all message-like string fields on a TL object."""
+        if obj is None or not text:
+            return 0
+        patched = 0
+        seen = set()
+        fields = []
+        try:
+            for f in obj.getClass().getFields():
+                fields.append(f)
+        except:
+            pass
+        try:
+            for f in obj.getClass().getDeclaredFields():
+                try:
+                    f.setAccessible(True)
+                except:
+                    pass
+                fields.append(f)
+        except:
+            pass
+        for f in fields:
+            try:
+                name = str(f.getName() or "")
+            except:
+                continue
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            if not self._my_gifts_comment_field_match(name):
+                continue
+            try:
+                typ = str(f.getType().getName() or "")
+            except:
+                typ = ""
+            if typ != "java.lang.String":
+                continue
+            try:
+                if self._set_field(obj, name, str(text)):
+                    patched += 1
+            except:
+                pass
+        return patched
 
     def _my_gifts_set_title(self, gift_id, source, value):
         v = str(value or "").strip()
@@ -16507,6 +16740,52 @@ class NftClonerPlugin(BasePlugin):
                 except Exception as _mig_e:
                     try:
                         _log(f"[my_gifts] regular_gifts migration failed: {_mig_e}")
+                    except:
+                        pass
+                # V3 → V4 backfill: route already-saved custom_from values into
+                # identity_config.from_user_id (so the existing pipeline patches
+                # the StarGiftSheet from peer) and parse custom_date into
+                # custom_date_ts. Idempotent.
+                try:
+                    bf_from = 0
+                    bf_date = 0
+                    for e in (self.gift_library or []):
+                        if not isinstance(e, dict):
+                            continue
+                        try:
+                            cf = str(e.get("custom_from", "") or "").strip()
+                        except:
+                            cf = ""
+                        if cf:
+                            ic = e.get("identity_config") if isinstance(e.get("identity_config"), dict) else {}
+                            if not isinstance(ic, dict):
+                                ic = {}
+                            try:
+                                cur = int(ic.get("from_user_id", 0) or 0)
+                            except:
+                                cur = 0
+                            if cur <= 0:
+                                uid = self._my_gifts_parse_from_uid(cf)
+                                if uid > 0:
+                                    ic["from_user_id"] = int(uid)
+                                    e["identity_config"] = ic
+                                    bf_from += 1
+                        try:
+                            cd = str(e.get("custom_date", "") or "").strip()
+                            cdts = int(e.get("custom_date_ts", 0) or 0)
+                        except:
+                            cd = ""
+                            cdts = 0
+                        if cd and cdts <= 0:
+                            ts = self._my_gifts_parse_date(cd)
+                            if ts > 0:
+                                e["custom_date_ts"] = int(ts)
+                                bf_date += 1
+                    if bf_from or bf_date:
+                        _log(f"[my_gifts] V4 backfill: from_uid={bf_from} date_ts={bf_date}")
+                except Exception as _bf_e:
+                    try:
+                        _log(f"[my_gifts] V4 backfill failed: {_bf_e}")
                     except:
                         pass
                 self.gift_objects = {}
