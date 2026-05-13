@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.81"
+__version__ = "1.0.82"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -2297,6 +2297,14 @@ class NftClonerPlugin(BasePlugin):
                 self._sync_bootstrap()
             except Exception as inner_e:
                 _log(f"Sync bootstrap error: {inner_e}")
+
+            # Pre-warm the upgrade-attribute pool in the background, so that
+            # by the time the user taps an NFT in the catalog the constructor
+            # opens instantly via AttrLoader's fast-path. Fire-and-forget.
+            try:
+                AndroidUtilities.runOnUIThread(JRunnable(_voidify(self._prewarm_upgrade_attr_pool)), 1500)
+            except Exception as inner_e:
+                _log(f"prewarm scheduling error: {inner_e}")
 
             _log(f"Plugin loaded v{__version__}")
         except Exception as e:
@@ -12717,6 +12725,88 @@ class NftClonerPlugin(BasePlugin):
         if not isinstance(pool, dict):
             return False
         return bool(pool.get("model") and pool.get("pattern") and pool.get("backdrop"))
+
+    def _has_any_upgrade_attrs(self):
+        """Looser variant for the fast-path: True if the pool has ANY of the
+        three groups populated. NftBuilderSheet falls back to the pool on
+        attr_response=None, so partial pools still produce a working sheet —
+        the background refresh fills in the gaps without making the user
+        wait for a network round-trip per open."""
+        pool = getattr(self, "_upgrade_attr_pool", None)
+        if not isinstance(pool, dict):
+            return False
+        return bool(pool.get("model") or pool.get("pattern") or pool.get("backdrop"))
+
+    def _prewarm_upgrade_attr_pool(self):
+        """Fire a background getStarGiftUpgradeAttributes request for one
+        gift_id from the library (or anywhere we can find one) so the
+        attribute pool is populated by the time the user taps an NFT in
+        the catalog and expects the constructor to open instantly.
+        Idempotent — bails fast if the pool is already full."""
+        try:
+            if self._has_generic_upgrade_attrs():
+                return False
+        except Exception:
+            return False
+        # Find a gift_id to prefetch. Prefer library entries with non-zero
+        # base_gift_id; fall back to anything that has unique_id set.
+        gift_id = 0
+        try:
+            for entry in list(self.gift_library or []):
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    bid = int(entry.get("base_gift_id", 0) or 0)
+                    if bid > 0:
+                        gift_id = bid
+                        break
+                except Exception:
+                    pass
+                try:
+                    uid = int(entry.get("unique_id", 0) or 0)
+                    if uid > 0:
+                        gift_id = uid
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if gift_id <= 0:
+            return False
+        try:
+            req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
+            req.gift_id = int(gift_id)
+        except Exception as _e:
+            try:
+                _log(f"_prewarm_upgrade_attr_pool req build fail: {_e}")
+            except Exception:
+                pass
+            return False
+
+        def _on_prewarm_done(response, error):
+            if error or response is None:
+                return None
+            try:
+                self._remember_upgrade_attrs(int(gift_id), response)
+                _log(f"_prewarm_upgrade_attr_pool: pool primed via gift_id={gift_id}")
+            except Exception:
+                pass
+            return None
+
+        try:
+            cb = JRequestDelegate(_voidify(_on_prewarm_done))
+            get_connections_manager().sendRequest(req, cb)
+            try:
+                self._prewarm_callback_ref = cb  # keep proxy alive
+            except Exception:
+                pass
+            return True
+        except Exception as _e:
+            try:
+                _log(f"_prewarm_upgrade_attr_pool send fail: {_e}")
+            except Exception:
+                pass
+            return False
 
     def _get_gift_floor_stars(self, gift):
         """Best-effort: try to resolve current floor/min resale price in stars for a catalog gift."""
@@ -28166,13 +28256,16 @@ class AttrLoader:
         self._fallback_requested = False
 
     def start(self):
-        # Fast path: if the upgrade-attribute pool was already populated
-        # by a previous load (any gift's attrs fill the generic model /
-        # pattern / backdrop pools), open the builder immediately. Saves
-        # the 5-10s server round-trip every time the user re-enters the
-        # constructor.
+        # Fast path: as long as the attribute pool has ANYTHING in it,
+        # open the builder immediately and let NftBuilderSheet fall back
+        # to whatever the pool currently holds. Background refresh fills
+        # in missing attrs without blocking the open. Going via the looser
+        # `_has_any_upgrade_attrs` instead of the all-three check means
+        # the user no longer waits 5-6s on every constructor entry — only
+        # the very first ever (before the pool sees any data) hits the
+        # network on the foreground path.
         try:
-            if self.allow_generic_fallback and self.plugin._has_generic_upgrade_attrs():
+            if self.allow_generic_fallback and self.plugin._has_any_upgrade_attrs():
                 _log(f"AttrLoader: cache hit, opening builder immediately gift_id={self.gift_id}")
                 run_on_ui_thread(lambda: NftBuilderSheet(self.plugin, self.base_gift_id, None).show())
                 # Refresh attrs in the background so the pool tracks new
@@ -28188,7 +28281,7 @@ class AttrLoader:
                 try:
                     bg_req = jclass("org.telegram.tgnet.tl.TL_stars$getStarGiftUpgradeAttributes")()
                     bg_req.gift_id = self.gift_id
-                    self.req_callback = JRequestDelegate(_bg_refresh)
+                    self.req_callback = JRequestDelegate(_voidify(_bg_refresh))
                     get_connections_manager().sendRequest(bg_req, self.req_callback)
                 except Exception:
                     pass

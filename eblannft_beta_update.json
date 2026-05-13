@@ -1,6 +1,6 @@
 {
-  "version": "1.0.81",
-  "notes": "Beta 1.0.81 — повтор фикса top-inset. В 1.0.80 padding не сработал: AndroidUtilities.statusBarHeight = 0 на этом форке, fallback был 26dp которого не хватило, и сам padding вероятно перетирался BottomSheet-контейнером. Сейчас inset резолвится из четырёх источников по очереди: AndroidUtilities.statusBarHeight → Activity.getWindow().getDecorView().getRootWindowInsets().getSystemWindowInsetTop() → resource android:status_bar_height → fixed 48dp. Inset применяется через явный spacer-View в начале LinearLayout (не через setPadding), чтобы BottomSheet не мог его перетереть. Минимум 20dp гарантирован.",
+  "version": "1.0.82",
+  "notes": "Beta 1.0.82 — конструктор больше не висит 5-6с. Fast-path для AttrLoader был слишком строгий (требовал чтобы все три группы — model/pattern/backdrop — были непусты в пуле). На свежей сессии или после _clear_cache пул мог быть частично пуст → проверка возвращала False → шёл сетевой запрос на 5-6с. Два фикса: (1) добавлена _has_any_upgrade_attrs — fast-path стреляет если в пуле есть ХОТЯ БЫ ОДНА группа; недостающие подтянутся фоновым refresh'ем без блокировки UI. (2) Pre-warm пула при загрузке плагина (через 1500мс после on_plugin_load): фоновый getStarGiftUpgradeAttributes для одного gift_id из библиотеки — пул прогревается заранее, конструктор открывается мгновенно с первого тапа после старта приложения. Идемпотентно: если пул уже полный — bail.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
