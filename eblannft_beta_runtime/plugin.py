@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.72"
+__version__ = "1.0.73"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -22184,13 +22184,23 @@ class NftClonerPlugin(BasePlugin):
                 key = None
         e = self._library_find_entry(key) if key else None
         # V6 sync: fall back to the remote meta cache so foreign-profile
-        # viewers also see the owner's «От» / «Комментарий» rows. Mirrors
-        # the pattern used by _inject_local_gift_value_row.
+        # viewers also see the owner's «От» / «Комментарий» rows. Try the
+        # raw arg first (works for TL_starGiftUnique whose .id key matches
+        # the cache), then unwrap to the inner gift (regular savedStarGift
+        # wrappers have no .id of their own — the cache is keyed on the
+        # inner TL_starGift.id).
         if not e and gift is not None:
             try:
                 e = self._get_remote_gift_meta_for_gift(gift)
             except Exception:
                 e = None
+            if not e:
+                try:
+                    inner = self._extract_wrapper_gift(gift)
+                    if inner is not None and inner is not gift:
+                        e = self._get_remote_gift_meta_for_gift(inner)
+                except Exception:
+                    e = None
         if not e:
             return False
         try:
