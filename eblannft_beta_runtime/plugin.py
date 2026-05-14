@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.89"
+__version__ = "1.0.90"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -9804,7 +9804,17 @@ class NftClonerPlugin(BasePlugin):
                     gid = int(get_val(gift, "id", 0) or 0) if gift is not None else 0
                 except:
                     gid = 0
-                if gid > 0 and gid in wrapper_ids:
+                # For unique NFTs, gift.id IS the instance id — dedup is
+                # correct (we can't have two of the same NFT in a profile).
+                # For regular gifts, gift.id is the TEMPLATE id, shared by
+                # every instance of that gift type; multiple are valid and
+                # must each show up in the profile grid. Only skip dedup
+                # collisions when the inner gift looks unique.
+                try:
+                    is_unique_dedup = self._looks_like_unique_gift(gift)
+                except:
+                    is_unique_dedup = False
+                if is_unique_dedup and gid > 0 and gid in wrapper_ids:
                     continue
                 wrappers.append(w)
                 if gid > 0:

@@ -1,6 +1,6 @@
 {
-  "version": "1.0.89",
-  "notes": "Beta 1.0.89 — превью NFT-карточки больше не оставляет пустой полосы снизу. Раньше превью было фиксированной высоты 108dp, а info-колонка (атрибуты + кнопки) на NFT карточках выше — отсюда зазор cyan-цвета на скриншоте. Превью теперь растягивается на всю высоту строки (LinearLayout LayoutParams height=-1). Pattern-точки переанкорены через FrameLayout.Gravity (углы LEFT|TOP / RIGHT|TOP / LEFT|BOTTOM / RIGHT|BOTTOM + edge-midpoints через CENTER_HORIZONTAL/CENTER_VERTICAL) с симметричными margins — остаются по углам/краям при любой высоте контейнера. Модель остаётся отцентрирована.",
+  "version": "1.0.90",
+  "notes": "Beta 1.0.90 — фикс: добавление одинаковых обычных подарков. Раньше при добавлении второго и далее экземпляров одного и того же regular gift (например, два Heart'а) в профиле появлялся только первый. _build_injection_wrappers_bundle дедуплицировал wrappers по gift.id, но для regular gifts gift.id — это id ТИПА подарка, общий для всех экземпляров (не уникальный inst id как у NFT). Теперь дедуп срабатывает только когда inner gift — TL_starGiftUnique. Для regular gifts (TL_starGift) все экземпляры с одинаковым template id пропускаются в инжекшн.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
