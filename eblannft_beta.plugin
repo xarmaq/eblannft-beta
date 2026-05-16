@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.99"
+__version__ = "1.1.0"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -934,8 +934,8 @@ def _eblannft_build_settings_header(context):
             sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
             card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
         # eblanNFT brand accent (violet/purple, matches the app icon).
-        accent = _eblannft_jint(0xFF8B5CF6)
-        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+        accent = _eblannft_jint(0xFF22C55E)
+        accent_soft = _eblannft_jint(0x1422C55E if is_dark else 0x1022C55E)
 
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
@@ -1191,8 +1191,8 @@ def _eblannft_build_status_card(context, plugin_self):
             text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
             sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
             card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
-        accent = _eblannft_jint(0xFF8B5CF6)
-        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+        accent = _eblannft_jint(0xFF22C55E)
+        accent_soft = _eblannft_jint(0x1422C55E if is_dark else 0x1022C55E)
         accent_off = _eblannft_jint(0x33515B70 if is_dark else 0x14000000)
 
         stats = _eblannft_read_profile_stats(plugin_self)
@@ -1342,9 +1342,10 @@ def _eblannft_build_status_card(context, plugin_self):
         return None
 
 
-def _eblannft_build_quick_actions(context, plugin_self):
-    """Translatica-style horizontal action strip: 4 tappable pill-cards
-    (Обновить каталог / Проверить апдейт / Очистить кэш / О плагине)."""
+def _eblannft_build_footer_card(context, plugin_self):
+    """Bottom-of-list footer: two action chips (Апдейт / Кэш), version
+    line, and clickable channel link. Replaces the older standalone
+    quick-actions strip — keeps the menu tidier."""
     try:
         from android.widget import FrameLayout, TextView, LinearLayout, ImageView
         from android.view import Gravity, View, ViewOutlineProvider
@@ -1354,24 +1355,14 @@ def _eblannft_build_quick_actions(context, plugin_self):
         from org.telegram.messenger import AndroidUtilities, ApplicationLoader
         from org.telegram.ui.ActionBar import Theme
     except Exception as e:
-        _bootstrap_log(f"quick-actions import err: {e}")
+        _bootstrap_log(f"footer import err: {e}")
         return None
 
     try:
-        compact = False
-        try:
-            dm = context.getResources().getDisplayMetrics()
-            screen_w_dp = float(dm.widthPixels) / float(dm.density or 1.0)
-            font_scale = float(getattr(context.getResources().getConfiguration(), "fontScale", 1.0) or 1.0)
-            compact = bool(screen_w_dp < 372.0 or font_scale > 1.08)
-        except Exception:
-            compact = False
-
         try:
             is_dark = bool(Theme.isCurrentThemeDark())
         except Exception:
             is_dark = True
-
         try:
             text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
             sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
@@ -1380,54 +1371,63 @@ def _eblannft_build_quick_actions(context, plugin_self):
             text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
             sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
             card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
-        accent = _eblannft_jint(0xFF8B5CF6)
-        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+        accent = _eblannft_jint(0xFF22C55E)
+        accent_soft = _eblannft_jint(0x1422C55E if is_dark else 0x1022C55E)
 
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
+        outer.setGravity(Gravity.CENTER_HORIZONTAL)
         try:
             outer.setPadding(
                 AndroidUtilities.dp(16),
-                AndroidUtilities.dp(0),
-                AndroidUtilities.dp(16),
                 AndroidUtilities.dp(8),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(20),
             )
         except Exception:
             pass
-
-        row = LinearLayout(context)
-        row.setOrientation(LinearLayout.HORIZONTAL)
-        row.setGravity(Gravity.CENTER_VERTICAL)
 
         def _safe_call(fn):
             try:
                 fn()
             except Exception as e:
-                _bootstrap_log(f"quick action call err: {e}")
+                _bootstrap_log(f"footer chip action err: {e}")
 
-        def _make_pill(icon_name, label, callback):
-            cell = LinearLayout(context)
-            cell.setOrientation(LinearLayout.VERTICAL)
-            cell.setGravity(Gravity.CENTER_HORIZONTAL)
+        def _call_check_update():
+            try:
+                _check_for_update_interactive()
+            except Exception:
+                pass
+
+        def _call_clear_cache():
+            try:
+                if plugin_self is not None:
+                    plugin_self._clear_cache()
+            except Exception:
+                pass
+
+        def _make_chip(icon_name, label, callback):
+            chip = LinearLayout(context)
+            chip.setOrientation(LinearLayout.HORIZONTAL)
+            chip.setGravity(Gravity.CENTER_VERTICAL)
             try:
                 bg = GradientDrawable()
                 bg.setCornerRadius(float(AndroidUtilities.dp(18)))
                 bg.setColor(card_color)
-                cell.setBackground(bg)
-                cell.setClipToOutline(True)
-                cell.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
-                cell.setClickable(True)
-                cell.setFocusable(True)
+                chip.setBackground(bg)
+                chip.setClipToOutline(True)
+                chip.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+                chip.setClickable(True)
+                chip.setFocusable(True)
             except Exception:
                 pass
             try:
-                cell.setPadding(
-                    AndroidUtilities.dp(8),
-                    AndroidUtilities.dp(12),
-                    AndroidUtilities.dp(8),
-                    AndroidUtilities.dp(12),
+                chip.setPadding(
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(10),
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(10),
                 )
-                cell.setMinimumHeight(AndroidUtilities.dp(80))
             except Exception:
                 pass
 
@@ -1439,7 +1439,6 @@ def _eblannft_build_quick_actions(context, plugin_self):
                 icon_wrap.setBackground(ic_bg)
             except Exception:
                 pass
-
             icon = ImageView(context)
             try:
                 icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
@@ -1456,130 +1455,71 @@ def _eblannft_build_quick_actions(context, plugin_self):
             icon_wrap.addView(
                 icon,
                 FrameLayout.LayoutParams(
-                    AndroidUtilities.dp(15),
-                    AndroidUtilities.dp(15),
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(14),
                     Gravity.CENTER,
                 ),
             )
-            cell.addView(
+            chip.addView(
                 icon_wrap,
                 LinearLayout.LayoutParams(
-                    AndroidUtilities.dp(30),
-                    AndroidUtilities.dp(30),
+                    AndroidUtilities.dp(26),
+                    AndroidUtilities.dp(26),
                 ),
             )
 
             label_tv = TextView(context)
             label_tv.setText(str(label))
-            label_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11 if not compact else 10)
+            label_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
             try:
                 label_tv.setTextColor(text_color)
             except Exception:
                 pass
-            label_tv.setGravity(Gravity.CENTER)
-            label_tv.setMaxLines(2)
             try:
-                label_tv.setPadding(0, AndroidUtilities.dp(7), 0, 0)
+                label_tv.setTypeface(label_tv.getTypeface(), 1)
             except Exception:
                 pass
-            cell.addView(label_tv)
+            lp_lbl = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp_lbl.leftMargin = AndroidUtilities.dp(8)
+            chip.addView(label_tv, lp_lbl)
 
             if callback is not None:
                 try:
-                    class _PillClick(dynamic_proxy(View.OnClickListener)):
+                    class _ChipClick(dynamic_proxy(View.OnClickListener)):
                         def onClick(self_obj, v):
                             _safe_call(callback)
-                    cell.setOnClickListener(_PillClick())
+                    chip.setOnClickListener(_ChipClick())
                 except Exception:
                     pass
-            return cell
+            return chip
 
-        def _call_refresh():
-            try:
-                plugin_self._force_load_catalog()
-            except Exception:
-                pass
+        chip_row = LinearLayout(context)
+        chip_row.setOrientation(LinearLayout.HORIZONTAL)
+        chip_row.setGravity(Gravity.CENTER_HORIZONTAL)
 
-        def _call_check_update():
-            try:
-                _check_for_update_interactive()
-            except Exception:
-                pass
-
-        def _call_clear_cache():
-            try:
-                plugin_self._clear_cache()
-            except Exception:
-                pass
-
-        def _call_about():
-            try:
-                plugin_self._on_about_click()
-            except Exception:
-                pass
-
-        pills = [
-            ("msg_retry",       "Обновить",   _call_refresh),
-            ("msg_download",    "Апдейт",     _call_check_update),
-            ("msg_delete",      "Кэш",        _call_clear_cache),
-            ("msg2_reactions2", "О плагине",  _call_about),
-        ]
-        for i, (icon_name, label, cb) in enumerate(pills):
-            lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
-            if i > 0:
-                lp.leftMargin = AndroidUtilities.dp(8)
-            row.addView(_make_pill(icon_name, label, cb), lp)
-
+        upd_chip = _make_chip("msg_download", "Апдейт", _call_check_update)
+        cache_chip = _make_chip("msg_delete",   "Кэш",    _call_clear_cache)
+        lp_upd = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp_cache = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp_cache.leftMargin = AndroidUtilities.dp(10)
+        chip_row.addView(upd_chip, lp_upd)
+        chip_row.addView(cache_chip, lp_cache)
         outer.addView(
-            row,
+            chip_row,
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ),
         )
-        return outer
-    except Exception as e:
-        _bootstrap_log(f"build quick-actions err: {e}")
-        return None
-
-
-def _eblannft_build_footer_card(context):
-    """Small bottom-of-list footer: maintainer + channel link + version."""
-    try:
-        from android.widget import FrameLayout, TextView, LinearLayout
-        from android.view import Gravity, View, ViewOutlineProvider
-        from android.util import TypedValue
-        from android.graphics.drawable import GradientDrawable
-        from java import dynamic_proxy
-        from org.telegram.messenger import AndroidUtilities
-        from org.telegram.ui.ActionBar import Theme
-    except Exception as e:
-        _bootstrap_log(f"footer import err: {e}")
-        return None
-
-    try:
-        try:
-            is_dark = bool(Theme.isCurrentThemeDark())
-        except Exception:
-            is_dark = True
-        try:
-            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
-        except Exception:
-            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
-        accent = _eblannft_jint(0xFF8B5CF6)
-
-        outer = LinearLayout(context)
-        outer.setOrientation(LinearLayout.VERTICAL)
-        outer.setGravity(Gravity.CENTER_HORIZONTAL)
-        try:
-            outer.setPadding(
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(20),
-            )
-        except Exception:
-            pass
 
         title = TextView(context)
         title.setText(f"eblanNFT Beta • v{__version__}")
@@ -1589,6 +1529,10 @@ def _eblannft_build_footer_card(context):
         except Exception:
             pass
         title.setGravity(Gravity.CENTER)
+        try:
+            title.setPadding(0, AndroidUtilities.dp(16), 0, 0)
+        except Exception:
+            pass
         outer.addView(title)
 
         chan = TextView(context)
@@ -1718,33 +1662,9 @@ def _eblannft_install_header_hook(plugin_self):
                 except Exception as e:
                     _bootstrap_log(f"status card inject err: {e}")
 
-                # Quick-actions strip under status card.
+                # Footer card at the very bottom (action chips + version + channel).
                 try:
-                    qa_view = _eblannft_build_quick_actions(activity.getContext(), plugin_ref())
-                    if qa_view is not None:
-                        qa_item = UItem.asCustom(qa_view)
-                        try:
-                            qa_item.settingItem = HeaderSetting("eblannft_beta_quick_actions")
-                        except Exception:
-                            pass
-                        try:
-                            qa_item.object2 = "__eblannft_beta_quick_actions__"
-                        except Exception:
-                            pass
-                        try:
-                            qa_item.setTransparent(True)
-                        except Exception:
-                            pass
-                        items.add(next_idx, qa_item)
-                        next_idx += 1
-                        items.add(next_idx, UItem.asShadow())
-                        next_idx += 1
-                except Exception as e:
-                    _bootstrap_log(f"quick-actions inject err: {e}")
-
-                # Footer card at the very bottom (maintainer + channel).
-                try:
-                    footer_view = _eblannft_build_footer_card(activity.getContext())
+                    footer_view = _eblannft_build_footer_card(activity.getContext(), plugin_ref())
                     if footer_view is not None:
                         footer_item = UItem.asCustom(footer_view)
                         try:

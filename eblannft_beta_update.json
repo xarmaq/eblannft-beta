@@ -1,6 +1,6 @@
 {
-  "version": "1.0.99",
-  "notes": "Beta 1.0.99 — ХОТФИКС установки плагина. exteraGram PipController отказывается ставить пакеты с бинарными расширениями (C/Rust). Из списка убраны pillow, zstandard, jsonschema (последний тянул rpds-py на Rust). Вместо jsonschema добавлен schema — крошечный pure-Python валидатор схем. Все остальные пакеты остались: requests, packaging, cachetools, humanize, tenacity, python-dateutil, markdown, websocket-client, schema.",
+  "version": "1.1.0",
+  "notes": "Beta 1.1.0 — реорганизация меню + смена акцентного цвета с фиолетового на зелёный (#22C55E).\n\nВизуальные изменения:\n• Убраны кнопки «Обновить каталог» и «О плагине» из quick-actions (дублировали Сервис-подменю и нижнюю строку О плагине).\n• Оставшиеся два действия — «Апдейт» и «Кэш» — переехали внутрь footer'а как компактные чипы с иконкой и подписью.\n• Сам блок quick-actions удалён — меню стало короче и аккуратнее.\n• Структура теперь: Header → Status (Username/Number/Рейтинг) → нативные строки (Подарки, Профиль, Данные, Сервис, О плагине) → Footer (Апдейт+Кэш chips, версия, ссылка на канал).\n• Везде в кастомных вью акцент сменён с фиолетового (#8B5CF6) на зелёный (#22C55E).",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
