@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.93"
+__version__ = "1.0.94"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1299,6 +1299,290 @@ def _eblannft_build_status_card(context, plugin_self):
         return None
 
 
+def _eblannft_build_quick_actions(context, plugin_self):
+    """Translatica-style horizontal action strip: 4 tappable pill-cards
+    (Обновить каталог / Проверить апдейт / Очистить кэш / О плагине)."""
+    try:
+        from android.widget import FrameLayout, TextView, LinearLayout, ImageView
+        from android.view import Gravity, View, ViewOutlineProvider
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
+        from org.telegram.ui.ActionBar import Theme
+    except Exception as e:
+        _bootstrap_log(f"quick-actions import err: {e}")
+        return None
+
+    try:
+        compact = False
+        try:
+            dm = context.getResources().getDisplayMetrics()
+            screen_w_dp = float(dm.widthPixels) / float(dm.density or 1.0)
+            font_scale = float(getattr(context.getResources().getConfiguration(), "fontScale", 1.0) or 1.0)
+            compact = bool(screen_w_dp < 372.0 or font_scale > 1.08)
+        except Exception:
+            compact = False
+
+        try:
+            is_dark = bool(Theme.isCurrentThemeDark())
+        except Exception:
+            is_dark = True
+
+        try:
+            text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+        except Exception:
+            text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
+            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
+            card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
+        accent = _eblannft_jint(0xFF8B5CF6)
+        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+
+        outer = LinearLayout(context)
+        outer.setOrientation(LinearLayout.VERTICAL)
+        try:
+            outer.setPadding(
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(0),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(8),
+            )
+        except Exception:
+            pass
+
+        row = LinearLayout(context)
+        row.setOrientation(LinearLayout.HORIZONTAL)
+        row.setGravity(Gravity.CENTER_VERTICAL)
+
+        def _safe_call(fn):
+            try:
+                fn()
+            except Exception as e:
+                _bootstrap_log(f"quick action call err: {e}")
+
+        def _make_pill(icon_name, label, callback):
+            cell = LinearLayout(context)
+            cell.setOrientation(LinearLayout.VERTICAL)
+            cell.setGravity(Gravity.CENTER_HORIZONTAL)
+            try:
+                bg = GradientDrawable()
+                bg.setCornerRadius(float(AndroidUtilities.dp(18)))
+                bg.setColor(card_color)
+                cell.setBackground(bg)
+                cell.setClipToOutline(True)
+                cell.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+                cell.setClickable(True)
+                cell.setFocusable(True)
+            except Exception:
+                pass
+            try:
+                cell.setPadding(
+                    AndroidUtilities.dp(8),
+                    AndroidUtilities.dp(12),
+                    AndroidUtilities.dp(8),
+                    AndroidUtilities.dp(12),
+                )
+                cell.setMinimumHeight(AndroidUtilities.dp(80))
+            except Exception:
+                pass
+
+            icon_wrap = FrameLayout(context)
+            try:
+                ic_bg = GradientDrawable()
+                ic_bg.setCornerRadius(float(AndroidUtilities.dp(12)))
+                ic_bg.setColor(accent_soft)
+                icon_wrap.setBackground(ic_bg)
+            except Exception:
+                pass
+
+            icon = ImageView(context)
+            try:
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+                rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                    str(icon_name or ""),
+                    "drawable",
+                    ApplicationLoader.applicationContext.getPackageName(),
+                )
+                if rid:
+                    icon.setImageResource(rid)
+                    icon.setColorFilter(accent)
+            except Exception:
+                pass
+            icon_wrap.addView(
+                icon,
+                FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(15),
+                    AndroidUtilities.dp(15),
+                    Gravity.CENTER,
+                ),
+            )
+            cell.addView(
+                icon_wrap,
+                LinearLayout.LayoutParams(
+                    AndroidUtilities.dp(30),
+                    AndroidUtilities.dp(30),
+                ),
+            )
+
+            label_tv = TextView(context)
+            label_tv.setText(str(label))
+            label_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11 if not compact else 10)
+            try:
+                label_tv.setTextColor(text_color)
+            except Exception:
+                pass
+            label_tv.setGravity(Gravity.CENTER)
+            label_tv.setMaxLines(2)
+            try:
+                label_tv.setPadding(0, AndroidUtilities.dp(7), 0, 0)
+            except Exception:
+                pass
+            cell.addView(label_tv)
+
+            if callback is not None:
+                try:
+                    class _PillClick(dynamic_proxy(View.OnClickListener)):
+                        def onClick(self_obj, v):
+                            _safe_call(callback)
+                    cell.setOnClickListener(_PillClick())
+                except Exception:
+                    pass
+            return cell
+
+        def _call_refresh():
+            try:
+                plugin_self._force_load_catalog()
+            except Exception:
+                pass
+
+        def _call_check_update():
+            try:
+                _check_for_update_interactive()
+            except Exception:
+                pass
+
+        def _call_clear_cache():
+            try:
+                plugin_self._clear_cache()
+            except Exception:
+                pass
+
+        def _call_about():
+            try:
+                plugin_self._on_about_click()
+            except Exception:
+                pass
+
+        pills = [
+            ("msg_retry",       "Обновить",   _call_refresh),
+            ("msg_download",    "Апдейт",     _call_check_update),
+            ("msg_delete",      "Кэш",        _call_clear_cache),
+            ("msg2_reactions2", "О плагине",  _call_about),
+        ]
+        for i, (icon_name, label, cb) in enumerate(pills):
+            lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
+            if i > 0:
+                lp.leftMargin = AndroidUtilities.dp(8)
+            row.addView(_make_pill(icon_name, label, cb), lp)
+
+        outer.addView(
+            row,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        return outer
+    except Exception as e:
+        _bootstrap_log(f"build quick-actions err: {e}")
+        return None
+
+
+def _eblannft_build_footer_card(context):
+    """Small bottom-of-list footer: maintainer + channel link + version."""
+    try:
+        from android.widget import FrameLayout, TextView, LinearLayout
+        from android.view import Gravity, View, ViewOutlineProvider
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities
+        from org.telegram.ui.ActionBar import Theme
+    except Exception as e:
+        _bootstrap_log(f"footer import err: {e}")
+        return None
+
+    try:
+        try:
+            is_dark = bool(Theme.isCurrentThemeDark())
+        except Exception:
+            is_dark = True
+        try:
+            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+        except Exception:
+            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
+        accent = _eblannft_jint(0xFF8B5CF6)
+
+        outer = LinearLayout(context)
+        outer.setOrientation(LinearLayout.VERTICAL)
+        outer.setGravity(Gravity.CENTER_HORIZONTAL)
+        try:
+            outer.setPadding(
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(20),
+            )
+        except Exception:
+            pass
+
+        title = TextView(context)
+        title.setText(f"eblanNFT Beta • v{__version__}")
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+        try:
+            title.setTextColor(sub_color)
+        except Exception:
+            pass
+        title.setGravity(Gravity.CENTER)
+        outer.addView(title)
+
+        chan = TextView(context)
+        chan.setText("Канал обновлений — @vcvk1")
+        chan.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+        try:
+            chan.setTextColor(accent)
+        except Exception:
+            pass
+        chan.setGravity(Gravity.CENTER)
+        try:
+            chan.setPadding(0, AndroidUtilities.dp(4), 0, 0)
+            chan.setClickable(True)
+            chan.setFocusable(True)
+        except Exception:
+            pass
+        try:
+            class _OpenChan(dynamic_proxy(View.OnClickListener)):
+                def onClick(self_obj, v):
+                    try:
+                        from client_utils import get_messages_controller, get_last_fragment
+                        get_messages_controller().openByUserName(
+                            "vcvk1", get_last_fragment(), 1
+                        )
+                    except Exception as e:
+                        _bootstrap_log(f"channel open err: {e}")
+            chan.setOnClickListener(_OpenChan())
+        except Exception:
+            pass
+        outer.addView(chan)
+
+        return outer
+    except Exception as e:
+        _bootstrap_log(f"build footer err: {e}")
+        return None
+
+
 def _eblannft_install_header_hook(plugin_self):
     """Hook PluginSettingsActivity.fillItems and prepend our custom header."""
     try:
@@ -1367,6 +1651,7 @@ def _eblannft_install_header_hook(plugin_self):
                 items.add(1, UItem.asShadow())
 
                 # Status card (Username / Number / Rating) right under header.
+                next_idx = 2
                 try:
                     status_view = _eblannft_build_status_card(activity.getContext(), plugin_ref())
                     if status_view is not None:
@@ -1383,10 +1668,57 @@ def _eblannft_install_header_hook(plugin_self):
                             status_item.setTransparent(True)
                         except Exception:
                             pass
-                        items.add(2, status_item)
-                        items.add(3, UItem.asShadow())
+                        items.add(next_idx, status_item)
+                        next_idx += 1
+                        items.add(next_idx, UItem.asShadow())
+                        next_idx += 1
                 except Exception as e:
                     _bootstrap_log(f"status card inject err: {e}")
+
+                # Quick-actions strip under status card.
+                try:
+                    qa_view = _eblannft_build_quick_actions(activity.getContext(), plugin_ref())
+                    if qa_view is not None:
+                        qa_item = UItem.asCustom(qa_view)
+                        try:
+                            qa_item.settingItem = HeaderSetting("eblannft_beta_quick_actions")
+                        except Exception:
+                            pass
+                        try:
+                            qa_item.object2 = "__eblannft_beta_quick_actions__"
+                        except Exception:
+                            pass
+                        try:
+                            qa_item.setTransparent(True)
+                        except Exception:
+                            pass
+                        items.add(next_idx, qa_item)
+                        next_idx += 1
+                        items.add(next_idx, UItem.asShadow())
+                        next_idx += 1
+                except Exception as e:
+                    _bootstrap_log(f"quick-actions inject err: {e}")
+
+                # Footer card at the very bottom (maintainer + channel).
+                try:
+                    footer_view = _eblannft_build_footer_card(activity.getContext())
+                    if footer_view is not None:
+                        footer_item = UItem.asCustom(footer_view)
+                        try:
+                            footer_item.settingItem = HeaderSetting("eblannft_beta_footer")
+                        except Exception:
+                            pass
+                        try:
+                            footer_item.object2 = "__eblannft_beta_footer__"
+                        except Exception:
+                            pass
+                        try:
+                            footer_item.setTransparent(True)
+                        except Exception:
+                            pass
+                        items.add(footer_item)
+                except Exception as e:
+                    _bootstrap_log(f"footer inject err: {e}")
             except Exception as e:
                 _bootstrap_log(f"header hook err: {e}")
 
