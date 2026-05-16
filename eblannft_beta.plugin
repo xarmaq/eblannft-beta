@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -366,7 +366,11 @@ def _http_get(url, timeout=None, progress_cb=None):
 
     Prefers the `requests` library (installed via __requirements__) for nicer
     retry/SSL handling; falls back to stdlib urllib if requests isn't
-    importable yet (first cold-launch before Chaquopy finishes pip-install)."""
+    importable yet (first cold-launch before Chaquopy finishes pip-install).
+
+    Wrapped with `tenacity` so a single network blip during a manifest
+    fetch or file download no longer silently skips the entire update
+    cycle — we try 3 times with 1s → 2s → 4s backoff."""
     headers = {
         "User-Agent": f"eblannft-bootstrap/{__version__}",
         "Accept": "*/*",
@@ -375,6 +379,29 @@ def _http_get(url, timeout=None, progress_cb=None):
     timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
     chunk_size = 4096
 
+    def _do_one_get():
+        return _http_get_inner(url, headers, timeout, progress_cb, chunk_size)
+
+    try:
+        from tenacity import (
+            retry, stop_after_attempt, wait_exponential, retry_if_exception_type,
+            before_sleep_log,
+        )
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=1, max=4),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        )
+        def _do_with_retry():
+            return _do_one_get()
+        return _do_with_retry()
+    except ImportError:
+        # tenacity not installed yet (first cold-launch) — single attempt.
+        return _do_one_get()
+
+
+def _http_get_inner(url, headers, timeout, progress_cb, chunk_size):
     try:
         import requests as _req
     except Exception:
@@ -3169,6 +3196,37 @@ def _resolve_dest_for_manifest_entry(rel_path):
     return None
 
 
+def _validate_manifest(data):
+    """Validate the manifest dict via the `schema` pip package. Logs a
+    clear error and returns False on malformed payloads instead of letting
+    them propagate as cryptic KeyError / TypeError later in
+    _download_and_apply_update. Always returns True if schema isn't
+    installed yet (cold-launch fallback) so update flow keeps working."""
+    try:
+        from schema import Schema, And, Or, Optional, SchemaError
+    except ImportError:
+        return True
+    try:
+        manifest_schema = Schema({
+            "version": And(str, lambda v: len(v.strip()) > 0,
+                           error="manifest.version must be a non-empty string"),
+            Optional("notes"): Or(str, None),
+            Optional("files"): And(
+                [str],
+                lambda lst: all(s.strip() for s in lst),
+                error="manifest.files must be a list of non-empty strings",
+            ),
+        }, ignore_extra_keys=True)
+        manifest_schema.validate(data)
+        return True
+    except SchemaError as e:
+        _bootstrap_log(f"manifest schema validation failed: {e}")
+        return False
+    except Exception as e:
+        _bootstrap_log(f"manifest schema check exploded: {e}")
+        return True
+
+
 def _fetch_manifest():
     # Bust raw.githubusercontent.com's CDN cache (~5-10 min TTL otherwise) by
     # appending a unique query string. The CDN keys on the full URL, so each
@@ -3183,6 +3241,8 @@ def _fetch_manifest():
     data = json.loads(text)
     if not isinstance(data, dict):
         raise RuntimeError("Manifest is not a JSON object")
+    if not _validate_manifest(data):
+        raise RuntimeError("Manifest payload failed schema validation")
     version = str(data.get("version") or "").strip()
     if not version:
         raise RuntimeError("Manifest is missing 'version'")
@@ -3491,10 +3551,19 @@ def _show_update_interval_picker():
 
 
 def _format_bytes(n):
+    """Human-readable byte size. Uses humanize.naturalsize when available
+    (gives '3.2 MB' style with proper SI/binary formatting); falls back
+    to a hand-rolled formatter so cold-launches before pip-install still
+    show something sane."""
     try:
         n = float(n or 0)
     except Exception:
         return "0 B"
+    try:
+        import humanize
+        return humanize.naturalsize(int(n), binary=True, format="%.1f")
+    except Exception:
+        pass
     units = ["B", "KB", "MB", "GB"]
     i = 0
     while n >= 1024.0 and i < len(units) - 1:
@@ -3702,7 +3771,39 @@ def _verify_last_apply_on_boot():
         _bootstrap_log(f"verify apply marker err: {e}")
 
 
-_eblannft_popup_sticker_doc_cache = None
+# Sticker document cache. Was a single global pointer that held the
+# document forever (small leak per session, no TTL). Now backed by a
+# cachetools TTLCache so it auto-evicts after an hour and we can also
+# remember more than one sticker key. Falls back to the old single-slot
+# pattern if cachetools isn't installed yet (cold-launch).
+try:
+    from cachetools import TTLCache as _TTLCache
+    _eblannft_sticker_doc_cache = _TTLCache(maxsize=8, ttl=3600)
+except Exception:
+    _eblannft_sticker_doc_cache = None
+_eblannft_popup_sticker_doc_cache = None  # legacy single-slot fallback
+
+
+def _cache_sticker_doc(key, document):
+    if document is None:
+        return
+    if _eblannft_sticker_doc_cache is not None:
+        try:
+            _eblannft_sticker_doc_cache[str(key)] = document
+            return
+        except Exception:
+            pass
+    global _eblannft_popup_sticker_doc_cache
+    _eblannft_popup_sticker_doc_cache = document
+
+
+def _lookup_sticker_doc(key):
+    if _eblannft_sticker_doc_cache is not None:
+        try:
+            return _eblannft_sticker_doc_cache.get(str(key))
+        except Exception:
+            pass
+    return _eblannft_popup_sticker_doc_cache
 
 
 def _enable_sticker_animation(sticker_view):
@@ -3750,8 +3851,7 @@ def _apply_sticker_document_to_view(sticker_view, document, image_filter="120_12
             return False
         sticker_view.setImage(loc, str(image_filter or "120_120"), None, 0, document)
         _enable_sticker_animation(sticker_view)
-        global _eblannft_popup_sticker_doc_cache
-        _eblannft_popup_sticker_doc_cache = document
+        _cache_sticker_doc("popup_default", document)
         return True
     except Exception as e:
         _bootstrap_log(f"apply sticker doc failed: {e}")
@@ -3769,7 +3869,8 @@ def _bind_eblannft_popup_sticker(sticker_view, set_name="HappyHappyPepe", indexe
 
     # Reuse the cached document if one's already been resolved during this
     # session — saves a MediaDataController round-trip on subsequent popups.
-    cached = _eblannft_popup_sticker_doc_cache
+    # Cached via cachetools.TTLCache (1h TTL) so it doesn't leak forever.
+    cached = _lookup_sticker_doc("popup_default")
     if cached is not None and _apply_sticker_document_to_view(sticker_view, cached, image_filter):
         return True
 
@@ -3847,16 +3948,32 @@ def _bind_eblannft_popup_sticker(sticker_view, set_name="HappyHappyPepe", indexe
     return False
 
 
+def _strip_html_tags(s):
+    """Quick-and-dirty HTML strip for markdown-rendered text. Keeps
+    text content but drops <p>, <ul>, <li>, <strong>, <em> tags so the
+    Android TextView sees clean text. Inline emphasis becomes bullets
+    in the calling code, not here."""
+    import re
+    s = re.sub(r"<\s*br\s*/?\s*>", "\n", s, flags=re.I)
+    s = re.sub(r"<\s*/\s*p\s*>", "\n", s, flags=re.I)
+    s = re.sub(r"<\s*/\s*li\s*>", "\n", s, flags=re.I)
+    s = re.sub(r"<[^>]+>", "", s)
+    s = re.sub(r"&nbsp;", " ", s)
+    s = re.sub(r"&lt;", "<", s)
+    s = re.sub(r"&gt;", ">", s)
+    s = re.sub(r"&amp;", "&", s)
+    return s
+
+
 def _parse_notes_bullets(text):
     """Split release notes into a list of bullet items.
 
-    Recognises three input styles, in order of preference:
-      1. "(1) ... (2) ... (3) ..." numbered groups (this repo's house style)
-      2. "• item / - item / * item" markdown-ish bullets
-      3. Plain prose — falls back to sentence-split on ". " before a capital
-
-    Returns a list of clean strings without the leading marker. Empty input
-    or no clear structure → returns a single-item list with the whole text.
+    First attempt uses the `markdown` pip package to render the notes as
+    HTML and extract real list items — this picks up properly-formatted
+    "- foo\n- bar" lists plus bold/italic content. If markdown isn't
+    installed (cold-launch) or the input has no list structure, falls
+    back to the legacy regex parser which handles the in-house
+    "(1) ... (2) ..." numbered style and bullet-ish prose.
     """
     import re
     if not text:
@@ -3865,6 +3982,27 @@ def _parse_notes_bullets(text):
     body = re.sub(r"^[Bb]eta\s+v?\d+\.\d+\.\d+\s*[—–-]\s*", "", body)
     body = re.sub(r"^v?\d+\.\d+\.\d+\s*[—–-]\s*", "", body)
 
+    # --- markdown path ------------------------------------------------
+    try:
+        import markdown as _md
+        html = _md.markdown(body, extensions=[])
+        # Extract <li>...</li> blocks via regex (a real HTML parser would
+        # be overkill for short release notes).
+        li_chunks = re.findall(r"<li[^>]*>(.*?)</li>", html, flags=re.I | re.S)
+        if len(li_chunks) >= 2:
+            items = []
+            for raw in li_chunks:
+                clean = _strip_html_tags(raw).strip()
+                clean = re.sub(r"\s+", " ", clean)
+                clean = clean.rstrip(" .;")
+                if clean:
+                    items.append(clean)
+            if len(items) >= 2:
+                return items
+    except Exception as e:
+        _bootstrap_log(f"markdown parse fallback: {e}")
+
+    # --- legacy regex paths -----------------------------------------
     parts = re.split(r"\s*\(\d+\)\s*", body)
     if len(parts) >= 3:
         items = []
