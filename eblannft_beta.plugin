@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.6"
+__version__ = "1.1.7"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -375,6 +375,11 @@ def _http_get(url, timeout=None, progress_cb=None):
         "User-Agent": f"eblannft-bootstrap/{__version__}",
         "Accept": "*/*",
         "Cache-Control": "no-cache",
+        # Force the server to NOT gzip the body. Otherwise Content-Length
+        # is the compressed transfer size but iter_content returns
+        # decompressed bytes — leading to "840 KB / 229 KB" style status
+        # where loaded > total because GitHub gzips text files.
+        "Accept-Encoding": "identity",
     }
     timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
     chunk_size = 4096
@@ -3219,6 +3224,7 @@ def _validate_manifest(data):
             "version": And(str, lambda v: len(v.strip()) > 0,
                            error="manifest.version must be a non-empty string"),
             Optional("notes"): Or(str, None),
+            Optional("released"): Or(str, None),  # ISO date or human string
             Optional("files"): And(
                 [str],
                 lambda lst: all(s.strip() for s in lst),
@@ -3233,6 +3239,55 @@ def _validate_manifest(data):
     except Exception as e:
         _bootstrap_log(f"manifest schema check exploded: {e}")
         return True
+
+
+def _parse_iso_datetime(value):
+    """Tolerant ISO/free-form datetime parser. Uses python-dateutil when
+    available (handles "2026-05-16", "16 May 2026", "вчера" via locale,
+    etc.); falls back to datetime.fromisoformat for plain ISO strings."""
+    if not value:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        from dateutil import parser as _dtparser
+        return _dtparser.parse(s)
+    except Exception:
+        pass
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _humanize_released(value):
+    """Render a manifest 'released' field as 'выпущено N назад' Russian
+    string. Empty string when unparseable or missing — caller hides the
+    line in that case."""
+    dt = _parse_iso_datetime(value)
+    if dt is None:
+        return ""
+    try:
+        import humanize
+        from datetime import datetime, timezone, timedelta
+        try:
+            humanize.i18n.activate("ru_RU")
+        except Exception:
+            pass
+        # Normalise tz-aware vs naive so subtraction works.
+        if dt.tzinfo is not None:
+            now = datetime.now(timezone.utc).astimezone(dt.tzinfo)
+        else:
+            now = datetime.now()
+        delta = now - dt
+        if delta < timedelta(minutes=1):
+            return "выпущено только что"
+        return "выпущено " + humanize.naturaldelta(delta) + " назад"
+    except Exception as e:
+        _bootstrap_log(f"humanize released err: {e}")
+        return ""
 
 
 # 10-second TTL on the parsed manifest: prevents back-to-back taps on
@@ -3281,6 +3336,7 @@ def _fetch_manifest():
     manifest = {
         "version": version,
         "notes": str(data.get("notes") or "").strip(),
+        "released": str(data.get("released") or "").strip(),
         "files": [str(x).strip() for x in files if str(x).strip()],
     }
     if _manifest_cache is not None:
@@ -3613,7 +3669,11 @@ def _format_progress_status(short_path, current_bytes, total_bytes, applying=Fal
     if applying:
         return f"{short_path} • {_format_bytes(current_bytes)}"
     if total_bytes > 0:
-        loaded = _format_bytes(current_bytes)
+        # Clamp loaded ≤ total for display. If a server returns a wrong
+        # Content-Length (or gzip body where loaded > compressed size),
+        # the previous code showed "840 KB / 229 KB" which looks broken.
+        loaded_clamped = min(int(current_bytes or 0), int(total_bytes))
+        loaded = _format_bytes(loaded_clamped)
         total = _format_bytes(total_bytes)
         return f"{short_path} • {loaded} / {total}"
     return f"{short_path} • {_format_bytes(current_bytes)}"
@@ -4381,6 +4441,28 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 pass
             chip_row.addView(chip, LinearLayout.LayoutParams(-2, -2))
 
+            # Optional "released N ago" line under the chip — only shown
+            # if the manifest carries a parseable 'released' ISO date.
+            try:
+                released_line = _humanize_released(manifest.get("released") or "")
+            except Exception:
+                released_line = ""
+            if released_line:
+                released_tv = TextView(ctx)
+                try:
+                    released_tv.setText(released_line)
+                    released_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
+                    released_tv.setTextColor(muted_color)
+                    released_tv.setGravity(Gravity.CENTER)
+                except Exception:
+                    pass
+                lp_rel = LinearLayout.LayoutParams(-1, -2)
+                try:
+                    lp_rel.topMargin = AndroidUtilities.dp(8)
+                except Exception:
+                    pass
+                outer.addView(released_tv, lp_rel)
+
             # ============================================================
             # CHANGE NOTES card
             # ============================================================
@@ -4557,45 +4639,42 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 pass
             head.addView(percent, LinearLayout.LayoutParams(-2, -2))
 
-            track_wrap = FrameLayout(ctx)
-            track_bg = View(ctx)
-            track_fill = View(ctx)
+            # Use Android's stock determinate ProgressBar — guaranteed
+            # to render on every device/theme. The previous hand-rolled
+            # FrameLayout + scaling View approach kept getting bitten by
+            # subtle Chaquopy/Java drawable issues; switching to the
+            # platform widget eliminates that whole class of bugs.
             try:
-                # Stronger contrast for the empty track so the bar is
-                # actually visible against the card it sits on. Was previously
-                # blended too close to container_color.
-                visible_track_bg = _blend(0xFFFFFFFF, bg_color, 0.10)
-                tb = GradientDrawable()
-                tb.setCornerRadius(float(AndroidUtilities.dp(999)))
-                tb.setColor(visible_track_bg)
-                track_bg.setBackground(tb)
-
-                # Solid accent fill. The previous gradient was constructed
-                # via GradientDrawable(orientation, list) which sometimes
-                # converts wrong through Chaquopy and leaves the fill
-                # transparent — switching to a guaranteed solid color via
-                # setColor closes that "bar never fills" bug.
-                tf = GradientDrawable()
-                tf.setCornerRadius(float(AndroidUtilities.dp(999)))
-                tf.setColor(accent)
-                track_fill.setBackground(tf)
-                track_fill.setPivotX(0.0)
-                track_fill.setScaleX(0.0)
+                from android.widget import ProgressBar
+                from android.content.res import ColorStateList
+                progress_bar = ProgressBar(
+                    ctx, None,
+                    ctx.getResources().getIdentifier(
+                        "progressBarStyleHorizontal", "attr", "android"
+                    ),
+                )
             except Exception:
-                pass
-            # Bigger track (16dp instead of 12dp) so the bar reads at a
-            # glance even on tall screens.
-            track_wrap.addView(
-                track_bg,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(16), Gravity.CENTER_VERTICAL),
-            )
-            track_wrap.addView(
-                track_fill,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(16), Gravity.CENTER_VERTICAL),
-            )
-            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(18))
+                # Fallback: bare constructor still produces a working horizontal bar.
+                from android.widget import ProgressBar
+                progress_bar = ProgressBar(ctx)
+            try:
+                progress_bar.setIndeterminate(False)
+                progress_bar.setMax(1000)
+                progress_bar.setProgress(0)
+                # Tint to our accent so the fill looks consistent with the
+                # rest of the popup.
+                try:
+                    from android.content.res import ColorStateList
+                    progress_bar.setProgressTintList(ColorStateList.valueOf(accent))
+                    bg_tint = _blend(0xFFFFFFFF, bg_color, 0.10)
+                    progress_bar.setProgressBackgroundTintList(ColorStateList.valueOf(bg_tint))
+                except Exception:
+                    pass
+            except Exception as e:
+                _bootstrap_log(f"progress bar setup err: {e}")
+            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(16))
             lp_track.topMargin = AndroidUtilities.dp(14)
-            progress_card.addView(track_wrap, lp_track)
+            progress_card.addView(progress_bar, lp_track)
 
             status = TextView(ctx)
             try:
@@ -4656,42 +4735,7 @@ def _show_update_popup(manifest, _retry_attempt=0):
             lp_close.topMargin = AndroidUtilities.dp(4)
             outer.addView(close_btn, lp_close)
 
-            track_state = {"ratio": 0.0, "track_w": 0}
-
-            def _apply_ratio_now(r):
-                """Push ratio r to the fill view, picking the best
-                technique based on whether we know the track's pixel width
-                yet."""
-                try:
-                    tw = int(track_state.get("track_w", 0) or 0)
-                    if tw <= 0:
-                        try:
-                            tw = int(track_bg.getWidth() or 0)
-                        except Exception:
-                            tw = 0
-                        if tw > 0:
-                            track_state["track_w"] = tw
-                    if tw > 0:
-                        new_w = max(0, int(round(tw * float(r))))
-                        try:
-                            lp = track_fill.getLayoutParams()
-                            if lp is not None:
-                                lp.width = new_w
-                                track_fill.setLayoutParams(lp)
-                                track_fill.setScaleX(1.0)
-                                track_fill.requestLayout()
-                                track_fill.invalidate()
-                                return
-                        except Exception:
-                            pass
-                    # No layout-pixel width yet — fall back to scaleX which
-                    # works against the MATCH_PARENT initial width and will
-                    # render correctly once the view has been laid out.
-                    track_fill.setPivotX(0.0)
-                    track_fill.setScaleX(float(r))
-                    track_fill.invalidate()
-                except Exception as e:
-                    _bootstrap_log(f"apply ratio err: {e}")
+            track_state = {"ratio": 0.0}
 
             def _set_ratio(ratio):
                 try:
@@ -4701,37 +4745,16 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 if r < float(track_state.get("ratio", 0.0) or 0.0) - 0.02:
                     return
                 track_state["ratio"] = r
+                progress_value = int(round(r * 1000.0))
                 try:
-                    run_on_ui_thread(lambda r_=r: _apply_ratio_now(r_))
+                    run_on_ui_thread(
+                        lambda p=progress_value: progress_bar.setProgress(p, True)
+                    )
                 except Exception:
                     try:
-                        _apply_ratio_now(r)
+                        progress_bar.setProgress(progress_value)
                     except Exception:
                         pass
-
-            # Catch-up listener: when track_bg finally gets a non-zero
-            # width during the first layout pass, immediately re-apply
-            # whatever ratio is current. Without this the very first
-            # progress update arrives before layout and the bar stays at
-            # 0% forever even though _set_ratio was called.
-            try:
-                from android.view import View as _ViewCls
-                from java import dynamic_proxy as _dp
-                class _TrackLayout(_dp(_ViewCls.OnLayoutChangeListener)):
-                    def onLayoutChange(self_obj, v, left, top, right, bottom,
-                                        oldLeft, oldTop, oldRight, oldBottom):
-                        try:
-                            new_w = int(right - left)
-                            if new_w > 0:
-                                track_state["track_w"] = new_w
-                                r = float(track_state.get("ratio", 0.0) or 0.0)
-                                if r > 0:
-                                    _apply_ratio_now(r)
-                        except Exception:
-                            pass
-                track_bg.addOnLayoutChangeListener(_TrackLayout())
-            except Exception as _le:
-                _bootstrap_log(f"track layout listener err: {_le}")
 
             def _set_status(text):
                 try:
