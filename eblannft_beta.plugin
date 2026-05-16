@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.91"
+__version__ = "1.0.92"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -815,84 +815,138 @@ _patch_runtime_about_relocation()
 
 
 # ---------------------------------------------------------------------------
-# Settings header + links section
-# Mirrors UiTweaks.plugin: a custom view (sticker + particles + title +
-# subtitle) is injected at the top of PluginSettingsActivity via a
-# fillItems MethodHook, and a 'Ссылки' Header+Text section is appended to
-# create_settings just above the trailing 'О плагине' row.
+# Settings header (Translatica-style hero card)
+# A rounded "hero" card with theme-aware colors is injected at the top of
+# PluginSettingsActivity via a fillItems MethodHook. Layout: sticker avatar
+# on the left, title + subtitle stacked on the right, with a small version
+# chip beneath. Compact-aware (small screens / large font scales). Mirrors
+# the design pattern used by translatica_pro.plugin.
 # ---------------------------------------------------------------------------
 
-_EBLANNFT_BETA_LINKS = (
-    ("GitHub репозиторий",       "msg_channel_solar",   "https://github.com/xarmaq/eblannft-beta"),
-    ("Исходники Telegram",       "msg_link",            "https://github.com/drklo/telegram"),
-    ("Документация exteraGram",  "msg_help",            "https://plugins.exteragram.app/docs"),
-)
 
-
-def _eblannft_open_url(url):
+def _eblannft_jint(value):
+    """Coerce a Python int (incl. 0xFFRRGGBB > 0x7FFFFFFF) to a Java jint."""
     try:
-        from android.content import Intent
-        from android.net import Uri
-        from client_utils import get_last_fragment
-        frag = get_last_fragment()
-        act = frag.getParentActivity() if frag else None
-        if act is not None:
-            act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(str(url))))
-    except Exception as e:
-        _bootstrap_log(f"open_url err: {e}")
+        from java import jint
+        v = int(value) & 0xFFFFFFFF
+        if v >= 0x80000000:
+            v -= 0x100000000
+        return jint(v)
+    except Exception:
+        return int(value)
+
+
+def _eblannft_resolve_icon_pack():
+    icon_raw = str(__icon__ or "")
+    if "/" in icon_raw:
+        pack_name, _, idx_str = icon_raw.partition("/")
+        try:
+            pack_idx = int(idx_str)
+        except Exception:
+            pack_idx = 0
+    else:
+        pack_name = icon_raw or "HappyHappyPepe"
+        pack_idx = 0
+    return pack_name or "HappyHappyPepe", pack_idx
 
 
 def _eblannft_build_settings_header(context):
+    """Translatica-style hero card: rounded panel, sticker avatar on the
+    left, title/subtitle/version stacked on the right. Theme-aware."""
     try:
-        from android.widget import FrameLayout, TextView
-        from android.view import Gravity
+        from android.widget import FrameLayout, TextView, LinearLayout
+        from android.view import Gravity, View
+        from android.view import ViewOutlineProvider
         from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
         from org.telegram.messenger import AndroidUtilities, MediaDataController, ImageLocation
         from org.telegram.ui.ActionBar import Theme
-        from org.telegram.ui.Components import LayoutHelper, BackupImageView
+        from org.telegram.ui.Components import BackupImageView
         from android_utils import run_on_ui_thread
     except Exception as e:
         _bootstrap_log(f"header import err: {e}")
         return None
 
     try:
-        container = FrameLayout(context)
+        compact = False
+        try:
+            dm = context.getResources().getDisplayMetrics()
+            screen_w_dp = float(dm.widthPixels) / float(dm.density or 1.0)
+            font_scale = float(getattr(context.getResources().getConfiguration(), "fontScale", 1.0) or 1.0)
+            compact = bool(screen_w_dp < 372.0 or font_scale > 1.08)
+        except Exception:
+            compact = False
 
         try:
-            from org.telegram.ui.Components.Premium import StarParticlesView
-            particles = StarParticlesView(context)
-            particles.setClipWithGradient()
-            particles.drawable.colorKey = Theme.key_premiumStarGradient2
-            particles.drawable.isCircle = True
-            particles.drawable.centerOffsetY = AndroidUtilities.dp(0)
-            particles.drawable.minLifeTime = 2000
-            particles.drawable.randLifeTime = 3000
-            particles.drawable.useRotate = False
-            particles.drawable.updateColors()
-            container.addView(
-                particles,
-                LayoutHelper.createFrame(-1, 220, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 0, 0, 0),
+            is_dark = bool(Theme.isCurrentThemeDark())
+        except Exception:
+            is_dark = True
+
+        try:
+            text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+        except Exception:
+            text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
+            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
+            card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
+        # eblanNFT brand accent (violet/purple, matches the app icon).
+        accent = _eblannft_jint(0xFF8B5CF6)
+        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+
+        outer = LinearLayout(context)
+        outer.setOrientation(LinearLayout.VERTICAL)
+        try:
+            outer.setPadding(
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(10),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(6),
             )
-            try:
-                run_on_ui_thread(lambda: particles.flingParticles(360), 200)
-            except Exception:
-                pass
         except Exception:
             pass
 
-        image_view = BackupImageView(context)
-        image_view.setRoundRadius(AndroidUtilities.dp(54))
+        hero = LinearLayout(context)
+        hero.setOrientation(LinearLayout.HORIZONTAL)
+        hero.setGravity(Gravity.CENTER_VERTICAL)
+        try:
+            hero_bg = GradientDrawable()
+            hero_bg.setCornerRadius(float(AndroidUtilities.dp(24)))
+            hero_bg.setColor(card_color)
+            hero.setBackground(hero_bg)
+            hero.setClipToOutline(True)
+            hero.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        except Exception:
+            pass
+        try:
+            hero.setPadding(
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(16),
+            )
+        except Exception:
+            pass
 
-        icon_raw = str(__icon__ or "")
-        if "/" in icon_raw:
-            pack_name, _, idx_str = icon_raw.partition("/")
-            try:
-                pack_idx = int(idx_str)
-            except Exception:
-                pack_idx = 0
-        else:
-            pack_name = icon_raw or "HappyHappyPepe"
-            pack_idx = 0
+        avatar_size_dp = 56 if compact else 64
+        avatar_wrap = FrameLayout(context)
+        try:
+            av_bg = GradientDrawable()
+            av_bg.setCornerRadius(float(AndroidUtilities.dp(avatar_size_dp // 2)))
+            av_bg.setColor(accent_soft)
+            avatar_wrap.setBackground(av_bg)
+            avatar_wrap.setClipToOutline(True)
+            avatar_wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        except Exception:
+            pass
+
+        avatar = BackupImageView(context)
+        try:
+            avatar.setRoundRadius(AndroidUtilities.dp(avatar_size_dp // 2))
+        except Exception:
+            pass
+
+        pack_name, pack_idx = _eblannft_resolve_icon_pack()
 
         def _try_load(img):
             try:
@@ -902,48 +956,119 @@ def _eblannft_build_settings_header(context):
                     sticker_index = min(pack_idx, ss.documents.size() - 1)
                     img.setImage(
                         ImageLocation.getForDocument(ss.documents.get(sticker_index)),
-                        "108_108", None, None, 0, 1,
+                        f"{avatar_size_dp}_{avatar_size_dp}", None, None, 0, 1,
                     )
                     return True
             except Exception:
                 pass
             return False
 
-        if not _try_load(image_view):
+        if not _try_load(avatar):
             try:
                 MediaDataController.getInstance(0).loadStickersByEmojiOrName(pack_name, False, False)
-                run_on_ui_thread(lambda: _try_load(image_view), 1500)
+                run_on_ui_thread(lambda: _try_load(avatar), 1500)
             except Exception:
                 pass
 
-        container.addView(
-            image_view,
-            LayoutHelper.createFrame(108, 108, Gravity.CENTER | Gravity.TOP, 0, 20, 0, 0),
+        avatar_wrap.addView(
+            avatar,
+            FrameLayout.LayoutParams(
+                AndroidUtilities.dp(avatar_size_dp),
+                AndroidUtilities.dp(avatar_size_dp),
+                Gravity.CENTER,
+            ),
         )
+        hero.addView(
+            avatar_wrap,
+            LinearLayout.LayoutParams(
+                AndroidUtilities.dp(avatar_size_dp),
+                AndroidUtilities.dp(avatar_size_dp),
+            ),
+        )
+
+        texts = LinearLayout(context)
+        texts.setOrientation(LinearLayout.VERTICAL)
+        lp_texts = LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0
+        )
+        lp_texts.leftMargin = AndroidUtilities.dp(14)
 
         title = TextView(context)
-        title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
-        title.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM))
-        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
-        title.setText(f"eblanNFT Beta {__version__}")
+        title.setText("eblanNFT Beta")
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22 if not compact else 20)
+        try:
+            title.setTextColor(text_color)
+        except Exception:
+            pass
+        try:
+            title.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM))
+        except Exception:
+            try:
+                title.setTypeface(title.getTypeface(), 1)
+            except Exception:
+                pass
         title.setSingleLine(True)
-        title.setGravity(Gravity.CENTER)
-        container.addView(
-            title,
-            LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 50, 145, 50, 0),
-        )
+        texts.addView(title)
 
         subtitle = TextView(context)
-        subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
-        subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
-        subtitle.setText("Бета-канал eblanNFT для exteraGram")
-        subtitle.setGravity(Gravity.CENTER)
-        container.addView(
-            subtitle,
-            LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 60, 180, 60, 27),
+        subtitle.setText("Бета-канал · NFT, юзернеймы, номер")
+        subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+        try:
+            subtitle.setTextColor(sub_color)
+        except Exception:
+            pass
+        try:
+            subtitle.setMaxLines(2)
+        except Exception:
+            pass
+        try:
+            subtitle.setPadding(0, AndroidUtilities.dp(4), 0, 0)
+        except Exception:
+            pass
+        texts.addView(subtitle)
+
+        version_chip = TextView(context)
+        version_chip.setText(f"v{__version__}")
+        version_chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11)
+        try:
+            version_chip.setTextColor(accent)
+        except Exception:
+            pass
+        try:
+            chip_bg = GradientDrawable()
+            chip_bg.setCornerRadius(float(AndroidUtilities.dp(10)))
+            chip_bg.setColor(accent_soft)
+            version_chip.setBackground(chip_bg)
+            version_chip.setPadding(
+                AndroidUtilities.dp(8),
+                AndroidUtilities.dp(3),
+                AndroidUtilities.dp(8),
+                AndroidUtilities.dp(3),
+            )
+        except Exception:
+            pass
+        try:
+            version_chip.setTypeface(version_chip.getTypeface(), 1)
+        except Exception:
+            pass
+        chip_lp = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        chip_lp.topMargin = AndroidUtilities.dp(8)
+        texts.addView(version_chip, chip_lp)
+
+        hero.addView(texts, lp_texts)
+
+        outer.addView(
+            hero,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
         )
 
-        return container
+        return outer
     except Exception as e:
         _bootstrap_log(f"build header err: {e}")
         return None
@@ -988,6 +1113,14 @@ def _eblannft_install_header_hook(plugin_self):
                     return
                 if get_private_field(activity, "createSubFragmentCallback") is not None:
                     return
+                # Skip if our header is already present (translatica pattern).
+                try:
+                    for i in range(items.size()):
+                        it = items.get(i)
+                        if str(getattr(it, "object2", "") or "") == "__eblannft_beta_header__":
+                            return
+                except Exception:
+                    pass
                 if plugin_ref() is None:
                     return
                 header = _eblannft_build_settings_header(activity.getContext())
@@ -997,6 +1130,10 @@ def _eblannft_install_header_hook(plugin_self):
                 from com.exteragram.messenger.plugins.models import HeaderSetting
                 item = UItem.asCustom(header)
                 item.settingItem = HeaderSetting("eblannft_beta_header")
+                try:
+                    item.object2 = "__eblannft_beta_header__"
+                except Exception:
+                    pass
                 try:
                     item.setTransparent(True)
                 except Exception:
@@ -1061,72 +1198,6 @@ def _patch_runtime_settings_header():
 
 
 _patch_runtime_settings_header()
-
-
-def _patch_runtime_links_section():
-    """Append a 'Ссылки' Header + Text rows to create_settings, inserted just
-    above the trailing 'О плагине' row added by _patch_runtime_about_relocation."""
-    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
-        return
-    try:
-        original_main = _EblanNftImpl.__dict__.get("create_settings")
-    except Exception as e:
-        _bootstrap_log(f"links-section lookup failed: {e}")
-        return
-    if original_main is None:
-        _bootstrap_log("links-section: no create_settings in dict")
-        return
-    if getattr(original_main, "_eblannft_links_added", False):
-        return
-
-    def patched(self, *a, **kw):
-        try:
-            items = list(original_main(self, *a, **kw) or [])
-        except Exception as e:
-            _bootstrap_log(f"links-section base build failed: {e}")
-            return []
-        try:
-            from ui.settings import Header, Text, Divider
-        except Exception as e:
-            _bootstrap_log(f"links-section ui.settings import failed: {e}")
-            return items
-
-        try:
-            insert_at = len(items)
-            for i in range(len(items) - 1, -1, -1):
-                if type(items[i]).__name__ == "Text" and "плагине" in str(getattr(items[i], "text", "")).lower():
-                    insert_at = i
-                    while insert_at > 0 and type(items[insert_at - 1]).__name__ == "Divider":
-                        insert_at -= 1
-                    break
-
-            link_rows = [Header(text="Ссылки")]
-            for label, icon, url in _EBLANNFT_BETA_LINKS:
-                link_rows.append(Text(
-                    text=label,
-                    icon=icon,
-                    on_click=(lambda _u: lambda _: _eblannft_open_url(_u))(url),
-                ))
-            link_rows.append(Divider())
-
-            for offset, row in enumerate(link_rows):
-                items.insert(insert_at + offset, row)
-            _bootstrap_log(f"links-section: {len(link_rows)} rows inserted at {insert_at}")
-        except Exception as e:
-            _bootstrap_log(f"links-section build/insert failed: {e}")
-        return items
-
-    patched._eblannft_links_added = True
-    if getattr(original_main, "_eblannft_about_moved", False):
-        patched._eblannft_about_moved = True
-    try:
-        _EblanNftImpl.create_settings = patched
-        _bootstrap_log("create_settings wrapped: Ссылки section appended")
-    except Exception as e:
-        _bootstrap_log(f"links-section attribute set failed: {e}")
-
-
-_patch_runtime_links_section()
 
 
 def _patch_runtime_nft_to_chat():
