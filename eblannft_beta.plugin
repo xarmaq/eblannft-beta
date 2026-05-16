@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -1014,17 +1014,27 @@ def _eblannft_build_settings_header(context, plugin_self=None):
                 hero_bg.setColors([card_color, tinted])
             except Exception:
                 hero_bg.setColor(card_color)
+            # Thin green outline — MD3-expressive style, gives the card
+            # definition without a heavy border.
+            try:
+                hero_bg.setStroke(
+                    AndroidUtilities.dp(1),
+                    _eblannft_jint(0x3322C55E if is_dark else 0x2222C55E),
+                )
+            except Exception:
+                pass
             hero.setBackground(hero_bg)
             hero.setClipToOutline(True)
             hero.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
         except Exception:
             pass
         try:
+            # More generous vertical padding — header feels less cramped.
             hero.setPadding(
                 AndroidUtilities.dp(20),
-                AndroidUtilities.dp(22),
+                AndroidUtilities.dp(28),
                 AndroidUtilities.dp(20),
-                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(26),
             )
         except Exception:
             pass
@@ -1158,7 +1168,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         )
         try:
             lp_title.gravity = Gravity.CENTER_HORIZONTAL
-            lp_title.topMargin = AndroidUtilities.dp(12)
+            lp_title.topMargin = AndroidUtilities.dp(16)
         except Exception:
             pass
         hero.addView(title, lp_title)
@@ -1181,45 +1191,77 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         )
         try:
             lp_sub.gravity = Gravity.CENTER_HORIZONTAL
-            lp_sub.topMargin = AndroidUtilities.dp(4)
+            lp_sub.topMargin = AndroidUtilities.dp(6)
         except Exception:
             pass
         hero.addView(subtitle, lp_sub)
 
-        version_chip = TextView(context)
-        version_chip.setText(f"v{__version__}")
-        version_chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11)
-        try:
-            version_chip.setTextColor(accent)
-        except Exception:
-            pass
+        # Version pill — a little leading dot + version text. Pill is
+        # slightly larger and uses an outlined style for a more refined
+        # look than the previous solid filled chip.
+        chip_row_inner = LinearLayout(context)
+        chip_row_inner.setOrientation(LinearLayout.HORIZONTAL)
+        chip_row_inner.setGravity(Gravity.CENTER_VERTICAL)
         try:
             chip_bg = GradientDrawable()
             chip_bg.setCornerRadius(float(AndroidUtilities.dp(20)))  # unified radius
             chip_bg.setColor(accent_soft)
-            version_chip.setBackground(chip_bg)
-            version_chip.setPadding(
-                AndroidUtilities.dp(10),
-                AndroidUtilities.dp(4),
-                AndroidUtilities.dp(10),
-                AndroidUtilities.dp(4),
+            try:
+                chip_bg.setStroke(
+                    AndroidUtilities.dp(1),
+                    _eblannft_jint(0x4422C55E if is_dark else 0x3322C55E),
+                )
+            except Exception:
+                pass
+            chip_row_inner.setBackground(chip_bg)
+            chip_row_inner.setPadding(
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(6),
+                AndroidUtilities.dp(14),
+                AndroidUtilities.dp(6),
             )
         except Exception:
             pass
+
+        # Leading green dot.
+        dot = View(context)
         try:
+            ddot = GradientDrawable()
+            ddot.setShape(GradientDrawable.OVAL)
+            ddot.setColor(accent)
+            dot.setBackground(ddot)
+        except Exception:
+            pass
+        lp_dot = LinearLayout.LayoutParams(
+            AndroidUtilities.dp(7), AndroidUtilities.dp(7),
+        )
+        chip_row_inner.addView(dot, lp_dot)
+
+        version_chip = TextView(context)
+        version_chip.setText(f"v{__version__}")
+        version_chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+        try:
+            version_chip.setTextColor(accent)
             version_chip.setTypeface(version_chip.getTypeface(), 1)
         except Exception:
             pass
+        lp_vt = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp_vt.leftMargin = AndroidUtilities.dp(7)
+        chip_row_inner.addView(version_chip, lp_vt)
+
         chip_lp = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         )
         try:
             chip_lp.gravity = Gravity.CENTER_HORIZONTAL
-            chip_lp.topMargin = AndroidUtilities.dp(10)
+            chip_lp.topMargin = AndroidUtilities.dp(16)
         except Exception:
             pass
-        hero.addView(version_chip, chip_lp)
+        hero.addView(chip_row_inner, chip_lp)
 
         outer.addView(
             hero,
@@ -1731,13 +1773,14 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
         try:
-            # Tight padding so status card sits close to the hero above
-            # and the native rows below — eliminates visible gaps.
+            # Modest breathing room above the status card (separates it
+            # from the hero) and a smaller gap below (lets native rows
+            # sit close).
             outer.setPadding(
                 AndroidUtilities.dp(12),
-                AndroidUtilities.dp(0),
+                AndroidUtilities.dp(10),
                 AndroidUtilities.dp(12),
-                AndroidUtilities.dp(2),
+                AndroidUtilities.dp(4),
             )
         except Exception:
             pass
