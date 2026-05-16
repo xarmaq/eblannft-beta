@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.7"
+__version__ = "1.2.8"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -5128,6 +5128,36 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 if not bullet_items:
                     bullet_items = [notes_text]
 
+                # Heuristic: colour each bullet by what the line is about.
+                # Strips HTML tags first because markdown rendering may
+                # wrap the leading verb in <strong>. Pattern matched
+                # against lowercase normalised text.
+                def _classify_bullet_color(raw):
+                    try:
+                        clean = _strip_html_tags(str(raw or "")).strip().lower()
+                    except Exception:
+                        clean = str(raw or "").strip().lower()
+                    # Strip a leading bullet/dash/digit etc.
+                    while clean and clean[0] in "•-*·(0123456789).":
+                        clean = clean[1:].lstrip()
+                    fix_words = ("фикс", "пофикш", "исправ", "починен", "почин", "hotfix", "fix", "крах", "баг")
+                    add_words = ("добавл", "новое", "новый", "новая", "новые", "added", "new ", "новинк")
+                    chg_words = ("измен", "обнов", "перепис", "переделан", "переход", "updated", "changed", "улучш", "перевед")
+                    rm_words  = ("убран", "удал", "снят", "remov", "drop", "стёрт")
+                    for w in fix_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFF22C55E)  # green
+                    for w in add_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFF3B82F6)  # blue
+                    for w in chg_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFFFACC15)  # yellow
+                    for w in rm_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFFEF4444)  # red
+                    return accent  # default = accent green
+
                 for idx, item_text in enumerate(bullet_items):
                     if not item_text:
                         continue
@@ -5139,7 +5169,7 @@ def _show_update_popup(manifest, _retry_attempt=0):
                     try:
                         d = GradientDrawable()
                         d.setShape(GradientDrawable.OVAL)
-                        d.setColor(accent)
+                        d.setColor(_classify_bullet_color(item_text))
                         dot.setBackground(d)
                     except Exception:
                         pass
@@ -5343,6 +5373,31 @@ def _show_update_popup(manifest, _retry_attempt=0):
             lp_close = LinearLayout.LayoutParams(-1, -2)
             lp_close.topMargin = AndroidUtilities.dp(4)
             outer.addView(close_btn, lp_close)
+
+            # Bouncy press feedback on both action buttons: scale to
+            # 96% on ACTION_DOWN and spring back on ACTION_UP/CANCEL.
+            # Pure visual — the existing OnClickListeners still fire
+            # normally on the click event.
+            try:
+                from android.view import MotionEvent as _ME_btn, View as _V_btn
+                from java import dynamic_proxy as _dp_btn
+                class _BouncyTouch(_dp_btn(_V_btn.OnTouchListener)):
+                    def onTouch(self_obj, v, event):
+                        try:
+                            a = event.getAction()
+                            if a == _ME_btn.ACTION_DOWN:
+                                v.animate().scaleX(0.96).scaleY(0.96) \
+                                    .setDuration(110).start()
+                            elif a == _ME_btn.ACTION_UP or a == _ME_btn.ACTION_CANCEL:
+                                v.animate().scaleX(1.0).scaleY(1.0) \
+                                    .setDuration(180).start()
+                        except Exception:
+                            pass
+                        return False
+                action_btn.setOnTouchListener(_BouncyTouch())
+                close_btn.setOnTouchListener(_BouncyTouch())
+            except Exception as _be:
+                _bootstrap_log(f"bouncy buttons setup err: {_be}")
 
             track_state = {"ratio": 0.0}
 
