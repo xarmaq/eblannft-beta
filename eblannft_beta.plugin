@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.9"
+__version__ = "1.2.0"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -991,9 +991,20 @@ def _eblannft_build_settings_header(context):
         hero.setOrientation(LinearLayout.HORIZONTAL)
         hero.setGravity(Gravity.CENTER_VERTICAL)
         try:
+            # MD3 tonal gradient (top-left → bottom-right) — gives the
+            # hero card subtle depth instead of looking like a flat
+            # rectangle. Use setColors() rather than the constructor
+            # variant because Chaquopy's Python-list → Java int[]
+            # conversion in the constructor is unreliable (same Chaquopy
+            # bug that broke the progress-bar fill earlier).
             hero_bg = GradientDrawable()
             hero_bg.setCornerRadius(float(AndroidUtilities.dp(28)))
-            hero_bg.setColor(card_color)
+            try:
+                tinted = _eblannft_jint(0x1822C55E if is_dark else 0x1022C55E)
+                hero_bg.setOrientation(GradientDrawable.Orientation.TL_BR)
+                hero_bg.setColors([card_color, tinted])
+            except Exception:
+                hero_bg.setColor(card_color)
             hero.setBackground(hero_bg)
             hero.setClipToOutline(True)
             hero.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
@@ -1059,6 +1070,35 @@ def _eblannft_build_settings_header(context):
                 Gravity.CENTER,
             ),
         )
+
+        # MD3-style bounce + pop on tap. Translatica does the same dance
+        # on its header icon — it's a tiny piece of interactivity that
+        # makes the static avatar feel alive.
+        try:
+            from java import dynamic_proxy as _dp
+            from android.view import View as _ViewCls, MotionEvent as _MotionEvent
+            class _AvatarBounceTouch(_dp(_ViewCls.OnTouchListener)):
+                def onTouch(self_obj, v, event):
+                    try:
+                        action = event.getAction()
+                        if action == _MotionEvent.ACTION_DOWN:
+                            v.animate().scaleX(0.88).scaleY(0.88).setDuration(110).start()
+                        elif action == _MotionEvent.ACTION_UP:
+                            v.animate().scaleX(1.0).scaleY(1.0).setDuration(180).start()
+                            try:
+                                avatar.performHapticFeedback(1)  # VIRTUAL_KEY
+                            except Exception:
+                                pass
+                        elif action == _MotionEvent.ACTION_CANCEL:
+                            v.animate().scaleX(1.0).scaleY(1.0).setDuration(180).start()
+                    except Exception:
+                        pass
+                    return False
+            avatar.setOnTouchListener(_AvatarBounceTouch())
+            avatar.setClickable(True)
+        except Exception as e:
+            _bootstrap_log(f"avatar bounce setup err: {e}")
+
         hero.addView(
             avatar_wrap,
             LinearLayout.LayoutParams(
@@ -1149,19 +1189,39 @@ def _eblannft_build_settings_header(context):
             ),
         )
 
+        _eblannft_animate_cascade_in(outer, delay_ms=0)
         return outer
     except Exception as e:
         _bootstrap_log(f"build header err: {e}")
         return None
 
 
+def _eblannft_animate_cascade_in(view, delay_ms=0):
+    """Material 3 motion entrance: fade-in + 14dp slide-up. Used on the
+    custom header, status, and footer cards so they don't just snap
+    into existence — they appear in a soft cascade."""
+    try:
+        from org.telegram.messenger import AndroidUtilities
+        view.setAlpha(0.0)
+        view.setTranslationY(float(AndroidUtilities.dp(14)))
+        view.animate() \
+            .alpha(1.0) \
+            .translationY(0.0) \
+            .setStartDelay(int(delay_ms)) \
+            .setDuration(280) \
+            .start()
+    except Exception as e:
+        _bootstrap_log(f"cascade-in animate err: {e}")
+
+
 def _eblannft_read_profile_stats(plugin_self):
-    """Best-effort read of {username, number, rating} from the runtime instance.
-    Falls back to placeholders if helpers are missing."""
+    """Best-effort read of {username, number, rating} from the runtime
+    instance. Each entry also gets a 'count' field used for the badge
+    overlay on the status card column (None means no badge)."""
     out = {
-        "username_active": False, "username_value": "выкл",
-        "number_active":   False, "number_value":   "выкл",
-        "rating":          "—",
+        "username_active": False, "username_value": "выкл", "username_count": None,
+        "number_active":   False, "number_value":   "выкл", "number_count":   None,
+        "rating":          "—",   "rating_count":   None,
     }
     if plugin_self is None:
         return out
@@ -1176,6 +1236,13 @@ def _eblannft_read_profile_stats(plugin_self):
     except Exception:
         pass
     try:
+        tokens = plugin_self._get_nft_username_tokens()
+        n = len(tokens) if tokens is not None else 0
+        if n > 0:
+            out["username_count"] = n
+    except Exception:
+        pass
+    try:
         active = bool(plugin_self._is_nft_number_active())
         out["number_active"] = active
         if active:
@@ -1183,6 +1250,13 @@ def _eblannft_read_profile_stats(plugin_self):
                 out["number_value"] = str(plugin_self._display_nft_number() or "—")
             except Exception:
                 out["number_value"] = "вкл"
+    except Exception:
+        pass
+    try:
+        tokens = plugin_self._get_nft_number_tokens()
+        n = len(tokens) if tokens is not None else 0
+        if n > 0:
+            out["number_count"] = n
     except Exception:
         pass
     try:
@@ -1469,7 +1543,7 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             except Exception as e:
                 _bootstrap_log(f"status col action err: {e}")
 
-        def _make_column(icon_name, label, value, is_on, callback):
+        def _make_column(icon_name, label, value, is_on, callback, badge_count=None):
             # FrameLayout root so the chevron can sit absolute-positioned in
             # the top-right corner of the column without disturbing the
             # vertical icon/label/value stack.
@@ -1599,10 +1673,47 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
                 ),
             )
 
-            # Chevron hint in the top-right corner of the column — only when
-            # the column is interactive, so the column visually advertises
-            # tappability instead of looking like static info.
-            if callback is not None:
+            # Top-right corner overlay: either a numeric badge (when the
+            # column has a count > 0) OR a chevron hint (when interactive
+            # but no count). The badge takes priority because it conveys
+            # actual data; the chevron remains a fallback affordance.
+            try:
+                count_int = int(badge_count) if badge_count is not None else 0
+            except Exception:
+                count_int = 0
+            if count_int > 0:
+                badge_text = str(count_int if count_int < 10 else "9+")
+                badge_tv = TextView(context)
+                try:
+                    badge_tv.setText(badge_text)
+                    badge_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9)
+                    badge_tv.setTextColor(_eblannft_jint(0xFFFFFFFF))
+                    badge_tv.setGravity(Gravity.CENTER)
+                    badge_tv.setTypeface(badge_tv.getTypeface(), 1)
+                    badge_bg = GradientDrawable()
+                    badge_bg.setShape(GradientDrawable.OVAL)
+                    badge_bg.setColor(accent)
+                    badge_tv.setBackground(badge_bg)
+                    badge_tv.setPadding(
+                        AndroidUtilities.dp(4),
+                        0,
+                        AndroidUtilities.dp(4),
+                        0,
+                    )
+                except Exception:
+                    pass
+                lp_badge = FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(16),
+                    Gravity.TOP | Gravity.END,
+                )
+                try:
+                    lp_badge.topMargin = AndroidUtilities.dp(2)
+                    lp_badge.rightMargin = AndroidUtilities.dp(2)
+                except Exception:
+                    pass
+                col_root.addView(badge_tv, lp_badge)
+            elif callback is not None:
                 chevron = ImageView(context)
                 try:
                     chevron.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
@@ -1629,6 +1740,7 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
                     pass
                 col_root.addView(chevron, lp_ch)
 
+            if callback is not None:
                 try:
                     class _ColClick(dynamic_proxy(View.OnClickListener)):
                         def onClick(self_obj, v):
@@ -1656,18 +1768,18 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
 
         cols = [
             ("msg_edit",       "Username",  stats["username_value"], stats["username_active"],
-             _open_profile_subfragment),
+             _open_profile_subfragment, stats.get("username_count")),
             ("msg_link",       "Number",    stats["number_value"],   stats["number_active"],
-             _open_profile_subfragment),
+             _open_profile_subfragment, stats.get("number_count")),
             ("msg_stats_solar","Рейтинг",   stats["rating"],
              stats["rating"] not in ("—", "Выкл", "выкл", "Off"),
-             _open_rating_dialog),
+             _open_rating_dialog, None),
         ]
-        for i, (icon_name, label, value, is_on, cb) in enumerate(cols):
+        for i, (icon_name, label, value, is_on, cb, badge) in enumerate(cols):
             lp_col = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
             if i > 0:
                 lp_col.leftMargin = AndroidUtilities.dp(4)
-            card.addView(_make_column(icon_name, label, value, is_on, cb), lp_col)
+            card.addView(_make_column(icon_name, label, value, is_on, cb, badge), lp_col)
 
         outer.addView(
             card,
@@ -1699,6 +1811,7 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             ),
         )
 
+        _eblannft_animate_cascade_in(outer, delay_ms=90)
         return outer
     except Exception as e:
         _bootstrap_log(f"build status err: {e}")
@@ -1983,6 +2096,7 @@ def _eblannft_build_footer_card(context, plugin_self):
             pass
         outer.addView(chan)
 
+        _eblannft_animate_cascade_in(outer, delay_ms=180)
         return outer
     except Exception as e:
         _bootstrap_log(f"build footer err: {e}")
