@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.6"
+__version__ = "1.2.7"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -4868,31 +4868,187 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 pass
             outer.addView(chip_row, lp_chip_row)
 
-            chip = TextView(ctx)
-            try:
-                chip.setText(
-                    f"  v{__version__}   →   v{manifest.get('version', '?')}  "
-                )
-                chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12)
-                chip.setTextColor(accent)
-                chip.setGravity(Gravity.CENTER)
+            # Two version pills with an animated arrow between them.
+            # The "new version" pill carries an Apple-style shimmer:
+            # a moving LinearGradient bright spot that travels across
+            # the pill background in a loop.
+            remote_v = str(manifest.get('version', '?'))
+
+            def _make_version_pill(text, *, highlight=False):
+                tv = TextView(ctx)
                 try:
-                    chip.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    tv.setText(text)
+                    tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                    try:
+                        tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    except Exception:
+                        pass
+                    tv.setGravity(Gravity.CENTER)
+                    tv.setPadding(
+                        AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(7),
+                        AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(7),
+                    )
+                    if highlight:
+                        tv.setTextColor(_eblannft_jint(0xFFFFFFFF))
+                        # Solid accent fill — the shimmer paints on top.
+                        bg = GradientDrawable()
+                        bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                        bg.setColor(accent)
+                        tv.setBackground(bg)
+                    else:
+                        tv.setTextColor(muted_color)
+                        bg = GradientDrawable()
+                        bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                        bg.setColor(_blend(0xFFFFFFFF, bg_color, 0.06))
+                        # Thin outline so the muted pill has definition.
+                        try:
+                            bg.setStroke(
+                                AndroidUtilities.dp(1),
+                                _eblannft_jint(0x22FFFFFF),
+                            )
+                        except Exception:
+                            pass
+                        tv.setBackground(bg)
                 except Exception:
                     pass
-                chip.setPadding(
-                    AndroidUtilities.dp(10),
-                    AndroidUtilities.dp(6),
-                    AndroidUtilities.dp(10),
-                    AndroidUtilities.dp(6),
-                )
-                cb = GradientDrawable()
-                cb.setCornerRadius(AndroidUtilities.dp(999))
-                cb.setColor(chip_color)
-                chip.setBackground(cb)
+                return tv
+
+            old_pill = _make_version_pill(f"v{__version__}", highlight=False)
+            new_pill = _make_version_pill(f"v{remote_v}", highlight=True)
+            chip_row.addView(old_pill, LinearLayout.LayoutParams(-2, -2))
+
+            # Animated arrow → between the two pills. The arrow uses a
+            # ValueAnimator-driven translationX to "pulse" forward.
+            arrow_tv = TextView(ctx)
+            try:
+                arrow_tv.setText("→")
+                arrow_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
+                arrow_tv.setTextColor(accent)
+                arrow_tv.setGravity(Gravity.CENTER)
+                try:
+                    arrow_tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
             except Exception:
                 pass
-            chip_row.addView(chip, LinearLayout.LayoutParams(-2, -2))
+            lp_arrow = LinearLayout.LayoutParams(-2, -2)
+            try:
+                lp_arrow.leftMargin = AndroidUtilities.dp(8)
+                lp_arrow.rightMargin = AndroidUtilities.dp(8)
+            except Exception:
+                pass
+            chip_row.addView(arrow_tv, lp_arrow)
+            chip_row.addView(new_pill, LinearLayout.LayoutParams(-2, -2))
+
+            # Arrow pulse: small forward translation that repeats.
+            try:
+                from android.animation import ValueAnimator
+                from android.view.animation import LinearInterpolator
+                from java import dynamic_proxy as _dp_anim
+                arrow_anim = ValueAnimator.ofFloat(0.0, 1.0)
+                arrow_anim.setDuration(1100)
+                arrow_anim.setRepeatCount(ValueAnimator.INFINITE)
+                arrow_anim.setInterpolator(LinearInterpolator())
+                shift_px = float(AndroidUtilities.dp(4))
+                class _ArrowUpdate(_dp_anim(ValueAnimator.AnimatorUpdateListener)):
+                    def onAnimationUpdate(self_obj, anim):
+                        try:
+                            v = float(anim.getAnimatedValue())
+                            # Triangle wave for back-and-forth motion + alpha pulse.
+                            wave = v * 2.0 if v < 0.5 else (1.0 - v) * 2.0
+                            arrow_tv.setTranslationX(shift_px * wave)
+                            arrow_tv.setAlpha(0.55 + 0.45 * wave)
+                        except Exception:
+                            pass
+                arrow_anim.addUpdateListener(_ArrowUpdate())
+                arrow_anim.start()
+            except Exception as _ae:
+                _bootstrap_log(f"arrow anim err: {_ae}")
+
+            # Apple-style shimmer on the new-version pill: a moving
+            # LinearGradient highlight that sweeps left → right and
+            # loops. Drawn as a LayerDrawable on top of the solid fill.
+            try:
+                from android.graphics import LinearGradient, Shader, Paint, RectF
+                from android.graphics.drawable import Drawable
+                from android.animation import ValueAnimator as _VA
+                from java import dynamic_proxy as _dp_sh
+
+                shimmer_state = {"progress": 0.0}
+                paint_sh = Paint(Paint.ANTI_ALIAS_FLAG)
+
+                class _ShimmerDrawable(_dp_sh(Drawable)):
+                    def draw(self_obj, canvas):
+                        try:
+                            b = self_obj.getBounds()
+                            w = float(b.right - b.left)
+                            h = float(b.bottom - b.top)
+                            if w <= 0 or h <= 0:
+                                return
+                            # The shimmer band is ~35% wide, sliding
+                            # from x=-band to x=w+band over the loop.
+                            band_w = w * 0.35
+                            travel = w + band_w * 2.0
+                            x = -band_w + travel * float(shimmer_state["progress"])
+                            shader = LinearGradient(
+                                float(x), 0.0,
+                                float(x + band_w), 0.0,
+                                [
+                                    _eblannft_jint(0x00FFFFFF),
+                                    _eblannft_jint(0x55FFFFFF),  # bright streak
+                                    _eblannft_jint(0x00FFFFFF),
+                                ],
+                                [0.0, 0.5, 1.0],
+                                Shader.TileMode.CLAMP,
+                            )
+                            paint_sh.setShader(shader)
+                            # Round-rect clip so the shimmer respects the
+                            # pill's rounded corners.
+                            rect = RectF(float(b.left), float(b.top),
+                                         float(b.right), float(b.bottom))
+                            radius = h / 2.0
+                            canvas.drawRoundRect(rect, radius, radius, paint_sh)
+                        except Exception:
+                            pass
+                    def setAlpha(self_obj, a):
+                        try: paint_sh.setAlpha(int(a))
+                        except Exception: pass
+                    def setColorFilter(self_obj, cf):
+                        try: paint_sh.setColorFilter(cf)
+                        except Exception: pass
+                    def getOpacity(self_obj):
+                        return -3
+
+                # Layer the shimmer ON TOP of the solid fill so the
+                # gradient passes over the green pill.
+                from android.graphics.drawable import LayerDrawable
+                base_bg = GradientDrawable()
+                base_bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                base_bg.setColor(accent)
+                shimmer = _ShimmerDrawable()
+                layer = LayerDrawable([base_bg, shimmer])
+                try:
+                    new_pill.setBackground(layer)
+                except Exception:
+                    pass
+
+                shimmer_anim = _VA.ofFloat(0.0, 1.0)
+                shimmer_anim.setDuration(1600)
+                shimmer_anim.setRepeatCount(_VA.INFINITE)
+                shimmer_anim.setStartDelay(300)
+                class _ShimmerUpdate(_dp_sh(_VA.AnimatorUpdateListener)):
+                    def onAnimationUpdate(self_obj, anim):
+                        try:
+                            shimmer_state["progress"] = float(anim.getAnimatedValue())
+                            new_pill.invalidate()
+                        except Exception:
+                            pass
+                shimmer_anim.addUpdateListener(_ShimmerUpdate())
+                shimmer_anim.start()
+            except Exception as _she:
+                _bootstrap_log(f"shimmer setup err: {_she}")
 
             # Optional "released N ago" line under the chip — only shown
             # if the manifest carries a parseable 'released' ISO date.
