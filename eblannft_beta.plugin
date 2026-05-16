@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -1154,14 +1154,81 @@ def _eblannft_read_profile_stats(plugin_self):
     return out
 
 
-def _eblannft_build_status_card(context, plugin_self):
-    """Translatica-style horizontal quick-stats strip: three columns
-    (Username / Number / Рейтинг) with icon, label and value. Read-only."""
+def _eblannft_invoke_native_item(activity, items, link_alias):
+    """Translatica trick: programmatically trigger a native UItem's row tap
+    by invoking PluginSettingsActivity.onClick(item, view, int, float, float)
+    on it. Used by clickable status-card columns to navigate into the
+    standard 'Профиль' subfragment without the user having to scroll down
+    and tap the row manually."""
+    if activity is None or items is None or not link_alias:
+        return False
+    try:
+        from hook_utils import find_class
+        from java import jclass, jint
+    except Exception as e:
+        _bootstrap_log(f"invoke native: import err: {e}")
+        return False
+    target = None
+    try:
+        for i in range(items.size()):
+            it = items.get(i)
+            if it is None:
+                continue
+            si = getattr(it, "settingItem", None)
+            la = ""
+            try:
+                la = str(getattr(it, "link_alias", "") or "").strip()
+            except Exception:
+                la = ""
+            if not la and si is not None:
+                try:
+                    la = str(getattr(si, "link_alias", "") or "").strip()
+                except Exception:
+                    la = ""
+            if la == str(link_alias).strip():
+                target = it
+                break
+    except Exception as e:
+        _bootstrap_log(f"invoke native: items scan err: {e}")
+        return False
+    if target is None:
+        _bootstrap_log(f"invoke native: no row for link_alias={link_alias}")
+        return False
+    try:
+        UItemCls = find_class("org.telegram.ui.Components.UItem")
+        ViewCls = find_class("android.view.View")
+        IntType = find_class("java.lang.Integer").TYPE
+        FloatCls = jclass("java.lang.Float")
+        if not UItemCls or not ViewCls or not IntType or not FloatCls:
+            return False
+        click_method = activity.getClass().getDeclaredMethod(
+            "onClick", UItemCls, ViewCls, IntType, FloatCls.TYPE, FloatCls.TYPE
+        )
+        click_method.setAccessible(True)
+        from android_utils import run_on_ui_thread
+        def _invoke():
+            try:
+                click_method.invoke(activity, target, None, jint(0), FloatCls(0.0), FloatCls(0.0))
+            except Exception as e:
+                _bootstrap_log(f"invoke native onClick fail: {e}")
+        run_on_ui_thread(_invoke)
+        return True
+    except Exception as e:
+        _bootstrap_log(f"invoke native: reflection err: {e}")
+        return False
+
+
+def _eblannft_build_status_card(context, plugin_self, activity=None, items=None):
+    """Translatica-style horizontal quick-stats strip: three clickable
+    columns (Username / Number / Рейтинг). Each column shows icon, label,
+    value, and a chevron hint. Tapping Username/Number opens the native
+    Профиль subfragment; tapping Рейтинг opens the rating dialog directly."""
     try:
         from android.widget import FrameLayout, TextView, LinearLayout, ImageView
         from android.view import Gravity, View, ViewOutlineProvider
         from android.util import TypedValue
         from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
         from org.telegram.messenger import AndroidUtilities, ApplicationLoader
         from org.telegram.ui.ActionBar import Theme
     except Exception as e:
@@ -1231,7 +1298,35 @@ def _eblannft_build_status_card(context, plugin_self):
         except Exception:
             pass
 
-        def _make_column(icon_name, label, value, is_on):
+        def _safe_call(fn):
+            try:
+                fn()
+            except Exception as e:
+                _bootstrap_log(f"status col action err: {e}")
+
+        def _make_column(icon_name, label, value, is_on, callback):
+            # FrameLayout root so the chevron can sit absolute-positioned in
+            # the top-right corner of the column without disturbing the
+            # vertical icon/label/value stack.
+            col_root = FrameLayout(context)
+            try:
+                col_root.setClickable(bool(callback))
+                col_root.setFocusable(bool(callback))
+                # Use a rounded transparent background just to enable the
+                # tap-ripple feedback inside the parent card.
+                hl_bg = GradientDrawable()
+                hl_bg.setCornerRadius(float(AndroidUtilities.dp(14)))
+                hl_bg.setColor(_eblannft_jint(0x00000000))
+                col_root.setBackground(hl_bg)
+                col_root.setPadding(
+                    AndroidUtilities.dp(4),
+                    AndroidUtilities.dp(2),
+                    AndroidUtilities.dp(4),
+                    AndroidUtilities.dp(2),
+                )
+            except Exception:
+                pass
+
             col = LinearLayout(context)
             col.setOrientation(LinearLayout.VERTICAL)
             col.setGravity(Gravity.CENTER_HORIZONTAL)
@@ -1316,18 +1411,81 @@ def _eblannft_build_status_card(context, plugin_self):
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                 ),
             )
-            return col
+
+            col_root.addView(
+                col,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.CENTER_HORIZONTAL,
+                ),
+            )
+
+            # Chevron hint in the top-right corner of the column — only when
+            # the column is interactive, so the column visually advertises
+            # tappability instead of looking like static info.
+            if callback is not None:
+                chevron = ImageView(context)
+                try:
+                    chevron.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+                    rid_ch = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                        "msg_arrowright",
+                        "drawable",
+                        ApplicationLoader.applicationContext.getPackageName(),
+                    )
+                    if rid_ch:
+                        chevron.setImageResource(rid_ch)
+                        chevron.setColorFilter(sub_color)
+                        chevron.setAlpha(0.7)
+                except Exception:
+                    pass
+                lp_ch = FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(10),
+                    AndroidUtilities.dp(10),
+                    Gravity.TOP | Gravity.END,
+                )
+                try:
+                    lp_ch.topMargin = AndroidUtilities.dp(2)
+                    lp_ch.rightMargin = AndroidUtilities.dp(2)
+                except Exception:
+                    pass
+                col_root.addView(chevron, lp_ch)
+
+                try:
+                    class _ColClick(dynamic_proxy(View.OnClickListener)):
+                        def onClick(self_obj, v):
+                            _safe_call(callback)
+                    col_root.setOnClickListener(_ColClick())
+                except Exception:
+                    pass
+
+            return col_root
+
+        def _open_profile_subfragment():
+            if not _eblannft_invoke_native_item(activity, items, "eblannft_profile_subfragment"):
+                _bootstrap_log("status col: failed to open Профиль subfragment")
+
+        def _open_rating_dialog():
+            try:
+                if plugin_self is not None and hasattr(plugin_self, "_open_local_rating_dialog"):
+                    plugin_self._open_local_rating_dialog()
+            except Exception as e:
+                _bootstrap_log(f"status col: rating dialog err: {e}")
 
         cols = [
-            ("msg_edit",       "Username",  stats["username_value"], stats["username_active"]),
-            ("msg_link",       "Number",    stats["number_value"],   stats["number_active"]),
-            ("msg_stats_solar","Рейтинг",   stats["rating"],         stats["rating"] not in ("—", "Выкл", "выкл", "Off")),
+            ("msg_edit",       "Username",  stats["username_value"], stats["username_active"],
+             _open_profile_subfragment),
+            ("msg_link",       "Number",    stats["number_value"],   stats["number_active"],
+             _open_profile_subfragment),
+            ("msg_stats_solar","Рейтинг",   stats["rating"],
+             stats["rating"] not in ("—", "Выкл", "выкл", "Off"),
+             _open_rating_dialog),
         ]
-        for i, (icon_name, label, value, is_on) in enumerate(cols):
+        for i, (icon_name, label, value, is_on, cb) in enumerate(cols):
             lp_col = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
             if i > 0:
                 lp_col.leftMargin = AndroidUtilities.dp(4)
-            card.addView(_make_column(icon_name, label, value, is_on), lp_col)
+            card.addView(_make_column(icon_name, label, value, is_on, cb), lp_col)
 
         outer.addView(
             card,
@@ -1640,7 +1798,9 @@ def _eblannft_install_header_hook(plugin_self):
                 # Status card (Username / Number / Rating) right under header.
                 next_idx = 2
                 try:
-                    status_view = _eblannft_build_status_card(activity.getContext(), plugin_ref())
+                    status_view = _eblannft_build_status_card(
+                        activity.getContext(), plugin_ref(), activity, items
+                    )
                     if status_view is not None:
                         status_item = UItem.asCustom(status_view)
                         try:
