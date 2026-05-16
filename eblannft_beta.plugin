@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -1706,12 +1706,20 @@ def _eblannft_humanize_last_check():
         return ""
     try:
         import humanize
-        from datetime import datetime
+        from datetime import datetime, timedelta
         try:
             humanize.i18n.activate("ru_RU")
         except Exception:
             pass
         delta = datetime.now() - datetime.fromtimestamp(ts)
+        # precisedelta gives "5 минут и 30 секунд" instead of just
+        # "5 минут" — more useful for recent checks.
+        if delta < timedelta(minutes=1):
+            return "проверено только что"
+        if delta < timedelta(hours=1):
+            return "проверено " + humanize.precisedelta(
+                delta, minimum_unit="minutes", format="%0.0f"
+            ) + " назад"
         return "проверено " + humanize.naturaldelta(delta) + " назад"
     except Exception as e:
         _bootstrap_log(f"humanize last check err: {e}")
@@ -3227,7 +3235,28 @@ def _validate_manifest(data):
         return True
 
 
+# 10-second TTL on the parsed manifest: prevents back-to-back taps on
+# "Проверить апдейт" (or simultaneous resume + interactive calls) from
+# hammering GitHub's raw endpoint within seconds. Auto-evicts so the
+# value stays fresh.
+try:
+    from cachetools import TTLCache as _ManifestTTLCache
+    _manifest_cache = _ManifestTTLCache(maxsize=2, ttl=10)
+except Exception:
+    _manifest_cache = None
+
+
 def _fetch_manifest():
+    # Short-circuit if we fetched the same manifest within the last 10s.
+    if _manifest_cache is not None:
+        try:
+            cached = _manifest_cache.get("default")
+            if cached:
+                _bootstrap_log("manifest: served from 10s TTL cache")
+                return cached
+        except Exception:
+            pass
+
     # Bust raw.githubusercontent.com's CDN cache (~5-10 min TTL otherwise) by
     # appending a unique query string. The CDN keys on the full URL, so each
     # fetch returns whatever is currently committed instead of a stale copy.
@@ -3249,11 +3278,17 @@ def _fetch_manifest():
     files = data.get("files") or list(_RUNTIME_FILES) + [_WRAPPER_DEFAULT_NAME]
     if not isinstance(files, list) or not files:
         files = list(_RUNTIME_FILES) + [_WRAPPER_DEFAULT_NAME]
-    return {
+    manifest = {
         "version": version,
         "notes": str(data.get("notes") or "").strip(),
         "files": [str(x).strip() for x in files if str(x).strip()],
     }
+    if _manifest_cache is not None:
+        try:
+            _manifest_cache["default"] = manifest
+        except Exception:
+            pass
+    return manifest
 
 
 def _last_check_marker_path():
@@ -3948,11 +3983,21 @@ def _bind_eblannft_popup_sticker(sticker_view, set_name="HappyHappyPepe", indexe
     return False
 
 
+def _strip_block_html_tags(s):
+    """Strip block-level HTML (p/ul/li/etc.) but preserve inline emphasis
+    tags (strong/em/b/i/code) so the calling code can hand the string
+    to Html.fromHtml() and get a real Android Spannable with formatting
+    instead of plain text."""
+    import re
+    s = re.sub(r"<\s*br\s*/?\s*>", "\n", s, flags=re.I)
+    s = re.sub(r"<\s*/?\s*(p|ul|ol|li|div|h[1-6]|blockquote)\s*[^>]*>", "", s, flags=re.I)
+    # Leave <strong>/<em>/<b>/<i>/<code>/<a> alone — Html.fromHtml understands them.
+    return s.strip()
+
+
 def _strip_html_tags(s):
-    """Quick-and-dirty HTML strip for markdown-rendered text. Keeps
-    text content but drops <p>, <ul>, <li>, <strong>, <em> tags so the
-    Android TextView sees clean text. Inline emphasis becomes bullets
-    in the calling code, not here."""
+    """Plain-text version of _strip_block_html_tags — drops ALL tags.
+    Kept for non-Spannable code paths and as a defensive fallback."""
     import re
     s = re.sub(r"<\s*br\s*/?\s*>", "\n", s, flags=re.I)
     s = re.sub(r"<\s*/\s*p\s*>", "\n", s, flags=re.I)
@@ -3983,17 +4028,19 @@ def _parse_notes_bullets(text):
     body = re.sub(r"^v?\d+\.\d+\.\d+\s*[—–-]\s*", "", body)
 
     # --- markdown path ------------------------------------------------
+    # Returns strings with inline <strong>/<em>/<b>/<i> tags PRESERVED so
+    # the popup renderer can hand them to Html.fromHtml() for real
+    # Spannable formatting (bold/italic actually render, not literal
+    # asterisks).
     try:
         import markdown as _md
         html = _md.markdown(body, extensions=[])
-        # Extract <li>...</li> blocks via regex (a real HTML parser would
-        # be overkill for short release notes).
         li_chunks = re.findall(r"<li[^>]*>(.*?)</li>", html, flags=re.I | re.S)
         if len(li_chunks) >= 2:
             items = []
             for raw in li_chunks:
-                clean = _strip_html_tags(raw).strip()
-                clean = re.sub(r"\s+", " ", clean)
+                clean = _strip_block_html_tags(raw).strip()
+                clean = re.sub(r"[ \t]+", " ", clean)
                 clean = clean.rstrip(" .;")
                 if clean:
                     items.append(clean)
@@ -4418,7 +4465,22 @@ def _show_update_popup(manifest, _retry_attempt=0):
 
                     item_tv = TextView(ctx)
                     try:
-                        item_tv.setText(str(item_text))
+                        raw = str(item_text or "")
+                        if "<" in raw and ">" in raw:
+                            # Markdown produced inline tags (<strong>/<em>/...).
+                            # Render them as a real Spannable so bold/italic
+                            # show as formatting, not as literal asterisks.
+                            try:
+                                from android.text import Html
+                                try:
+                                    spanned = Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY)
+                                except Exception:
+                                    spanned = Html.fromHtml(raw)
+                                item_tv.setText(spanned)
+                            except Exception:
+                                item_tv.setText(_strip_html_tags(raw))
+                        else:
+                            item_tv.setText(raw)
                         item_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
                         item_tv.setTextColor(text_color)
                         item_tv.setLineSpacing(0.0, 1.18)
