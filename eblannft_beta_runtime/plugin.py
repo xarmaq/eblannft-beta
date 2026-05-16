@@ -13585,7 +13585,19 @@ class NftClonerPlugin(BasePlugin):
         elif key == "usd":
             self.nft_username_price_usd = text if text else "0"
         elif key == "date":
-            self.nft_username_purchase_date = text
+            # Normalize free-form date input via python-dateutil when
+            # available: "1 мая 2024" / "01.05.24" / "May 1, 2024" all
+            # become "01.05.2024". Falls back to raw text on parse
+            # failure or if dateutil isn't installed yet.
+            normalized = text
+            if text:
+                try:
+                    from dateutil import parser as _dtparser
+                    dt = _dtparser.parse(text, dayfirst=True, fuzzy=True)
+                    normalized = dt.strftime("%d.%m.%Y")
+                except Exception:
+                    pass
+            self.nft_username_purchase_date = normalized
         self._save_cache()
         BulletinHelper.show_success("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ NFT Username Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
 
@@ -13765,7 +13777,15 @@ class NftClonerPlugin(BasePlugin):
         elif key == "usd":
             self.nft_number_price_usd = text if text else "0"
         elif key == "date":
-            self.nft_number_purchase_date = text
+            normalized = text
+            if text:
+                try:
+                    from dateutil import parser as _dtparser
+                    dt = _dtparser.parse(text, dayfirst=True, fuzzy=True)
+                    normalized = dt.strftime("%d.%m.%Y")
+                except Exception:
+                    pass
+            self.nft_number_purchase_date = normalized
         self._save_cache()
         BulletinHelper.show_success("ÃƒÂÃ¢â‚¬ÂÃƒÂÃ‚ÂµÃƒâ€˜Ã¢â‚¬Å¡ÃƒÂÃ‚Â°ÃƒÂÃ‚Â»ÃƒÂÃ‚Â¸ NFT Number Ãƒâ€˜Ã‚ÂÃƒÂÃ‚Â¾Ãƒâ€˜Ã¢â‚¬Â¦Ãƒâ€˜Ã¢â€šÂ¬ÃƒÂÃ‚Â°ÃƒÂÃ‚Â½ÃƒÂÃ‚ÂµÃƒÂÃ‚Â½Ãƒâ€˜Ã¢â‚¬Â¹")
 
@@ -15739,7 +15759,19 @@ class NftClonerPlugin(BasePlugin):
         elif key == "usd":
             self.nft_username_price_usd = text if text else "0"
         elif key == "date":
-            self.nft_username_purchase_date = text
+            # Normalize free-form date input via python-dateutil when
+            # available: "1 мая 2024" / "01.05.24" / "May 1, 2024" all
+            # become "01.05.2024". Falls back to raw text on parse
+            # failure or if dateutil isn't installed yet.
+            normalized = text
+            if text:
+                try:
+                    from dateutil import parser as _dtparser
+                    dt = _dtparser.parse(text, dayfirst=True, fuzzy=True)
+                    normalized = dt.strftime("%d.%m.%Y")
+                except Exception:
+                    pass
+            self.nft_username_purchase_date = normalized
         self._save_cache()
         BulletinHelper.show_success("\u0414\u0435\u0442\u0430\u043b\u0438 NFT Username \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b")
 
@@ -15825,7 +15857,15 @@ class NftClonerPlugin(BasePlugin):
         elif key == "usd":
             self.nft_number_price_usd = text if text else "0"
         elif key == "date":
-            self.nft_number_purchase_date = text
+            normalized = text
+            if text:
+                try:
+                    from dateutil import parser as _dtparser
+                    dt = _dtparser.parse(text, dayfirst=True, fuzzy=True)
+                    normalized = dt.strftime("%d.%m.%Y")
+                except Exception:
+                    pass
+            self.nft_number_purchase_date = normalized
         self._save_cache()
         BulletinHelper.show_success("\u0414\u0435\u0442\u0430\u043b\u0438 NFT Number \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b")
 

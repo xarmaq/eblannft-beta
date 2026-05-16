@@ -26,14 +26,14 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
 # which is a Rust ext). Replacement for schema validation: 'schema'
 # (tiny, pure-Python). Replacement for image work / compression: not
 # strictly needed in the wrapper.
-__requirements__ = "requests, packaging, cachetools, humanize, tenacity, python-dateutil, markdown, websocket-client, schema"
+__requirements__ = "requests, packaging, cachetools, humanize, tenacity, python-dateutil, markdown, websocket-client, schema, requests-cache, atomicwrites"
 
 
 # ---------------------------------------------------------------------------
@@ -468,10 +468,15 @@ def _download_to(path, url, progress_cb=None):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "wb") as f:
-        f.write(data)
-    os.replace(tmp, path)
+    try:
+        from atomicwrites import atomic_write as _atomic_write
+        with _atomic_write(path, mode="wb", overwrite=True) as f:
+            f.write(data)
+    except Exception:
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
     return len(data)
 
 
@@ -3290,15 +3295,32 @@ def _humanize_released(value):
         return ""
 
 
-# 10-second TTL on the parsed manifest: prevents back-to-back taps on
-# "Проверить апдейт" (or simultaneous resume + interactive calls) from
-# hammering GitHub's raw endpoint within seconds. Auto-evicts so the
-# value stays fresh.
+# Per-process manifest cache. Two layers:
+#   1. `requests-cache` (preferred): wraps the requests Session so any
+#      GET to the manifest URL is auto-cached for the configured TTL.
+#      Works at the HTTP layer — closer to the metal, properly handles
+#      304 Not Modified etc.
+#   2. cachetools.TTLCache (fallback): plain in-memory dict with eviction.
+# Either layer eliminates rapid-fire GitHub hits when user spams the
+# "Проверить апдейт" button.
 try:
     from cachetools import TTLCache as _ManifestTTLCache
     _manifest_cache = _ManifestTTLCache(maxsize=2, ttl=10)
 except Exception:
     _manifest_cache = None
+
+try:
+    import requests_cache as _rc
+    # In-memory backend keeps things simple and avoids touching disk for
+    # something this small. 10s TTL matches the in-process cache.
+    _rc_session = _rc.CachedSession(
+        cache_name="eblannft_manifest",
+        backend="memory",
+        expire_after=10,
+        allowable_methods=("GET",),
+    )
+except Exception:
+    _rc_session = None
 
 
 def _fetch_manifest():
@@ -3320,7 +3342,27 @@ def _fetch_manifest():
         f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/"
         f"{_UPDATE_MANIFEST_PATH}?_={bust}"
     )
-    raw, _total = _http_get(url, timeout=12)
+
+    # Try requests-cache first — gives proper HTTP-layer caching and
+    # treats stale responses smarter than my manual dict.
+    raw = None
+    if _rc_session is not None:
+        try:
+            headers = {
+                "User-Agent": f"eblannft-bootstrap/{__version__}",
+                "Accept": "*/*",
+                "Accept-Encoding": "identity",
+            }
+            resp = _rc_session.get(url, headers=headers, timeout=12)
+            resp.raise_for_status()
+            raw = resp.content
+            if getattr(resp, "from_cache", False):
+                _bootstrap_log("manifest: served via requests-cache hit")
+        except Exception as e:
+            _bootstrap_log(f"requests-cache manifest fetch failed: {e}")
+            raw = None
+    if raw is None:
+        raw, _total = _http_get(url, timeout=12)
     text = raw.decode("utf-8", errors="replace")
     data = json.loads(text)
     if not isinstance(data, dict):
@@ -3766,15 +3808,36 @@ def _download_and_apply_update(manifest, progress_cb=None):
     apply_total = max(1, sum(len(d) for _r, _de, d in payloads))
     applied = 0
     touched_dirs = set()
+
+    # Prefer the `atomicwrites` pip package for correct cross-platform
+    # atomic writes (handles edge cases around fsync, Windows rename
+    # semantics, etc.). Falls back to the manual tmp + os.replace dance
+    # when atomicwrites isn't importable yet (cold-launch).
+    try:
+        from atomicwrites import atomic_write as _atomic_write
+    except Exception:
+        _atomic_write = None
+
     for idx, (rel, dest, data) in enumerate(payloads, 1):
         parent = os.path.dirname(dest)
         if parent:
             os.makedirs(parent, exist_ok=True)
             touched_dirs.add(parent)
-        tmp = dest + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, dest)
+        if _atomic_write is not None:
+            try:
+                with _atomic_write(dest, mode="wb", overwrite=True) as f:
+                    f.write(data)
+            except Exception as _ae:
+                _bootstrap_log(f"atomic_write fallback for {dest}: {_ae}")
+                tmp = dest + ".tmp"
+                with open(tmp, "wb") as f:
+                    f.write(data)
+                os.replace(tmp, dest)
+        else:
+            tmp = dest + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, dest)
         applied += len(data)
         if callable(progress_cb):
             try:
