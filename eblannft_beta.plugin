@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.3"
+__version__ = "1.2.4"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -989,24 +989,25 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
         try:
+            # Minimal outer padding — sections sit closer together.
             outer.setPadding(
                 AndroidUtilities.dp(12),
+                AndroidUtilities.dp(10),
                 AndroidUtilities.dp(12),
-                AndroidUtilities.dp(12),
-                AndroidUtilities.dp(8),
+                AndroidUtilities.dp(2),
             )
         except Exception:
             pass
 
+        # Centered vertical hero: sticker at top, text stack below, all
+        # horizontally centred. Reads as a "profile card" instead of a
+        # left-aligned banner.
         hero = LinearLayout(context)
-        hero.setOrientation(LinearLayout.HORIZONTAL)
-        hero.setGravity(Gravity.CENTER_VERTICAL)
+        hero.setOrientation(LinearLayout.VERTICAL)
+        hero.setGravity(Gravity.CENTER_HORIZONTAL)
         try:
-            # Bigger rectangular hero — wider, taller, less rounded
-            # (18dp instead of 28dp) for a banner-y feel. Tonal gradient
-            # for subtle depth still.
             hero_bg = GradientDrawable()
-            hero_bg.setCornerRadius(float(AndroidUtilities.dp(18)))
+            hero_bg.setCornerRadius(float(AndroidUtilities.dp(20)))  # unified radius
             try:
                 tinted = _eblannft_jint(0x1822C55E if is_dark else 0x1022C55E)
                 hero_bg.setOrientation(GradientDrawable.Orientation.TL_BR)
@@ -1020,15 +1021,14 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             pass
         try:
             hero.setPadding(
+                AndroidUtilities.dp(20),
                 AndroidUtilities.dp(22),
-                AndroidUtilities.dp(24),
-                AndroidUtilities.dp(22),
-                AndroidUtilities.dp(24),
+                AndroidUtilities.dp(20),
+                AndroidUtilities.dp(20),
             )
         except Exception:
             pass
 
-        # Bigger sticker so the header has real presence as a banner.
         avatar_size_dp = 80 if compact else 96
         avatar_wrap = FrameLayout(context)
         try:
@@ -1124,21 +1124,18 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         except Exception as e:
             _bootstrap_log(f"avatar bounce setup err: {e}")
 
-        hero.addView(
-            avatar_wrap,
-            LinearLayout.LayoutParams(
-                AndroidUtilities.dp(avatar_size_dp),
-                AndroidUtilities.dp(avatar_size_dp),
-            ),
+        # Sticker centered at top of the hero.
+        lp_avatar = LinearLayout.LayoutParams(
+            AndroidUtilities.dp(avatar_size_dp),
+            AndroidUtilities.dp(avatar_size_dp),
         )
+        try:
+            lp_avatar.gravity = Gravity.CENTER_HORIZONTAL
+        except Exception:
+            pass
+        hero.addView(avatar_wrap, lp_avatar)
 
-        texts = LinearLayout(context)
-        texts.setOrientation(LinearLayout.VERTICAL)
-        lp_texts = LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0
-        )
-        lp_texts.leftMargin = AndroidUtilities.dp(14)
-
+        # Title — centered, big, just under the sticker.
         title = TextView(context)
         title.setText("eblanNFT Beta")
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26 if not compact else 23)
@@ -1154,7 +1151,17 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             except Exception:
                 pass
         title.setSingleLine(True)
-        texts.addView(title)
+        title.setGravity(Gravity.CENTER)
+        lp_title = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        try:
+            lp_title.gravity = Gravity.CENTER_HORIZONTAL
+            lp_title.topMargin = AndroidUtilities.dp(12)
+        except Exception:
+            pass
+        hero.addView(title, lp_title)
 
         subtitle = TextView(context)
         subtitle.setText("Бета-канал · NFT, юзернеймы, номер")
@@ -1167,11 +1174,17 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             subtitle.setMaxLines(2)
         except Exception:
             pass
+        subtitle.setGravity(Gravity.CENTER)
+        lp_sub = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
         try:
-            subtitle.setPadding(0, AndroidUtilities.dp(4), 0, 0)
+            lp_sub.gravity = Gravity.CENTER_HORIZONTAL
+            lp_sub.topMargin = AndroidUtilities.dp(4)
         except Exception:
             pass
-        texts.addView(subtitle)
+        hero.addView(subtitle, lp_sub)
 
         version_chip = TextView(context)
         version_chip.setText(f"v{__version__}")
@@ -1182,14 +1195,14 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             pass
         try:
             chip_bg = GradientDrawable()
-            chip_bg.setCornerRadius(float(AndroidUtilities.dp(10)))
+            chip_bg.setCornerRadius(float(AndroidUtilities.dp(20)))  # unified radius
             chip_bg.setColor(accent_soft)
             version_chip.setBackground(chip_bg)
             version_chip.setPadding(
-                AndroidUtilities.dp(8),
-                AndroidUtilities.dp(3),
-                AndroidUtilities.dp(8),
-                AndroidUtilities.dp(3),
+                AndroidUtilities.dp(10),
+                AndroidUtilities.dp(4),
+                AndroidUtilities.dp(10),
+                AndroidUtilities.dp(4),
             )
         except Exception:
             pass
@@ -1201,10 +1214,12 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
         )
-        chip_lp.topMargin = AndroidUtilities.dp(8)
-        texts.addView(version_chip, chip_lp)
-
-        hero.addView(texts, lp_texts)
+        try:
+            chip_lp.gravity = Gravity.CENTER_HORIZONTAL
+            chip_lp.topMargin = AndroidUtilities.dp(10)
+        except Exception:
+            pass
+        hero.addView(version_chip, chip_lp)
 
         outer.addView(
             hero,
@@ -1716,11 +1731,13 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
         try:
+            # Tight padding so status card sits close to the hero above
+            # and the native rows below — eliminates visible gaps.
             outer.setPadding(
-                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(12),
                 AndroidUtilities.dp(0),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(8),
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(2),
             )
         except Exception:
             pass
@@ -1730,7 +1747,7 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
         card.setGravity(Gravity.CENTER_VERTICAL)
         try:
             bg = GradientDrawable()
-            bg.setCornerRadius(float(AndroidUtilities.dp(28)))
+            bg.setCornerRadius(float(AndroidUtilities.dp(20)))  # unified radius
             bg.setColor(card_color)
             card.setBackground(bg)
             card.setClipToOutline(True)
@@ -2354,10 +2371,9 @@ def _eblannft_install_header_hook(plugin_self):
                 except Exception:
                     pass
                 items.add(0, item)
-                items.add(1, UItem.asShadow())
-
-                # Status card (Username / Number / Rating) right under header.
-                next_idx = 2
+                # Status card injected right after header — no shadow/spacer
+                # between them so the two custom views sit flush.
+                next_idx = 1
                 try:
                     status_view = _eblannft_build_status_card(
                         activity.getContext(), plugin_ref(), activity, items
@@ -2377,8 +2393,6 @@ def _eblannft_install_header_hook(plugin_self):
                         except Exception:
                             pass
                         items.add(next_idx, status_item)
-                        next_idx += 1
-                        items.add(next_idx, UItem.asShadow())
                         next_idx += 1
                 except Exception as e:
                     _bootstrap_log(f"status card inject err: {e}")
