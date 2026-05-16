@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -990,10 +990,10 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         outer.setOrientation(LinearLayout.VERTICAL)
         try:
             outer.setPadding(
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(10),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(6),
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(8),
             )
         except Exception:
             pass
@@ -1002,14 +1002,11 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         hero.setOrientation(LinearLayout.HORIZONTAL)
         hero.setGravity(Gravity.CENTER_VERTICAL)
         try:
-            # MD3 tonal gradient (top-left → bottom-right) — gives the
-            # hero card subtle depth instead of looking like a flat
-            # rectangle. Use setColors() rather than the constructor
-            # variant because Chaquopy's Python-list → Java int[]
-            # conversion in the constructor is unreliable (same Chaquopy
-            # bug that broke the progress-bar fill earlier).
+            # Bigger rectangular hero — wider, taller, less rounded
+            # (18dp instead of 28dp) for a banner-y feel. Tonal gradient
+            # for subtle depth still.
             hero_bg = GradientDrawable()
-            hero_bg.setCornerRadius(float(AndroidUtilities.dp(28)))
+            hero_bg.setCornerRadius(float(AndroidUtilities.dp(18)))
             try:
                 tinted = _eblannft_jint(0x1822C55E if is_dark else 0x1022C55E)
                 hero_bg.setOrientation(GradientDrawable.Orientation.TL_BR)
@@ -1023,15 +1020,16 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             pass
         try:
             hero.setPadding(
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(22),
+                AndroidUtilities.dp(24),
+                AndroidUtilities.dp(22),
+                AndroidUtilities.dp(24),
             )
         except Exception:
             pass
 
-        avatar_size_dp = 56 if compact else 64
+        # Bigger sticker so the header has real presence as a banner.
+        avatar_size_dp = 80 if compact else 96
         avatar_wrap = FrameLayout(context)
         try:
             av_bg = GradientDrawable()
@@ -1049,7 +1047,9 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         except Exception:
             pass
 
-        pack_name, pack_idx = _eblannft_resolve_icon_pack(random_pick=True)
+        # Fixed sticker — always the default __icon__ pick. Per user
+        # request: no random shuffle per open, no tap-to-shuffle.
+        pack_name, pack_idx = _eblannft_resolve_icon_pack(random_pick=False)
 
         def _try_load(img):
             try:
@@ -1108,30 +1108,10 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             avatar.setOnTouchListener(_AvatarBounceTouch())
             avatar.setClickable(True)
 
-            # Tap → reload sticker with a fresh random index (every tap
-            # gets a different Pepe). Long-press → secret debug sheet.
+            # Long-press → hidden debug sheet. No tap-shuffle anymore
+            # (per user request: sticker stays fixed).
             try:
-                from android_utils import OnClickListener as _OnClick, OnLongClickListener as _OnLong
-                def _on_tap(view):
-                    try:
-                        new_pack, new_idx = _eblannft_resolve_icon_pack(random_pick=True)
-                        def _reload(img, idx=new_idx, pack=new_pack):
-                            try:
-                                mdc = MediaDataController.getInstance(0)
-                                ss = mdc.getStickerSetByName(pack) or mdc.getStickerSetByEmojiOrName(pack)
-                                if ss and ss.documents and ss.documents.size() > 0:
-                                    si = min(idx, ss.documents.size() - 1)
-                                    img.setImage(
-                                        ImageLocation.getForDocument(ss.documents.get(si)),
-                                        f"{avatar_size_dp}_{avatar_size_dp}", None, None, 0, 1,
-                                    )
-                            except Exception:
-                                pass
-                        _reload(avatar)
-                    except Exception:
-                        pass
-                avatar.setOnClickListener(_OnClick(_on_tap))
-
+                from android_utils import OnLongClickListener as _OnLong
                 def _on_long(view):
                     try:
                         _eblannft_show_debug_sheet(context, plugin_self)
@@ -1140,7 +1120,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
                     return True
                 avatar.setOnLongClickListener(_OnLong(_on_long))
             except Exception as _ce:
-                _bootstrap_log(f"avatar click/long-click err: {_ce}")
+                _bootstrap_log(f"avatar long-click err: {_ce}")
         except Exception as e:
             _bootstrap_log(f"avatar bounce setup err: {e}")
 
@@ -1161,7 +1141,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
 
         title = TextView(context)
         title.setText("eblanNFT Beta")
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22 if not compact else 20)
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26 if not compact else 23)
         try:
             title.setTextColor(text_color)
         except Exception:
@@ -1234,7 +1214,6 @@ def _eblannft_build_settings_header(context, plugin_self=None):
             ),
         )
 
-        _eblannft_animate_cascade_in(outer, delay_ms=0)
         return outer
     except Exception as e:
         _bootstrap_log(f"build header err: {e}")
@@ -2019,7 +1998,6 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             ),
         )
 
-        _eblannft_animate_cascade_in(outer, delay_ms=90)
         return outer
     except Exception as e:
         _bootstrap_log(f"build status err: {e}")
@@ -2070,19 +2048,20 @@ def _eblannft_humanize_last_check():
 
 
 def _eblannft_build_footer_card(context, plugin_self):
-    """Minimalist single-line footer: "v1.x.x · @vcvk1 · проверено N назад".
-    No action chips (those duplicate the Сервис submenu); just a quiet
-    line of meta-info under the standard menu rows. The @vcvk1 token is
-    tappable to open the channel."""
+    """Compact footer: two pill buttons (Апдейт / Кэш) above a single
+    muted line "v1.x.x · @vcvk1 · проверено N назад". The buttons are
+    here because the user asked for direct shortcuts (and Сервис is a
+    multi-tap path to the same actions); the meta line stays minimal."""
     try:
-        from android.widget import TextView, LinearLayout
+        from android.widget import TextView, LinearLayout, FrameLayout, ImageView
         from android.text import SpannableString, Spannable
         from android.text.style import ForegroundColorSpan, ClickableSpan
         from android.text.method import LinkMovementMethod
-        from android.view import Gravity, View
+        from android.view import Gravity, View, ViewOutlineProvider
         from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
         from java import dynamic_proxy
-        from org.telegram.messenger import AndroidUtilities
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
         from org.telegram.ui.ActionBar import Theme
     except Exception as e:
         _bootstrap_log(f"footer import err: {e}")
@@ -2090,10 +2069,19 @@ def _eblannft_build_footer_card(context, plugin_self):
 
     try:
         try:
-            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            is_dark = bool(Theme.isCurrentThemeDark())
         except Exception:
-            sub_color = _eblannft_jint(0xFFAAB7CF)
+            is_dark = True
+        try:
+            text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+        except Exception:
+            text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
+            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
+            card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
         accent = _eblannft_jint(0xFF22C55E)
+        accent_soft = _eblannft_jint(0x1422C55E if is_dark else 0x1022C55E)
 
         outer = LinearLayout(context)
         outer.setOrientation(LinearLayout.VERTICAL)
@@ -2101,13 +2089,144 @@ def _eblannft_build_footer_card(context, plugin_self):
         try:
             outer.setPadding(
                 AndroidUtilities.dp(16),
-                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(12),
                 AndroidUtilities.dp(16),
                 AndroidUtilities.dp(20),
             )
         except Exception:
             pass
 
+        # --- two action pills row -------------------------------------
+        def _make_pill(icon_name, label, callback):
+            chip = LinearLayout(context)
+            chip.setOrientation(LinearLayout.HORIZONTAL)
+            chip.setGravity(Gravity.CENTER_VERTICAL)
+            try:
+                bg = GradientDrawable()
+                bg.setCornerRadius(float(AndroidUtilities.dp(20)))
+                bg.setColor(card_color)
+                try:
+                    from android.content.res import ColorStateList
+                    from android.graphics.drawable import RippleDrawable
+                    ripple_color = ColorStateList.valueOf(
+                        _eblannft_jint(0x3322C55E if is_dark else 0x2222C55E)
+                    )
+                    chip.setBackground(RippleDrawable(ripple_color, bg, bg))
+                except Exception:
+                    chip.setBackground(bg)
+                chip.setClipToOutline(True)
+                chip.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+                chip.setClickable(True)
+                chip.setFocusable(True)
+                chip.setPadding(
+                    AndroidUtilities.dp(14), AndroidUtilities.dp(10),
+                    AndroidUtilities.dp(16), AndroidUtilities.dp(10),
+                )
+            except Exception:
+                pass
+
+            icon_wrap = FrameLayout(context)
+            try:
+                ic_bg = GradientDrawable()
+                ic_bg.setCornerRadius(float(AndroidUtilities.dp(12)))
+                ic_bg.setColor(accent_soft)
+                icon_wrap.setBackground(ic_bg)
+            except Exception:
+                pass
+            icon = ImageView(context)
+            try:
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+                rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                    str(icon_name or ""), "drawable",
+                    ApplicationLoader.applicationContext.getPackageName(),
+                )
+                if rid:
+                    icon.setImageResource(rid)
+                    icon.setColorFilter(accent)
+            except Exception:
+                pass
+            icon_wrap.addView(
+                icon,
+                FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(14),
+                    AndroidUtilities.dp(14),
+                    Gravity.CENTER,
+                ),
+            )
+            chip.addView(
+                icon_wrap,
+                LinearLayout.LayoutParams(
+                    AndroidUtilities.dp(26),
+                    AndroidUtilities.dp(26),
+                ),
+            )
+
+            label_tv = TextView(context)
+            label_tv.setText(str(label))
+            label_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+            try:
+                label_tv.setTextColor(text_color)
+                label_tv.setTypeface(label_tv.getTypeface(), 1)
+            except Exception:
+                pass
+            lp_lbl = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            lp_lbl.leftMargin = AndroidUtilities.dp(8)
+            chip.addView(label_tv, lp_lbl)
+
+            if callback is not None:
+                try:
+                    class _ChipClick(dynamic_proxy(View.OnClickListener)):
+                        def onClick(self_obj, v):
+                            try:
+                                callback()
+                            except Exception as e:
+                                _bootstrap_log(f"footer chip err: {e}")
+                    chip.setOnClickListener(_ChipClick())
+                except Exception:
+                    pass
+            return chip
+
+        def _on_apdejt():
+            try:
+                _check_for_update_interactive()
+            except Exception:
+                pass
+
+        def _on_cache():
+            try:
+                if plugin_self is not None and hasattr(plugin_self, "_clear_cache"):
+                    plugin_self._clear_cache()
+            except Exception:
+                pass
+
+        chip_row = LinearLayout(context)
+        chip_row.setOrientation(LinearLayout.HORIZONTAL)
+        chip_row.setGravity(Gravity.CENTER_HORIZONTAL)
+        upd_chip = _make_pill("msg_download", "Апдейт", _on_apdejt)
+        cache_chip = _make_pill("msg_delete",   "Кэш",    _on_cache)
+        lp_l = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp_r = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        lp_r.leftMargin = AndroidUtilities.dp(10)
+        chip_row.addView(upd_chip, lp_l)
+        chip_row.addView(cache_chip, lp_r)
+        outer.addView(
+            chip_row,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
+        # --- meta line below the buttons -----------------------------
         last_check = _eblannft_humanize_last_check()
         version_part = f"v{__version__}"
         channel_part = "@vcvk1"
@@ -2154,9 +2273,16 @@ def _eblannft_build_footer_card(context, plugin_self):
         except Exception:
             pass
         tv.setGravity(Gravity.CENTER)
-        outer.addView(tv)
+        lp_meta = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        )
+        try:
+            lp_meta.topMargin = AndroidUtilities.dp(14)
+        except Exception:
+            pass
+        outer.addView(tv, lp_meta)
 
-        _eblannft_animate_cascade_in(outer, delay_ms=180)
         return outer
     except Exception as e:
         _bootstrap_log(f"build footer err: {e}")
