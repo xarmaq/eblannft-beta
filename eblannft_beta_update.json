@@ -1,7 +1,7 @@
 {
-  "version": "1.1.8",
-  "released": "2026-05-16T19:30:00+03:00",
-  "notes": "Beta 1.1.8 — два новых pip-пакета сразу с применением + правка рантайма.\n\nWrapper:\n• atomicwrites — все записи .plugin/.py файлов теперь идут через atomic_write вместо самописного tmp+os.replace. Правильная семантика fsync, корректное переименование, защита от частичных записей при крахе процесса посреди обновления. Fallback на старый код если пакет ещё не докачался.\n• requests-cache — HTTP-уровневый кэш ответов GitHub'а на запрос манифеста. Прозрачно, через CachedSession в режиме memory backend, TTL 10 секунд. Дополняет мой ручной in-process TTLCache как второй слой.\n\nРантайм:\n• python-dateutil подключён к поле «Дата покупки» (Profile → Username/Number → Детали → Дата). Юзер может теперь вбить «1 мая 2024» / «01.05.24» / «May 1, 2024» — всё нормализуется в «01.05.2024». Опечатался в формате — раньше сохранялось как есть, теперь dateutil разберёт.",
+  "version": "1.1.9",
+  "released": "2026-05-16T19:50:00+03:00",
+  "notes": "Beta 1.1.9 — ХОТФИКС: убран atomicwrites из зависимостей.\n\nexteraGram PipController отказался ставить atomicwrites с ошибкой 'No pure-Python wheel found'. Хотя сам пакет pure-Python, в дереве зависимостей PipController нашёл что-то бинарное (вероятно Windows-специфичный pywin32-ctypes).\n\nКод сразу был с fallback'ом на старый tmp + os.replace через try/except, так что функционально ничего не теряется — просто записи остаются на самописной атомарной семантике как и раньше.\n\nrequests-cache и остальные 9 пакетов работают.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
