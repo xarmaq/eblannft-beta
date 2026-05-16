@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -1638,10 +1638,68 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ),
         )
+
+        # Small hint line under the card explaining columns are tappable.
+        # Translatica does the same below its dotted card.
+        hint = TextView(context)
+        hint.setText("Тапни колонку чтобы открыть редактор")
+        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11)
+        try:
+            hint.setTextColor(sub_color)
+        except Exception:
+            pass
+        hint.setGravity(Gravity.CENTER)
+        try:
+            hint.setPadding(0, AndroidUtilities.dp(8), 0, AndroidUtilities.dp(2))
+        except Exception:
+            pass
+        outer.addView(
+            hint,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+
         return outer
     except Exception as e:
         _bootstrap_log(f"build status err: {e}")
         return None
+
+
+def _eblannft_humanize_last_check():
+    """Return 'проверено N минут назад' style string for the most recent
+    update check, or '' if no check has happened yet. Uses the humanize
+    pip package with the ru_RU locale activated."""
+    try:
+        ts = float(_read_last_check_ts() or 0.0)
+    except Exception:
+        ts = 0.0
+    if ts <= 0:
+        return ""
+    try:
+        import humanize
+        from datetime import datetime
+        try:
+            humanize.i18n.activate("ru_RU")
+        except Exception:
+            pass
+        delta = datetime.now() - datetime.fromtimestamp(ts)
+        return "проверено " + humanize.naturaldelta(delta) + " назад"
+    except Exception as e:
+        _bootstrap_log(f"humanize last check err: {e}")
+        try:
+            mins = int((time.time() - ts) / 60.0)
+            if mins < 1:
+                return "проверено только что"
+            if mins < 60:
+                return f"проверено {mins} мин назад"
+            hours = int(mins / 60)
+            if hours < 24:
+                return f"проверено {hours} ч назад"
+            return f"проверено {int(hours / 24)} дн назад"
+        except Exception:
+            return ""
 
 
 def _eblannft_build_footer_card(context, plugin_self):
@@ -1833,7 +1891,11 @@ def _eblannft_build_footer_card(context, plugin_self):
         )
 
         title = TextView(context)
-        title.setText(f"eblanNFT Beta • v{__version__}")
+        last_check = _eblannft_humanize_last_check()
+        if last_check:
+            title.setText(f"eblanNFT Beta • v{__version__}  ·  {last_check}")
+        else:
+            title.setText(f"eblanNFT Beta • v{__version__}")
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
         try:
             title.setTextColor(sub_color)
@@ -3495,7 +3557,14 @@ def _download_and_apply_update(manifest, progress_cb=None):
     completed_bytes = 0
 
     def _known_total():
-        return sum(int(v or 0) for v in sizes.values())
+        # Only return a total when EVERY file's Content-Length was reported.
+        # Otherwise the sum is partial while overall_loaded keeps growing,
+        # which is the root of the "578%" bug — the percent display falls
+        # back to a file-count estimate via _ui_progress instead.
+        vals = [int(v or 0) for v in sizes.values()]
+        if not vals or not all(v > 0 for v in vals):
+            return 0
+        return sum(vals)
 
     for idx, (rel, dest) in enumerate(plan, 1):
         url = _raw_url(rel)
@@ -4502,6 +4571,12 @@ def _show_update_popup(manifest, _retry_attempt=0):
                     target = float(value)
                 except Exception:
                     target = 0.0
+                # Hard upper bound — defence in depth against any upstream
+                # math that overshoots (closes the 578% display bug).
+                if target > 100.0:
+                    target = 100.0
+                if target < 0.0:
+                    target = 0.0
                 if target < float(percent_state.get("target", 0.0) or 0.0):
                     return
                 percent_state["target"] = target
@@ -4538,9 +4613,18 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 if overall_total > 0:
                     ratio = overall_bytes / float(overall_total)
                 elif current_total > 0:
-                    ratio = current_bytes / float(current_total)
+                    # Per-file ratio + completed-files fraction = overall.
+                    completed_frac = max(0.0, (idx - 1) / float(max(1, total_steps)))
+                    per_file_frac = (current_bytes / float(current_total)) / float(max(1, total_steps))
+                    ratio = completed_frac + per_file_frac
                 else:
                     ratio = max(0.0, (idx - 1) / float(max(1, total_steps)))
+                # CLAMP — never let the UI claim >100% or <0% no matter what
+                # the upstream math reports. Closes the 578% display bug.
+                if ratio < 0.0:
+                    ratio = 0.0
+                if ratio > 1.0:
+                    ratio = 1.0
                 _set_ratio(ratio)
                 _set_percent(ratio * 100.0)
                 _set_label("Применение…" if applying else "Скачивание…")
