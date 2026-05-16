@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -1039,26 +1039,57 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         except Exception:
             pass
 
-        avatar_size_dp = 80 if compact else 96
+        # Bigger sticker AND drop the circular clipping background —
+        # earlier versions cropped the Pepe's arms/legs at the rounded
+        # outline. The wrap is a FrameLayout sized larger than the
+        # sticker, with a soft radial spotlight behind it (drawn via
+        # a custom Drawable) instead of a hard circle clip.
+        avatar_size_dp = 96 if compact else 116
+        wrap_size_dp = avatar_size_dp + 24  # spotlight headroom
         avatar_wrap = FrameLayout(context)
+
+        # Soft radial glow behind the sticker — drawn via dynamic_proxy
+        # over RadialGradient. Falls back silently if the platform call
+        # fails (older Android / Chaquopy quirks).
         try:
-            av_bg = GradientDrawable()
-            av_bg.setCornerRadius(float(AndroidUtilities.dp(avatar_size_dp // 2)))
-            av_bg.setColor(accent_soft)
-            avatar_wrap.setBackground(av_bg)
-            avatar_wrap.setClipToOutline(True)
-            avatar_wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
-        except Exception:
-            pass
+            from android.graphics import RadialGradient, Shader, Paint, Color
+            from android.graphics.drawable import Drawable
+            from java import dynamic_proxy as _dp_glow
+            paint_glow = Paint(Paint.ANTI_ALIAS_FLAG)
+            glow_inner = _eblannft_jint(0x4422C55E if is_dark else 0x3322C55E)
+            glow_outer = _eblannft_jint(0x0022C55E)
+            class _GlowDrawable(_dp_glow(Drawable)):
+                def draw(self_obj, canvas):
+                    try:
+                        b = self_obj.getBounds()
+                        cx = (b.left + b.right) / 2.0
+                        cy = (b.top + b.bottom) / 2.0
+                        r = float(max(1, min(b.right - b.left, b.bottom - b.top)) / 2.0)
+                        shader = RadialGradient(
+                            cx, cy, r,
+                            glow_inner, glow_outer,
+                            Shader.TileMode.CLAMP,
+                        )
+                        paint_glow.setShader(shader)
+                        canvas.drawCircle(cx, cy, r, paint_glow)
+                    except Exception:
+                        pass
+                def setAlpha(self_obj, a):
+                    try: paint_glow.setAlpha(int(a))
+                    except Exception: pass
+                def setColorFilter(self_obj, cf):
+                    try: paint_glow.setColorFilter(cf)
+                    except Exception: pass
+                def getOpacity(self_obj):
+                    return -3
+            avatar_wrap.setBackground(_GlowDrawable())
+        except Exception as _ge:
+            _bootstrap_log(f"sticker glow err: {_ge}")
 
         avatar = BackupImageView(context)
-        try:
-            avatar.setRoundRadius(AndroidUtilities.dp(avatar_size_dp // 2))
-        except Exception:
-            pass
+        # No round radius — let the sticker paint its full transparent
+        # PNG/TGS bounds inside the wrap.
 
-        # Fixed sticker — always the default __icon__ pick. Per user
-        # request: no random shuffle per open, no tap-to-shuffle.
         pack_name, pack_idx = _eblannft_resolve_icon_pack(random_pick=False)
 
         def _try_load(img):
@@ -1134,10 +1165,11 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         except Exception as e:
             _bootstrap_log(f"avatar bounce setup err: {e}")
 
-        # Sticker centered at top of the hero.
+        # Sticker centered at top of the hero. Wrap is bigger than the
+        # sticker so the radial glow extends past the figure's silhouette.
         lp_avatar = LinearLayout.LayoutParams(
-            AndroidUtilities.dp(avatar_size_dp),
-            AndroidUtilities.dp(avatar_size_dp),
+            AndroidUtilities.dp(wrap_size_dp),
+            AndroidUtilities.dp(wrap_size_dp),
         )
         try:
             lp_avatar.gravity = Gravity.CENTER_HORIZONTAL
