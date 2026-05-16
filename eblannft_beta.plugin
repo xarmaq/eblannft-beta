@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -4361,33 +4361,39 @@ def _show_update_popup(manifest, _retry_attempt=0):
             track_bg = View(ctx)
             track_fill = View(ctx)
             try:
+                # Stronger contrast for the empty track so the bar is
+                # actually visible against the card it sits on. Was previously
+                # blended too close to container_color.
+                visible_track_bg = _blend(0xFFFFFFFF, bg_color, 0.10)
                 tb = GradientDrawable()
-                tb.setCornerRadius(AndroidUtilities.dp(999))
-                tb.setColor(track_bg_color)
+                tb.setCornerRadius(float(AndroidUtilities.dp(999)))
+                tb.setColor(visible_track_bg)
                 track_bg.setBackground(tb)
 
-                # Gradient fill: accent → slightly lighter accent so it has
-                # depth instead of looking flat.
-                light_accent = _blend(0xFFFFFFFF, accent, 0.18)
-                tf = GradientDrawable(
-                    GradientDrawable.Orientation.LEFT_RIGHT,
-                    [accent, light_accent],
-                )
-                tf.setCornerRadius(AndroidUtilities.dp(999))
+                # Solid accent fill. The previous gradient was constructed
+                # via GradientDrawable(orientation, list) which sometimes
+                # converts wrong through Chaquopy and leaves the fill
+                # transparent — switching to a guaranteed solid color via
+                # setColor closes that "bar never fills" bug.
+                tf = GradientDrawable()
+                tf.setCornerRadius(float(AndroidUtilities.dp(999)))
+                tf.setColor(accent)
                 track_fill.setBackground(tf)
                 track_fill.setPivotX(0.0)
                 track_fill.setScaleX(0.0)
             except Exception:
                 pass
+            # Bigger track (16dp instead of 12dp) so the bar reads at a
+            # glance even on tall screens.
             track_wrap.addView(
                 track_bg,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(12), Gravity.CENTER_VERTICAL),
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(16), Gravity.CENTER_VERTICAL),
             )
             track_wrap.addView(
                 track_fill,
-                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(12), Gravity.CENTER_VERTICAL),
+                FrameLayout.LayoutParams(-1, AndroidUtilities.dp(16), Gravity.CENTER_VERTICAL),
             )
-            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(14))
+            lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(18))
             lp_track.topMargin = AndroidUtilities.dp(14)
             progress_card.addView(track_wrap, lp_track)
 
@@ -4452,6 +4458,41 @@ def _show_update_popup(manifest, _retry_attempt=0):
 
             track_state = {"ratio": 0.0, "track_w": 0}
 
+            def _apply_ratio_now(r):
+                """Push ratio r to the fill view, picking the best
+                technique based on whether we know the track's pixel width
+                yet."""
+                try:
+                    tw = int(track_state.get("track_w", 0) or 0)
+                    if tw <= 0:
+                        try:
+                            tw = int(track_bg.getWidth() or 0)
+                        except Exception:
+                            tw = 0
+                        if tw > 0:
+                            track_state["track_w"] = tw
+                    if tw > 0:
+                        new_w = max(0, int(round(tw * float(r))))
+                        try:
+                            lp = track_fill.getLayoutParams()
+                            if lp is not None:
+                                lp.width = new_w
+                                track_fill.setLayoutParams(lp)
+                                track_fill.setScaleX(1.0)
+                                track_fill.requestLayout()
+                                track_fill.invalidate()
+                                return
+                        except Exception:
+                            pass
+                    # No layout-pixel width yet — fall back to scaleX which
+                    # works against the MATCH_PARENT initial width and will
+                    # render correctly once the view has been laid out.
+                    track_fill.setPivotX(0.0)
+                    track_fill.setScaleX(float(r))
+                    track_fill.invalidate()
+                except Exception as e:
+                    _bootstrap_log(f"apply ratio err: {e}")
+
             def _set_ratio(ratio):
                 try:
                     r = max(0.0, min(1.0, float(ratio or 0.0)))
@@ -4460,46 +4501,37 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 if r < float(track_state.get("ratio", 0.0) or 0.0) - 0.02:
                     return
                 track_state["ratio"] = r
-
-                def _apply():
-                    try:
-                        track_fill.setPivotX(0.0)
-                        track_fill.setScaleX(float(r))
-                    except Exception:
-                        pass
-                    try:
-                        tw = int(track_state.get("track_w", 0) or 0)
-                        if tw <= 0:
-                            try:
-                                tw = int(track_bg.getWidth() or 0)
-                            except Exception:
-                                tw = 0
-                            if tw > 0:
-                                track_state["track_w"] = tw
-                        if tw > 0:
-                            new_w = max(0, int(round(tw * float(r))))
-                            try:
-                                lp = track_fill.getLayoutParams()
-                                if lp is not None and getattr(lp, "width", -1) != new_w:
-                                    lp.width = new_w
-                                    track_fill.setLayoutParams(lp)
-                                    track_fill.setScaleX(1.0)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-                    try:
-                        track_fill.invalidate()
-                    except Exception:
-                        pass
-
                 try:
-                    run_on_ui_thread(_apply)
+                    run_on_ui_thread(lambda r_=r: _apply_ratio_now(r_))
                 except Exception:
                     try:
-                        _apply()
+                        _apply_ratio_now(r)
                     except Exception:
                         pass
+
+            # Catch-up listener: when track_bg finally gets a non-zero
+            # width during the first layout pass, immediately re-apply
+            # whatever ratio is current. Without this the very first
+            # progress update arrives before layout and the bar stays at
+            # 0% forever even though _set_ratio was called.
+            try:
+                from android.view import View as _ViewCls
+                from java import dynamic_proxy as _dp
+                class _TrackLayout(_dp(_ViewCls.OnLayoutChangeListener)):
+                    def onLayoutChange(self_obj, v, left, top, right, bottom,
+                                        oldLeft, oldTop, oldRight, oldBottom):
+                        try:
+                            new_w = int(right - left)
+                            if new_w > 0:
+                                track_state["track_w"] = new_w
+                                r = float(track_state.get("ratio", 0.0) or 0.0)
+                                if r > 0:
+                                    _apply_ratio_now(r)
+                        except Exception:
+                            pass
+                track_bg.addOnLayoutChangeListener(_TrackLayout())
+            except Exception as _le:
+                _bootstrap_log(f"track layout listener err: {_le}")
 
             def _set_status(text):
                 try:
