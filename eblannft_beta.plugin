@@ -950,6 +950,323 @@ def _patch_runtime_about_relocation():
 _patch_runtime_about_relocation()
 
 
+# ---------------------------------------------------------------------------
+# Settings header + links section
+# Mirrors UiTweaks.plugin: a custom view (sticker + particles + title +
+# subtitle) is injected at the top of PluginSettingsActivity via a
+# fillItems MethodHook, and a 'Ссылки' Header+Text section is appended to
+# create_settings just above the trailing 'О плагине' row.
+# ---------------------------------------------------------------------------
+
+_EBLANNFT_BETA_LINKS = (
+    ("GitHub репозиторий",       "msg_channel_solar",   "https://github.com/xarmaq/eblannft-beta"),
+    ("Исходники Telegram",       "msg_link",            "https://github.com/drklo/telegram"),
+    ("Документация exteraGram",  "msg_help",            "https://plugins.exteragram.app/docs"),
+)
+
+
+def _eblannft_open_url(url):
+    try:
+        from android.content import Intent
+        from android.net import Uri
+        from client_utils import get_last_fragment
+        frag = get_last_fragment()
+        act = frag.getParentActivity() if frag else None
+        if act is not None:
+            act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(str(url))))
+    except Exception as e:
+        _bootstrap_log(f"open_url err: {e}")
+
+
+def _eblannft_build_settings_header(context):
+    try:
+        from android.widget import FrameLayout, TextView
+        from android.view import Gravity
+        from android.util import TypedValue
+        from org.telegram.messenger import AndroidUtilities, MediaDataController, ImageLocation
+        from org.telegram.ui.ActionBar import Theme
+        from org.telegram.ui.Components import LayoutHelper, BackupImageView
+        from android_utils import run_on_ui_thread
+    except Exception as e:
+        _bootstrap_log(f"header import err: {e}")
+        return None
+
+    try:
+        container = FrameLayout(context)
+
+        try:
+            from org.telegram.ui.Components.Premium import StarParticlesView
+            particles = StarParticlesView(context)
+            particles.setClipWithGradient()
+            particles.drawable.colorKey = Theme.key_premiumStarGradient2
+            particles.drawable.isCircle = True
+            particles.drawable.centerOffsetY = AndroidUtilities.dp(0)
+            particles.drawable.minLifeTime = 2000
+            particles.drawable.randLifeTime = 3000
+            particles.drawable.useRotate = False
+            particles.drawable.updateColors()
+            container.addView(
+                particles,
+                LayoutHelper.createFrame(-1, 220, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 0, 0, 0),
+            )
+            try:
+                run_on_ui_thread(lambda: particles.flingParticles(360), 200)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        image_view = BackupImageView(context)
+        image_view.setRoundRadius(AndroidUtilities.dp(54))
+
+        icon_raw = str(__icon__ or "")
+        if "/" in icon_raw:
+            pack_name, _, idx_str = icon_raw.partition("/")
+            try:
+                pack_idx = int(idx_str)
+            except Exception:
+                pack_idx = 0
+        else:
+            pack_name = icon_raw or "HappyHappyPepe"
+            pack_idx = 0
+
+        def _try_load(img):
+            try:
+                mdc = MediaDataController.getInstance(0)
+                ss = mdc.getStickerSetByName(pack_name) or mdc.getStickerSetByEmojiOrName(pack_name)
+                if ss and ss.documents and ss.documents.size() > 0:
+                    sticker_index = min(pack_idx, ss.documents.size() - 1)
+                    img.setImage(
+                        ImageLocation.getForDocument(ss.documents.get(sticker_index)),
+                        "108_108", None, None, 0, 1,
+                    )
+                    return True
+            except Exception:
+                pass
+            return False
+
+        if not _try_load(image_view):
+            try:
+                MediaDataController.getInstance(0).loadStickersByEmojiOrName(pack_name, False, False)
+                run_on_ui_thread(lambda: _try_load(image_view), 1500)
+            except Exception:
+                pass
+
+        container.addView(
+            image_view,
+            LayoutHelper.createFrame(108, 108, Gravity.CENTER | Gravity.TOP, 0, 20, 0, 0),
+        )
+
+        title = TextView(context)
+        title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+        title.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM))
+        title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
+        title.setText(f"eblanNFT Beta {__version__}")
+        title.setSingleLine(True)
+        title.setGravity(Gravity.CENTER)
+        container.addView(
+            title,
+            LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 50, 145, 50, 0),
+        )
+
+        subtitle = TextView(context)
+        subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+        subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+        subtitle.setText("Бета-канал eblanNFT для exteraGram")
+        subtitle.setGravity(Gravity.CENTER)
+        container.addView(
+            subtitle,
+            LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 60, 180, 60, 27),
+        )
+
+        return container
+    except Exception as e:
+        _bootstrap_log(f"build header err: {e}")
+        return None
+
+
+def _eblannft_install_header_hook(plugin_self):
+    """Hook PluginSettingsActivity.fillItems and prepend our custom header."""
+    try:
+        from base_plugin import MethodHook, hook_filters, HookFilter
+        from hook_utils import find_class, get_private_field
+        import weakref as _wr
+    except Exception as e:
+        _bootstrap_log(f"header hook import err: {e}")
+        return
+
+    try:
+        PSA = find_class("com.exteragram.messenger.plugins.ui.PluginSettingsActivity")
+        if not PSA:
+            return
+        method = PSA.getClass().getDeclaredMethod(
+            "fillItems",
+            find_class("java.util.ArrayList"),
+            find_class("org.telegram.ui.Components.UniversalAdapter"),
+        )
+        method.setAccessible(True)
+    except Exception as e:
+        _bootstrap_log(f"header hook method lookup err: {e}")
+        return
+
+    plugin_ref = _wr.ref(plugin_self)
+
+    class _EblanNftSettingsHeaderHook(MethodHook):
+        @hook_filters(HookFilter.Condition("param.thisObject != null"), HookFilter.ArgumentNotNull(0))
+        def after_hooked_method(self, param):
+            try:
+                activity = param.thisObject
+                items = param.args[0]
+                if not items or items.size() == 0:
+                    return
+                plugin_obj = get_private_field(activity, "plugin")
+                if not plugin_obj or str(plugin_obj.getId()) != "eblannft_beta":
+                    return
+                if get_private_field(activity, "createSubFragmentCallback") is not None:
+                    return
+                if plugin_ref() is None:
+                    return
+                header = _eblannft_build_settings_header(activity.getContext())
+                if header is None:
+                    return
+                from org.telegram.ui.Components import UItem
+                from com.exteragram.messenger.plugins.models import HeaderSetting
+                item = UItem.asCustom(header)
+                item.settingItem = HeaderSetting("eblannft_beta_header")
+                try:
+                    item.setTransparent(True)
+                except Exception:
+                    pass
+                items.add(0, item)
+                items.add(1, UItem.asShadow())
+            except Exception as e:
+                _bootstrap_log(f"header hook err: {e}")
+
+    try:
+        plugin_self._eblannft_header_hook_ref = plugin_self.hook_method(
+            method, _EblanNftSettingsHeaderHook()
+        )
+        _bootstrap_log("settings header hook installed")
+    except Exception as e:
+        _bootstrap_log(f"header hook_method err: {e}")
+
+
+def _patch_runtime_settings_header():
+    """Wrap on_plugin_load on the runtime impl to install the fillItems hook
+    that injects our custom settings header."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original_load = _EblanNftImpl.__dict__.get("on_plugin_load")
+    except Exception as e:
+        _bootstrap_log(f"settings-header lookup failed: {e}")
+        return
+    if original_load is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("on_plugin_load") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original_load = cand
+                break
+    if original_load is None:
+        _bootstrap_log("settings-header: no on_plugin_load found in MRO")
+        return
+    if getattr(original_load, "_eblannft_header_hook_installed", False):
+        return
+
+    def patched_load(self, *a, **kw):
+        try:
+            res = original_load(self, *a, **kw)
+        except Exception as e:
+            _bootstrap_log(f"settings-header on_load original error: {e}")
+            res = None
+        try:
+            _eblannft_install_header_hook(self)
+        except Exception as e:
+            _bootstrap_log(f"settings-header install failed: {e}")
+        return res
+
+    patched_load._eblannft_header_hook_installed = True
+    # Preserve any markers from prior patches so other wrappers don't re-patch.
+    for marker in ("_eblannft_nft_chat_patched", "_eblannft_resume_check_patched"):
+        if getattr(original_load, marker, False):
+            setattr(patched_load, marker, True)
+    try:
+        _EblanNftImpl.on_plugin_load = patched_load
+        _bootstrap_log("on_plugin_load wrapped for settings-header hook")
+    except Exception as e:
+        _bootstrap_log(f"settings-header attribute set failed: {e}")
+
+
+_patch_runtime_settings_header()
+
+
+def _patch_runtime_links_section():
+    """Append a 'Ссылки' Header + Text rows to create_settings, inserted just
+    above the trailing 'О плагине' row added by _patch_runtime_about_relocation."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original_main = _EblanNftImpl.__dict__.get("create_settings")
+    except Exception as e:
+        _bootstrap_log(f"links-section lookup failed: {e}")
+        return
+    if original_main is None:
+        _bootstrap_log("links-section: no create_settings in dict")
+        return
+    if getattr(original_main, "_eblannft_links_added", False):
+        return
+
+    def patched(self, *a, **kw):
+        try:
+            items = list(original_main(self, *a, **kw) or [])
+        except Exception as e:
+            _bootstrap_log(f"links-section base build failed: {e}")
+            return []
+        try:
+            from ui.settings import Header, Text, Divider
+        except Exception as e:
+            _bootstrap_log(f"links-section ui.settings import failed: {e}")
+            return items
+
+        try:
+            insert_at = len(items)
+            for i in range(len(items) - 1, -1, -1):
+                if type(items[i]).__name__ == "Text" and "плагине" in str(getattr(items[i], "text", "")).lower():
+                    insert_at = i
+                    while insert_at > 0 and type(items[insert_at - 1]).__name__ == "Divider":
+                        insert_at -= 1
+                    break
+
+            link_rows = [Header(text="Ссылки")]
+            for label, icon, url in _EBLANNFT_BETA_LINKS:
+                link_rows.append(Text(
+                    text=label,
+                    icon=icon,
+                    on_click=(lambda _u: lambda _: _eblannft_open_url(_u))(url),
+                ))
+            link_rows.append(Divider())
+
+            for offset, row in enumerate(link_rows):
+                items.insert(insert_at + offset, row)
+            _bootstrap_log(f"links-section: {len(link_rows)} rows inserted at {insert_at}")
+        except Exception as e:
+            _bootstrap_log(f"links-section build/insert failed: {e}")
+        return items
+
+    patched._eblannft_links_added = True
+    # Preserve the about-moved marker so the relocation patch is not re-run.
+    if getattr(original_main, "_eblannft_about_moved", False):
+        patched._eblannft_about_moved = True
+    try:
+        _EblanNftImpl.create_settings = patched
+        _bootstrap_log("create_settings wrapped: Ссылки section appended")
+    except Exception as e:
+        _bootstrap_log(f"links-section attribute set failed: {e}")
+
+
+_patch_runtime_links_section()
+
+
 def _patch_runtime_nft_to_chat():
     """Add 'NFT в чат' to the chat 'three-dots → My Plugins' menu.
 
