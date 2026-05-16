@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.92"
+__version__ = "1.0.93"
 __icon__ = "HappyHappyPepe/31"
 
 
@@ -1074,6 +1074,231 @@ def _eblannft_build_settings_header(context):
         return None
 
 
+def _eblannft_read_profile_stats(plugin_self):
+    """Best-effort read of {username, number, rating} from the runtime instance.
+    Falls back to placeholders if helpers are missing."""
+    out = {
+        "username_active": False, "username_value": "выкл",
+        "number_active":   False, "number_value":   "выкл",
+        "rating":          "—",
+    }
+    if plugin_self is None:
+        return out
+    try:
+        active = bool(plugin_self._is_nft_username_active())
+        out["username_active"] = active
+        if active:
+            try:
+                out["username_value"] = str(plugin_self._display_nft_username() or "—")
+            except Exception:
+                out["username_value"] = "вкл"
+    except Exception:
+        pass
+    try:
+        active = bool(plugin_self._is_nft_number_active())
+        out["number_active"] = active
+        if active:
+            try:
+                out["number_value"] = str(plugin_self._display_nft_number() or "—")
+            except Exception:
+                out["number_value"] = "вкл"
+    except Exception:
+        pass
+    try:
+        out["rating"] = str(plugin_self._get_local_rating_label() or "—")
+    except Exception:
+        pass
+    return out
+
+
+def _eblannft_build_status_card(context, plugin_self):
+    """Translatica-style horizontal quick-stats strip: three columns
+    (Username / Number / Рейтинг) with icon, label and value. Read-only."""
+    try:
+        from android.widget import FrameLayout, TextView, LinearLayout, ImageView
+        from android.view import Gravity, View, ViewOutlineProvider
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
+        from org.telegram.ui.ActionBar import Theme
+    except Exception as e:
+        _bootstrap_log(f"status import err: {e}")
+        return None
+
+    try:
+        compact = False
+        try:
+            dm = context.getResources().getDisplayMetrics()
+            screen_w_dp = float(dm.widthPixels) / float(dm.density or 1.0)
+            font_scale = float(getattr(context.getResources().getConfiguration(), "fontScale", 1.0) or 1.0)
+            compact = bool(screen_w_dp < 372.0 or font_scale > 1.08)
+        except Exception:
+            compact = False
+
+        try:
+            is_dark = bool(Theme.isCurrentThemeDark())
+        except Exception:
+            is_dark = True
+
+        try:
+            text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+            card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+        except Exception:
+            text_color = _eblannft_jint(0xFFF8FAFC if is_dark else 0xFF111827)
+            sub_color = _eblannft_jint(0xFFAAB7CF if is_dark else 0xFF6B7280)
+            card_color = _eblannft_jint(0xFF182336 if is_dark else 0xFFF8FAFC)
+        accent = _eblannft_jint(0xFF8B5CF6)
+        accent_soft = _eblannft_jint(0x148B5CF6 if is_dark else 0x108B5CF6)
+        accent_off = _eblannft_jint(0x33515B70 if is_dark else 0x14000000)
+
+        stats = _eblannft_read_profile_stats(plugin_self)
+
+        outer = LinearLayout(context)
+        outer.setOrientation(LinearLayout.VERTICAL)
+        try:
+            outer.setPadding(
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(0),
+                AndroidUtilities.dp(16),
+                AndroidUtilities.dp(8),
+            )
+        except Exception:
+            pass
+
+        card = LinearLayout(context)
+        card.setOrientation(LinearLayout.HORIZONTAL)
+        card.setGravity(Gravity.CENTER_VERTICAL)
+        try:
+            bg = GradientDrawable()
+            bg.setCornerRadius(float(AndroidUtilities.dp(22)))
+            bg.setColor(card_color)
+            card.setBackground(bg)
+            card.setClipToOutline(True)
+            card.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        except Exception:
+            pass
+        try:
+            card.setPadding(
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(14),
+                AndroidUtilities.dp(12),
+                AndroidUtilities.dp(14),
+            )
+        except Exception:
+            pass
+
+        def _make_column(icon_name, label, value, is_on):
+            col = LinearLayout(context)
+            col.setOrientation(LinearLayout.VERTICAL)
+            col.setGravity(Gravity.CENTER_HORIZONTAL)
+
+            icon_wrap = FrameLayout(context)
+            try:
+                ic_bg = GradientDrawable()
+                ic_bg.setCornerRadius(float(AndroidUtilities.dp(14)))
+                ic_bg.setColor(accent_soft if is_on else accent_off)
+                icon_wrap.setBackground(ic_bg)
+            except Exception:
+                pass
+
+            icon = ImageView(context)
+            try:
+                icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+                rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                    str(icon_name or ""),
+                    "drawable",
+                    ApplicationLoader.applicationContext.getPackageName(),
+                )
+                if rid:
+                    icon.setImageResource(rid)
+                    icon.setColorFilter(accent if is_on else sub_color)
+            except Exception:
+                pass
+            icon_wrap.addView(
+                icon,
+                FrameLayout.LayoutParams(
+                    AndroidUtilities.dp(16),
+                    AndroidUtilities.dp(16),
+                    Gravity.CENTER,
+                ),
+            )
+            col.addView(
+                icon_wrap,
+                LinearLayout.LayoutParams(
+                    AndroidUtilities.dp(32),
+                    AndroidUtilities.dp(32),
+                ),
+            )
+
+            label_tv = TextView(context)
+            label_tv.setText(str(label))
+            label_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11)
+            try:
+                label_tv.setTextColor(sub_color)
+            except Exception:
+                pass
+            label_tv.setGravity(Gravity.CENTER)
+            try:
+                label_tv.setPadding(0, AndroidUtilities.dp(8), 0, 0)
+            except Exception:
+                pass
+            col.addView(label_tv)
+
+            value_tv = TextView(context)
+            value_tv.setText(str(value))
+            value_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13 if not compact else 12)
+            try:
+                value_tv.setTextColor(text_color if is_on else sub_color)
+            except Exception:
+                pass
+            try:
+                value_tv.setTypeface(value_tv.getTypeface(), 1)
+            except Exception:
+                pass
+            value_tv.setGravity(Gravity.CENTER)
+            value_tv.setSingleLine(True)
+            try:
+                value_tv.setEllipsize(__import__("android.text", fromlist=["TextUtils"]).TextUtils.TruncateAt.END)
+            except Exception:
+                pass
+            try:
+                value_tv.setPadding(AndroidUtilities.dp(4), AndroidUtilities.dp(3), AndroidUtilities.dp(4), 0)
+            except Exception:
+                pass
+            col.addView(
+                value_tv,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            return col
+
+        cols = [
+            ("msg_edit",       "Username",  stats["username_value"], stats["username_active"]),
+            ("msg_link",       "Number",    stats["number_value"],   stats["number_active"]),
+            ("msg_stats_solar","Рейтинг",   stats["rating"],         stats["rating"] not in ("—", "Выкл", "выкл", "Off")),
+        ]
+        for i, (icon_name, label, value, is_on) in enumerate(cols):
+            lp_col = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0)
+            if i > 0:
+                lp_col.leftMargin = AndroidUtilities.dp(4)
+            card.addView(_make_column(icon_name, label, value, is_on), lp_col)
+
+        outer.addView(
+            card,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        return outer
+    except Exception as e:
+        _bootstrap_log(f"build status err: {e}")
+        return None
+
+
 def _eblannft_install_header_hook(plugin_self):
     """Hook PluginSettingsActivity.fillItems and prepend our custom header."""
     try:
@@ -1140,6 +1365,28 @@ def _eblannft_install_header_hook(plugin_self):
                     pass
                 items.add(0, item)
                 items.add(1, UItem.asShadow())
+
+                # Status card (Username / Number / Rating) right under header.
+                try:
+                    status_view = _eblannft_build_status_card(activity.getContext(), plugin_ref())
+                    if status_view is not None:
+                        status_item = UItem.asCustom(status_view)
+                        try:
+                            status_item.settingItem = HeaderSetting("eblannft_beta_status")
+                        except Exception:
+                            pass
+                        try:
+                            status_item.object2 = "__eblannft_beta_status__"
+                        except Exception:
+                            pass
+                        try:
+                            status_item.setTransparent(True)
+                        except Exception:
+                            pass
+                        items.add(2, status_item)
+                        items.add(3, UItem.asShadow())
+                except Exception as e:
+                    _bootstrap_log(f"status card inject err: {e}")
             except Exception as e:
                 _bootstrap_log(f"header hook err: {e}")
 
