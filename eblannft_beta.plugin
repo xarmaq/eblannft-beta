@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -917,7 +917,10 @@ def _eblannft_jint(value):
         return int(value)
 
 
-def _eblannft_resolve_icon_pack():
+def _eblannft_resolve_icon_pack(random_pick=False):
+    """Return (pack_name, pack_idx). When random_pick is True, picks a
+    random index from the HappyHappyPepe set instead of using __icon__'s
+    default — feels alive: every settings-screen open gets a fresh sticker."""
     icon_raw = str(__icon__ or "")
     if "/" in icon_raw:
         pack_name, _, idx_str = icon_raw.partition("/")
@@ -928,10 +931,18 @@ def _eblannft_resolve_icon_pack():
     else:
         pack_name = icon_raw or "HappyHappyPepe"
         pack_idx = 0
+    if random_pick:
+        try:
+            import random
+            # 32 is roughly the upper bound for HappyHappyPepe; _try_load
+            # clamps anyway if out of range.
+            pack_idx = random.randint(0, 31)
+        except Exception:
+            pass
     return pack_name or "HappyHappyPepe", pack_idx
 
 
-def _eblannft_build_settings_header(context):
+def _eblannft_build_settings_header(context, plugin_self=None):
     """Translatica-style hero card: rounded panel, sticker avatar on the
     left, title/subtitle/version stacked on the right. Theme-aware."""
     try:
@@ -1005,7 +1016,19 @@ def _eblannft_build_settings_header(context):
                 hero_bg.setColors([card_color, tinted])
             except Exception:
                 hero_bg.setColor(card_color)
-            hero.setBackground(hero_bg)
+            # Compose: dot pattern overlay on top of the tonal gradient.
+            try:
+                from android.graphics.drawable import LayerDrawable
+                dots = _eblannft_make_dot_pattern_drawable(
+                    0x22C55E, dot_alpha=22, dot_radius_dp=1, spacing_dp=14
+                )
+                if dots is not None:
+                    layer = LayerDrawable([hero_bg, dots])
+                    hero.setBackground(layer)
+                else:
+                    hero.setBackground(hero_bg)
+            except Exception:
+                hero.setBackground(hero_bg)
             hero.setClipToOutline(True)
             hero.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
         except Exception:
@@ -1038,7 +1061,7 @@ def _eblannft_build_settings_header(context):
         except Exception:
             pass
 
-        pack_name, pack_idx = _eblannft_resolve_icon_pack()
+        pack_name, pack_idx = _eblannft_resolve_icon_pack(random_pick=True)
 
         def _try_load(img):
             try:
@@ -1096,8 +1119,108 @@ def _eblannft_build_settings_header(context):
                     return False
             avatar.setOnTouchListener(_AvatarBounceTouch())
             avatar.setClickable(True)
+
+            # Tap → reload sticker with a fresh random index (every tap
+            # gets a different Pepe). Long-press → secret debug sheet.
+            try:
+                from android_utils import OnClickListener as _OnClick, OnLongClickListener as _OnLong
+                def _on_tap(view):
+                    try:
+                        new_pack, new_idx = _eblannft_resolve_icon_pack(random_pick=True)
+                        def _reload(img, idx=new_idx, pack=new_pack):
+                            try:
+                                mdc = MediaDataController.getInstance(0)
+                                ss = mdc.getStickerSetByName(pack) or mdc.getStickerSetByEmojiOrName(pack)
+                                if ss and ss.documents and ss.documents.size() > 0:
+                                    si = min(idx, ss.documents.size() - 1)
+                                    img.setImage(
+                                        ImageLocation.getForDocument(ss.documents.get(si)),
+                                        f"{avatar_size_dp}_{avatar_size_dp}", None, None, 0, 1,
+                                    )
+                            except Exception:
+                                pass
+                        _reload(avatar)
+                    except Exception:
+                        pass
+                avatar.setOnClickListener(_OnClick(_on_tap))
+
+                def _on_long(view):
+                    try:
+                        _eblannft_show_debug_sheet(context, plugin_self)
+                    except Exception as e:
+                        _bootstrap_log(f"debug sheet open err: {e}")
+                    return True
+                avatar.setOnLongClickListener(_OnLong(_on_long))
+            except Exception as _ce:
+                _bootstrap_log(f"avatar click/long-click err: {_ce}")
         except Exception as e:
             _bootstrap_log(f"avatar bounce setup err: {e}")
+
+        # Small user avatar tucked into the bottom-right of the sticker
+        # — makes the header feel personal instead of generic. Uses
+        # the avatar of the currently selected Telegram account.
+        try:
+            from org.telegram.ui.Components import AvatarDrawable
+            from org.telegram.messenger import UserConfig
+            user_avatar_size_dp = 24
+            user_avatar = BackupImageView(context)
+            try:
+                user_avatar.setRoundRadius(AndroidUtilities.dp(user_avatar_size_dp // 2))
+            except Exception:
+                pass
+            try:
+                me = UserConfig.getInstance(int(UserConfig.selectedAccount)).getCurrentUser()
+                if me is not None:
+                    ad = AvatarDrawable()
+                    try:
+                        ad.setInfo(int(UserConfig.selectedAccount), me)
+                    except Exception:
+                        try:
+                            ad.setInfo(me)
+                        except Exception:
+                            pass
+                    try:
+                        user_avatar.setForUserOrChat(me, ad)
+                    except Exception:
+                        try:
+                            from org.telegram.messenger import ImageLocation as _IL
+                            loc = _IL.getForUserOrChat(me, _IL.TYPE_SMALL)
+                            user_avatar.setImage(loc, "50_50", ad, me)
+                        except Exception:
+                            pass
+                    # White ring around the user avatar to lift it off the
+                    # sticker visually.
+                    try:
+                        ring = GradientDrawable()
+                        ring.setShape(GradientDrawable.OVAL)
+                        ring.setColor(card_color)
+                        ring.setStroke(AndroidUtilities.dp(2), accent)
+                        wrap = FrameLayout(context)
+                        wrap.setBackground(ring)
+                        wrap.addView(
+                            user_avatar,
+                            FrameLayout.LayoutParams(
+                                AndroidUtilities.dp(user_avatar_size_dp),
+                                AndroidUtilities.dp(user_avatar_size_dp),
+                                Gravity.CENTER,
+                            ),
+                        )
+                        wrap.setClipToOutline(True)
+                        wrap.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+                        avatar_wrap.addView(
+                            wrap,
+                            FrameLayout.LayoutParams(
+                                AndroidUtilities.dp(user_avatar_size_dp + 4),
+                                AndroidUtilities.dp(user_avatar_size_dp + 4),
+                                Gravity.BOTTOM | Gravity.END,
+                            ),
+                        )
+                    except Exception as _re:
+                        _bootstrap_log(f"user avatar ring err: {_re}")
+            except Exception as _ue:
+                _bootstrap_log(f"user avatar pick err: {_ue}")
+        except Exception as e:
+            _bootstrap_log(f"user avatar setup err: {e}")
 
         hero.addView(
             avatar_wrap,
@@ -1194,6 +1317,192 @@ def _eblannft_build_settings_header(context):
     except Exception as e:
         _bootstrap_log(f"build header err: {e}")
         return None
+
+
+def _eblannft_make_dot_pattern_drawable(accent_argb, dot_alpha=20, dot_radius_dp=2, spacing_dp=16):
+    """Returns a layered Drawable: subtle accent-coloured dot grid for
+    use as a decorative background under hero cards. Renders via a
+    PaintDrawable subclass through dynamic_proxy; if anything fails
+    returns None and the caller skips the overlay."""
+    try:
+        from android.graphics.drawable import Drawable
+        from android.graphics import Paint, Canvas, Color
+        from java import dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities
+    except Exception:
+        return None
+    try:
+        spacing = AndroidUtilities.dp(spacing_dp)
+        radius = float(AndroidUtilities.dp(dot_radius_dp))
+        paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        # Apply alpha to the accent color.
+        try:
+            r = (accent_argb >> 16) & 0xFF
+            g = (accent_argb >> 8) & 0xFF
+            b = accent_argb & 0xFF
+            paint.setColor(Color.argb(int(dot_alpha), r, g, b))
+        except Exception:
+            paint.setColor(_eblannft_jint(accent_argb))
+        class _DotPattern(dynamic_proxy(Drawable)):
+            def draw(self_obj, canvas):
+                try:
+                    bounds = self_obj.getBounds()
+                    left = bounds.left
+                    top = bounds.top
+                    right = bounds.right
+                    bottom = bounds.bottom
+                    x = left + spacing // 2
+                    while x < right:
+                        y = top + spacing // 2
+                        while y < bottom:
+                            canvas.drawCircle(float(x), float(y), radius, paint)
+                            y += spacing
+                        x += spacing
+                except Exception:
+                    pass
+            def setAlpha(self_obj, alpha):
+                try:
+                    paint.setAlpha(int(alpha))
+                except Exception:
+                    pass
+            def setColorFilter(self_obj, cf):
+                try:
+                    paint.setColorFilter(cf)
+                except Exception:
+                    pass
+            def getOpacity(self_obj):
+                try:
+                    from android.graphics import PixelFormat
+                    return PixelFormat.TRANSLUCENT
+                except Exception:
+                    return -3  # PixelFormat.TRANSLUCENT
+        return _DotPattern()
+    except Exception as e:
+        _bootstrap_log(f"dot pattern err: {e}")
+        return None
+
+
+def _eblannft_show_debug_sheet(context, plugin_self):
+    """Hidden long-press-on-sticker debug menu. Shows runtime info that's
+    useful when something's wrong — version + paths + last apply marker
+    + last update check + a button to force a manifest re-fetch."""
+    try:
+        from org.telegram.ui.ActionBar import BottomSheet, Theme
+        from android.widget import LinearLayout, TextView, ScrollView
+        from android.view import Gravity
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
+        from android.view import View
+        from org.telegram.messenger import AndroidUtilities
+    except Exception as e:
+        _bootstrap_log(f"debug sheet imports err: {e}")
+        return
+
+    try:
+        is_dark = bool(Theme.isCurrentThemeDark())
+    except Exception:
+        is_dark = True
+    text_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextBlack))
+    sub_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextGray3))
+    card_color = _eblannft_jint(Theme.getColor(Theme.key_dialogBackground))
+    accent = _eblannft_jint(0xFF22C55E)
+
+    try:
+        sheet = BottomSheet(context, False)
+    except Exception:
+        return
+
+    root = LinearLayout(context)
+    root.setOrientation(LinearLayout.VERTICAL)
+    try:
+        root.setPadding(
+            AndroidUtilities.dp(20), AndroidUtilities.dp(20),
+            AndroidUtilities.dp(20), AndroidUtilities.dp(16),
+        )
+    except Exception:
+        pass
+
+    title = TextView(context)
+    title.setText("🛠 Debug eblanNFT Beta")
+    title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18)
+    try:
+        title.setTextColor(text_color)
+        title.setTypeface(title.getTypeface(), 1)
+    except Exception:
+        pass
+    root.addView(title)
+
+    last_check = _eblannft_humanize_last_check() or "никогда"
+    try:
+        wrapper_path = _wrapper_file_path() or "?"
+    except Exception:
+        wrapper_path = "?"
+    try:
+        runtime_root = _RUNTIME_INSTALL_ROOT or "?"
+    except Exception:
+        runtime_root = "?"
+    try:
+        plugin_id = str(plugin_self.getId()) if plugin_self else "?"
+    except Exception:
+        plugin_id = "?"
+
+    lines = [
+        f"version: {__version__}",
+        f"id: {plugin_id}",
+        f"wrapper: {wrapper_path}",
+        f"runtime: {runtime_root}",
+        f"last check: {last_check}",
+    ]
+    body = TextView(context)
+    body.setText("\n".join(lines))
+    body.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+    try:
+        body.setTextColor(sub_color)
+        body.setPadding(0, AndroidUtilities.dp(12), 0, 0)
+        body.setLineSpacing(0.0, 1.3)
+    except Exception:
+        pass
+    root.addView(body)
+
+    btn = TextView(context)
+    btn.setText("Принудительно проверить обновления")
+    btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14)
+    try:
+        btn.setTextColor(_eblannft_jint(0xFFFFFFFF))
+        btn.setGravity(Gravity.CENTER)
+        bg = GradientDrawable()
+        bg.setCornerRadius(float(AndroidUtilities.dp(20)))
+        bg.setColor(accent)
+        btn.setBackground(bg)
+        btn.setPadding(
+            AndroidUtilities.dp(16), AndroidUtilities.dp(12),
+            AndroidUtilities.dp(16), AndroidUtilities.dp(12),
+        )
+        btn.setClickable(True)
+        btn.setFocusable(True)
+        lp_btn = LinearLayout.LayoutParams(-1, -2)
+        lp_btn.topMargin = AndroidUtilities.dp(20)
+        root.addView(btn, lp_btn)
+        class _BtnTap(dynamic_proxy(View.OnClickListener)):
+            def onClick(self_obj, v):
+                try:
+                    sheet.dismiss()
+                except Exception:
+                    pass
+                try:
+                    _check_for_update_interactive()
+                except Exception as e:
+                    _bootstrap_log(f"debug force-check err: {e}")
+        btn.setOnClickListener(_BtnTap())
+    except Exception:
+        pass
+
+    try:
+        sheet.setCustomView(root)
+        sheet.show()
+    except Exception as e:
+        _bootstrap_log(f"debug sheet show err: {e}")
 
 
 def _eblannft_animate_cascade_in(view, delay_ms=0):
@@ -1682,10 +1991,10 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             except Exception:
                 count_int = 0
             if count_int > 0:
-                badge_text = str(count_int if count_int < 10 else "9+")
+                final_text = str(count_int if count_int < 10 else "9+")
                 badge_tv = TextView(context)
                 try:
-                    badge_tv.setText(badge_text)
+                    badge_tv.setText("0")
                     badge_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9)
                     badge_tv.setTextColor(_eblannft_jint(0xFFFFFFFF))
                     badge_tv.setGravity(Gravity.CENTER)
@@ -1713,6 +2022,38 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
                 except Exception:
                     pass
                 col_root.addView(badge_tv, lp_badge)
+
+                # Counter-up animation: tick from 0 → count_int over
+                # ~600ms with a simple Handler-driven loop. Last frame
+                # locks in the canonical "N" or "9+" text.
+                try:
+                    from android.os import Handler, Looper
+                    h = Handler(Looper.getMainLooper())
+                    duration_ms = 600
+                    frames = 14
+                    step_ms = max(20, duration_ms // frames)
+                    state = {"tick": 0}
+                    def _bump():
+                        try:
+                            state["tick"] += 1
+                            t = state["tick"]
+                            if t >= frames:
+                                badge_tv.setText(final_text)
+                                # Tiny pop at the end for emphasis.
+                                badge_tv.setScaleX(0.5)
+                                badge_tv.setScaleY(0.5)
+                                badge_tv.animate().scaleX(1.0).scaleY(1.0).setDuration(180).start()
+                                return
+                            frac = float(t) / float(frames)
+                            ease = 1.0 - (1.0 - frac) * (1.0 - frac)  # easeOutQuad
+                            shown = int(round(ease * count_int))
+                            badge_tv.setText(str(shown if shown < 10 else "9+"))
+                            h.postDelayed(_bump, step_ms)
+                        except Exception:
+                            pass
+                    h.postDelayed(_bump, 300)  # start after the cascade entrance
+                except Exception:
+                    badge_tv.setText(final_text)
             elif callback is not None:
                 chevron = ImageView(context)
                 try:
@@ -1746,6 +2087,29 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
                         def onClick(self_obj, v):
                             _safe_call(callback)
                     col_root.setOnClickListener(_ColClick())
+                except Exception:
+                    pass
+                # MD3 hover/press: column shrinks slightly + lifts (elevation)
+                # while finger is down. Combined with the existing
+                # RippleDrawable it gives a tactile press feel.
+                try:
+                    from android.view import MotionEvent as _ME
+                    class _ColHover(dynamic_proxy(View.OnTouchListener)):
+                        def onTouch(self_obj, v, event):
+                            try:
+                                a = event.getAction()
+                                if a == _ME.ACTION_DOWN:
+                                    v.animate().scaleX(0.96).scaleY(0.96) \
+                                        .translationZ(float(AndroidUtilities.dp(2))) \
+                                        .setDuration(120).start()
+                                elif a == _ME.ACTION_UP or a == _ME.ACTION_CANCEL:
+                                    v.animate().scaleX(1.0).scaleY(1.0) \
+                                        .translationZ(0.0) \
+                                        .setDuration(180).start()
+                            except Exception:
+                                pass
+                            return False
+                    col_root.setOnTouchListener(_ColHover())
                 except Exception:
                     pass
 
@@ -1925,7 +2289,7 @@ def _eblannft_build_footer_card(context, plugin_self):
             except Exception:
                 pass
 
-        def _make_chip(icon_name, label, callback):
+        def _make_chip(icon_name, label, callback, label_holder=None):
             chip = LinearLayout(context)
             chip.setOrientation(LinearLayout.HORIZONTAL)
             chip.setGravity(Gravity.CENTER_VERTICAL)
@@ -2007,6 +2371,9 @@ def _eblannft_build_footer_card(context, plugin_self):
                 label_tv.setTypeface(label_tv.getTypeface(), 1)
             except Exception:
                 pass
+            if isinstance(label_holder, dict):
+                label_holder["tv"] = label_tv
+                label_holder["original"] = str(label)
             lp_lbl = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -2028,8 +2395,109 @@ def _eblannft_build_footer_card(context, plugin_self):
         chip_row.setOrientation(LinearLayout.HORIZONTAL)
         chip_row.setGravity(Gravity.CENTER_HORIZONTAL)
 
-        upd_chip = _make_chip("msg_download", "Апдейт", _call_check_update)
-        cache_chip = _make_chip("msg_delete",   "Кэш",    _call_clear_cache)
+        # Track per-chip tap counts in plugin settings. "Favourite actions
+        # to the top": the more-tapped chip floats to the left position.
+        try:
+            upd_count = int(plugin_self.get_setting("eblannft_chip_taps_upd", 0) or 0) if plugin_self else 0
+            cache_count = int(plugin_self.get_setting("eblannft_chip_taps_cache", 0) or 0) if plugin_self else 0
+        except Exception:
+            upd_count = cache_count = 0
+
+        def _bump_taps(key):
+            try:
+                if plugin_self:
+                    cur = int(plugin_self.get_setting(key, 0) or 0)
+                    plugin_self.set_setting(key, cur + 1)
+            except Exception:
+                pass
+
+        # Apply "shutter" animation to the Апдейт chip's label while
+        # the check is in flight: text rotates "Проверяю.", "Проверяю..",
+        # "Проверяю..." in a Handler-driven loop and resets when done.
+        upd_label_ref = {"tv": None, "original": "Апдейт", "stop": False}
+
+        def _start_upd_animation():
+            try:
+                tv = upd_label_ref.get("tv")
+                if tv is None:
+                    return
+                upd_label_ref["stop"] = False
+                from android.os import Handler, Looper
+                h = Handler(Looper.getMainLooper())
+                state = {"dots": 0}
+                def _tick():
+                    try:
+                        if upd_label_ref.get("stop"):
+                            tv.setText(upd_label_ref.get("original", "Апдейт"))
+                            return
+                        state["dots"] = (state["dots"] + 1) % 4
+                        tv.setText("Проверяю" + ("." * state["dots"]))
+                        h.postDelayed(_tick, 380)
+                    except Exception:
+                        pass
+                _tick()
+                # Auto-stop after 8s no matter what (safety).
+                h.postDelayed(lambda: upd_label_ref.update(stop=True) or tv.setText(upd_label_ref.get("original", "Апдейт")), 8000)
+            except Exception as e:
+                _bootstrap_log(f"upd anim err: {e}")
+
+        def _on_upd_tap():
+            _bump_taps("eblannft_chip_taps_upd")
+            _start_upd_animation()
+            _call_check_update()
+
+        def _on_cache_tap():
+            _bump_taps("eblannft_chip_taps_cache")
+            _call_clear_cache()
+
+        upd_chip = _make_chip("msg_download", "Апдейт", _on_upd_tap, label_holder=upd_label_ref)
+        cache_chip = _make_chip("msg_delete",   "Кэш",    _on_cache_tap)
+
+        # New-version dot on the Апдейт chip if remote manifest reports a
+        # different version than ours. Best-effort — silent if it fails.
+        try:
+            cached_manifest = None
+            if _manifest_cache is not None:
+                try:
+                    cached_manifest = _manifest_cache.get("default")
+                except Exception:
+                    cached_manifest = None
+            if cached_manifest is not None:
+                remote_v = str(cached_manifest.get("version") or "")
+                if remote_v and _is_remote_different(remote_v):
+                    dot = View(context)
+                    try:
+                        dbg = GradientDrawable()
+                        dbg.setShape(GradientDrawable.OVAL)
+                        dbg.setColor(_eblannft_jint(0xFFEF4444))  # red
+                        dot.setBackground(dbg)
+                    except Exception:
+                        pass
+                    # Wrap upd_chip in a FrameLayout so the dot can sit
+                    # absolute-positioned in its top-right.
+                    upd_wrap = FrameLayout(context)
+                    upd_wrap.addView(
+                        upd_chip,
+                        FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                        ),
+                    )
+                    lp_dot = FrameLayout.LayoutParams(
+                        AndroidUtilities.dp(8),
+                        AndroidUtilities.dp(8),
+                        Gravity.TOP | Gravity.END,
+                    )
+                    try:
+                        lp_dot.topMargin = AndroidUtilities.dp(2)
+                        lp_dot.rightMargin = AndroidUtilities.dp(2)
+                    except Exception:
+                        pass
+                    upd_wrap.addView(dot, lp_dot)
+                    upd_chip = upd_wrap  # use the wrapped version for layout
+        except Exception as _de:
+            _bootstrap_log(f"new-version dot err: {_de}")
+
         lp_upd = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -2039,8 +2507,13 @@ def _eblannft_build_footer_card(context, plugin_self):
             LinearLayout.LayoutParams.WRAP_CONTENT,
         )
         lp_cache.leftMargin = AndroidUtilities.dp(10)
-        chip_row.addView(upd_chip, lp_upd)
-        chip_row.addView(cache_chip, lp_cache)
+        # Favourite actions: whichever chip has more taps goes first.
+        if cache_count > upd_count:
+            chip_row.addView(cache_chip, lp_upd)
+            chip_row.addView(upd_chip, lp_cache)
+        else:
+            chip_row.addView(upd_chip, lp_upd)
+            chip_row.addView(cache_chip, lp_cache)
         outer.addView(
             chip_row,
             LinearLayout.LayoutParams(
@@ -2152,7 +2625,7 @@ def _eblannft_install_header_hook(plugin_self):
                     pass
                 if plugin_ref() is None:
                     return
-                header = _eblannft_build_settings_header(activity.getContext())
+                header = _eblannft_build_settings_header(activity.getContext(), plugin_ref())
                 if header is None:
                     return
                 from org.telegram.ui.Components import UItem
@@ -2169,6 +2642,42 @@ def _eblannft_install_header_hook(plugin_self):
                     pass
                 items.add(0, item)
                 items.add(1, UItem.asShadow())
+
+                # Parallax: when the user scrolls the list down, fade and
+                # collapse the header. Hooks into the activity's listView
+                # via get_private_field — bail silently if the field isn't
+                # present in this exteraGram build.
+                try:
+                    listView = get_private_field(activity, "listView")
+                    if listView is not None:
+                        header_view_ref = [header]
+                        from java import dynamic_proxy as _dp_para
+                        rv_cls = find_class("androidx.recyclerview.widget.RecyclerView")
+                        if rv_cls is not None:
+                            scroll_cls = find_class("androidx.recyclerview.widget.RecyclerView$OnScrollListener")
+                            if scroll_cls is not None:
+                                class _ParallaxScroll(_dp_para(scroll_cls)):
+                                    def onScrolled(self_obj, recycler, dx, dy):
+                                        try:
+                                            hv = header_view_ref[0]
+                                            offset = recycler.computeVerticalScrollOffset() or 0
+                                            # Fade out across 200px scroll, scale 1.0 → 0.92.
+                                            frac = max(0.0, min(1.0, float(offset) / 240.0))
+                                            hv.setAlpha(float(1.0 - frac * 0.85))
+                                            scale = float(1.0 - frac * 0.08)
+                                            hv.setScaleX(scale)
+                                            hv.setScaleY(scale)
+                                            hv.setTranslationY(float(-offset * 0.35))
+                                        except Exception:
+                                            pass
+                                    def onScrollStateChanged(self_obj, recycler, newState):
+                                        pass
+                                try:
+                                    listView.addOnScrollListener(_ParallaxScroll())
+                                except Exception as _se:
+                                    _bootstrap_log(f"parallax attach err: {_se}")
+                except Exception as _pe:
+                    _bootstrap_log(f"parallax setup err: {_pe}")
 
                 # Status card (Username / Number / Rating) right under header.
                 next_idx = 2
