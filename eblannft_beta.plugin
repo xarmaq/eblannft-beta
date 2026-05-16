@@ -26,8 +26,9 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.94"
+__version__ = "1.0.95"
 __icon__ = "HappyHappyPepe/31"
+__requirements__ = "requests, packaging, cachetools, humanize, pillow"
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +48,13 @@ _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/sync_client.py",
     f"{_RUNTIME_PACKAGE_NAME}/legacy_gifts.py",
 )
+# Names by which the wrapper file may appear in update manifests. The very
+# old prod manifest used "eblannft.plugin"; beta builds use
+# "eblannft_beta.plugin". Both must resolve to the *currently loaded*
+# wrapper file on disk, otherwise the wrapper itself never gets updated
+# and the install loops the popup forever.
+_WRAPPER_MANIFEST_NAMES = ("eblannft_beta.plugin", "eblannft.plugin")
+_WRAPPER_DEFAULT_NAME = "eblannft_beta.plugin"
 _DOWNLOAD_TIMEOUT_SEC = 35
 
 _UPDATE_MANIFEST_PATH = "eblannft_beta_update.json"
@@ -349,21 +357,51 @@ def _pick_writable_install_root():
 
 
 def _http_get(url, timeout=None, progress_cb=None):
-    """Blocking GET. Returns (bytes_payload, total_bytes_hint)."""
-    from urllib.request import Request, urlopen
-    req = Request(
-        url,
-        headers={
-            "User-Agent": f"eblannft-bootstrap/{__version__}",
-            "Accept": "*/*",
-            "Cache-Control": "no-cache",
-        },
-    )
+    """Blocking GET. Returns (bytes_payload, total_bytes_hint).
+
+    Prefers the `requests` library (installed via __requirements__) for nicer
+    retry/SSL handling; falls back to stdlib urllib if requests isn't
+    importable yet (first cold-launch before Chaquopy finishes pip-install)."""
+    headers = {
+        "User-Agent": f"eblannft-bootstrap/{__version__}",
+        "Accept": "*/*",
+        "Cache-Control": "no-cache",
+    }
     timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
-    # Keep chunk size small so the progress bar gets enough updates even on
-    # tiny files (the 38 KB wrapper used to fit in a single 64 KB chunk and
-    # the bar jumped 0% → 100% with no fill animation in between).
     chunk_size = 4096
+
+    try:
+        import requests as _req
+    except Exception:
+        _req = None
+
+    if _req is not None:
+        try:
+            with _req.get(url, headers=headers, timeout=timeout, stream=True) as r:
+                r.raise_for_status()
+                try:
+                    total = int(r.headers.get("Content-Length", "0") or 0)
+                except Exception:
+                    total = 0
+                chunks = []
+                loaded = 0
+                for chunk in r.iter_content(chunk_size=chunk_size):
+                    if not chunk:
+                        continue
+                    chunks.append(chunk)
+                    loaded += len(chunk)
+                    if callable(progress_cb):
+                        try:
+                            progress_cb(loaded, total)
+                        except Exception:
+                            pass
+            data = b"".join(chunks)
+            return data, (total or len(data))
+        except Exception as e:
+            _bootstrap_log(f"requests get failed, falling back to urllib: {e}")
+
+    from urllib.request import Request, urlopen
+    req = Request(url, headers=headers)
     with urlopen(req, timeout=timeout) as resp:
         try:
             total = int(resp.headers.get("Content-Length", "0") or 0)
@@ -2758,6 +2796,8 @@ _patch_runtime_welcome_text_walker()
 
 
 def _version_tuple(version_str):
+    """Legacy 4-digit numeric tuple parser, kept as a fallback for when
+    `packaging` isn't importable yet. Prefer _version_obj() in new code."""
     parts = re.findall(r"\d+", str(version_str or ""))
     if not parts:
         return (0,)
@@ -2765,6 +2805,17 @@ def _version_tuple(version_str):
     while len(nums) < 4:
         nums = nums + (0,)
     return nums
+
+
+def _version_obj(version_str):
+    """Return packaging.version.Version when available, else a numeric tuple.
+    Both types support __eq__/__lt__/__gt__ among same-kind values, so always
+    compare two _version_obj() results — never mix with raw strings."""
+    try:
+        from packaging.version import Version
+        return Version(str(version_str or "0"))
+    except Exception:
+        return _version_tuple(version_str)
 
 
 def _is_remote_different(remote_version):
@@ -2778,11 +2829,17 @@ def _is_remote_different(remote_version):
         rv = ""
     if not rv:
         return False
-    return _version_tuple(rv) != _version_tuple(__version__)
+    try:
+        return _version_obj(rv) != _version_obj(__version__)
+    except Exception:
+        return _version_tuple(rv) != _version_tuple(__version__)
 
 
 def _is_remote_upgrade(remote_version):
-    return _version_tuple(remote_version) > _version_tuple(__version__)
+    try:
+        return _version_obj(remote_version) > _version_obj(__version__)
+    except Exception:
+        return _version_tuple(remote_version) > _version_tuple(__version__)
 
 
 def _wrapper_file_path():
@@ -2797,7 +2854,7 @@ def _resolve_dest_for_manifest_entry(rel_path):
     rel = str(rel_path or "").replace("\\", "/").strip().lstrip("/")
     if not rel:
         return None
-    if rel == "eblannft.plugin":
+    if rel in _WRAPPER_MANIFEST_NAMES:
         wrapper = _wrapper_file_path()
         if wrapper:
             return wrapper
@@ -2829,9 +2886,9 @@ def _fetch_manifest():
     version = str(data.get("version") or "").strip()
     if not version:
         raise RuntimeError("Manifest is missing 'version'")
-    files = data.get("files") or list(_RUNTIME_FILES) + ["eblannft.plugin"]
+    files = data.get("files") or list(_RUNTIME_FILES) + [_WRAPPER_DEFAULT_NAME]
     if not isinstance(files, list) or not files:
-        files = list(_RUNTIME_FILES) + ["eblannft.plugin"]
+        files = list(_RUNTIME_FILES) + [_WRAPPER_DEFAULT_NAME]
     return {
         "version": version,
         "notes": str(data.get("notes") or "").strip(),
@@ -3237,10 +3294,12 @@ def _download_and_apply_update(manifest, progress_cb=None):
     # All downloads succeeded — now write atomically.
     apply_total = max(1, sum(len(d) for _r, _de, d in payloads))
     applied = 0
+    touched_dirs = set()
     for idx, (rel, dest, data) in enumerate(payloads, 1):
         parent = os.path.dirname(dest)
         if parent:
             os.makedirs(parent, exist_ok=True)
+            touched_dirs.add(parent)
         tmp = dest + ".tmp"
         with open(tmp, "wb") as f:
             f.write(data)
@@ -3260,6 +3319,80 @@ def _download_and_apply_update(manifest, progress_cb=None):
                 )
             except Exception:
                 pass
+
+    # Invalidate Python's bytecode cache for any .py file we just rewrote.
+    # Without this, importlib happily loads the old __pycache__/*.pyc next
+    # boot and our new code never runs — which is the long-standing
+    # "downloaded but didn't apply" bug.
+    try:
+        import shutil
+        for d in touched_dirs:
+            pc = os.path.join(d, "__pycache__")
+            if os.path.isdir(pc):
+                shutil.rmtree(pc, ignore_errors=True)
+                _bootstrap_log(f"cleared pycache: {pc}")
+    except Exception as e:
+        _bootstrap_log(f"pycache clear err: {e}")
+
+    # Record what was applied so the next boot can sanity-check that the
+    # wrapper file actually changed on disk (otherwise the install loops the
+    # popup). Best-effort — failures here are non-fatal.
+    try:
+        marker = {
+            "applied_version": str(manifest.get("version") or ""),
+            "wrapper_path": _wrapper_file_path(),
+            "files": [rel for rel, _d, _b in payloads],
+            "ts": time.time(),
+        }
+        marker_path = _pending_apply_marker_path()
+        if marker_path:
+            os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+            with open(marker_path, "w") as f:
+                json.dump(marker, f, ensure_ascii=False)
+    except Exception as e:
+        _bootstrap_log(f"apply marker write err: {e}")
+
+
+def _pending_apply_marker_path():
+    """Path of the JSON marker that records the most recently applied
+    update. Read on next boot to verify the new version actually loaded."""
+    base = _RUNTIME_INSTALL_ROOT or _existing_runtime_root()
+    if not base:
+        return ""
+    try:
+        return os.path.join(base, ".eblannft_last_apply.json")
+    except Exception:
+        return ""
+
+
+def _verify_last_apply_on_boot():
+    """If the previous session downloaded an update but the wrapper didn't
+    actually change on disk, log a warning and clear the marker so the
+    update popup re-fires on the next interval cycle."""
+    try:
+        path = _pending_apply_marker_path()
+        if not path or not os.path.isfile(path):
+            return
+        with open(path, "r") as f:
+            marker = json.load(f) or {}
+        applied_v = str(marker.get("applied_version") or "")
+        if not applied_v:
+            os.remove(path)
+            return
+        if _version_obj(applied_v) == _version_obj(__version__):
+            _bootstrap_log(f"apply verified: now running v{__version__}")
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+            return
+        _bootstrap_log(
+            f"APPLY MISMATCH: marker says v{applied_v} was written, "
+            f"but wrapper is still running v{__version__} — pycache or "
+            f"wrong dest path? Marker preserved for the next attempt."
+        )
+    except Exception as e:
+        _bootstrap_log(f"verify apply marker err: {e}")
 
 
 _eblannft_popup_sticker_doc_cache = None
@@ -4562,3 +4695,13 @@ else:
 
 
 NftClonerPlugin = EblanNftPlugin
+
+
+# Self-check on every module import: did the most recently downloaded
+# update actually apply on disk? If the running __version__ doesn't match
+# the marker, _verify_last_apply_on_boot logs APPLY MISMATCH so the bug
+# is visible in adb logcat instead of silently looping the popup.
+try:
+    _verify_last_apply_on_boot()
+except Exception:
+    pass
