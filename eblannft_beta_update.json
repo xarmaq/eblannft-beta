@@ -1,6 +1,6 @@
 {
-  "version": "1.0.4",
-  "notes": "beta v1.0.4 — копия основного eblanNFT, оформленная как параллельная установка: __id__ = eblannft_beta, отдельный рантайм (eblannft_beta_runtime), отдельные папки данных и экспорта (Download/<client>/eblannft_beta), отдельный кэш ~/.eblannft_beta_cache. Можно ставить рядом с прод-версией — ничего не конфликтует.",
+  "version": "1.0.5",
+  "notes": "beta v1.0.5 — добавлен красивый header в меню настроек (частицы + стикер + название + подзаголовок, как в UiTweaks) и секция «Ссылки» с переходами на GitHub-репозиторий, исходники Telegram (drklo/telegram) и документацию плагинов exteraGram.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
