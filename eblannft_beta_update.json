@@ -1,6 +1,6 @@
 {
-  "version": "1.0.95",
-  "notes": "Beta 1.0.95 — крупный фикс цикла обновлений + новые pip-зависимости.\n\n• ФИКС: «скачал апдейт → перезашёл → не применилось». В _resolve_dest_for_manifest_entry сравнивалось 'eblannft.plugin' вместо 'eblannft_beta.plugin', поэтому сам wrapper-файл писался куда-то рядом с runtime, а не поверх установленного. Теперь и beta-, и legacy-имена резолвятся в реальный путь wrapper'а через __file__.\n• ФИКС: после применения апдейта вычищается __pycache__ возле обновлённых .py — иначе Python грузит старый .pyc и новый код не работает.\n• Добавлен маркер _eblannft_last_apply.json: следующая загрузка проверяет, действительно ли версия совпала с записанной — иначе пишет APPLY MISMATCH в логи.\n• __requirements__: requests, packaging, cachetools, humanize, pillow.\n• _http_get теперь предпочитает requests с retry/SSL; fallback на urllib если pip ещё не докачал.\n• Сравнение версий через packaging.version.Version вместо самописного 4-значного tuple (корректно для 1.0.99 < 1.0.100).",
+  "version": "1.0.96",
+  "notes": "Beta 1.0.96 — добавлены ещё две pip-зависимости: tenacity (автоматический повтор сетевых запросов при сбое — закрывает баги «иногда апдейт не пришёл из-за моргнувшего интернета») и python-dateutil (понимает любые форматы дат — пригодится для поля «Дата покупки» NFT).",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
