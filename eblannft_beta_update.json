@@ -1,6 +1,6 @@
 {
-  "version": "1.0.90",
-  "notes": "Beta 1.0.90 — фикс: добавление одинаковых обычных подарков. Раньше при добавлении второго и далее экземпляров одного и того же regular gift (например, два Heart'а) в профиле появлялся только первый. _build_injection_wrappers_bundle дедуплицировал wrappers по gift.id, но для regular gifts gift.id — это id ТИПА подарка, общий для всех экземпляров (не уникальный inst id как у NFT). Теперь дедуп срабатывает только когда inner gift — TL_starGiftUnique. Для regular gifts (TL_starGift) все экземпляры с одинаковым template id пропускаются в инжекшн.",
+  "version": "1.0.91",
+  "notes": "Beta 1.0.91 — добавлен красивый header в меню настроек плагина (частицы + стикер + название + подзаголовок, в стиле UiTweaks) и секция «Ссылки» с переходами на GitHub-репозиторий, исходники Telegram (drklo/telegram) и документацию плагинов exteraGram.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
