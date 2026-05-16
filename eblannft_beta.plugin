@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -954,7 +954,7 @@ def _eblannft_build_settings_header(context):
         hero.setGravity(Gravity.CENTER_VERTICAL)
         try:
             hero_bg = GradientDrawable()
-            hero_bg.setCornerRadius(float(AndroidUtilities.dp(24)))
+            hero_bg.setCornerRadius(float(AndroidUtilities.dp(28)))
             hero_bg.setColor(card_color)
             hero.setBackground(hero_bg)
             hero.setClipToOutline(True)
@@ -1154,13 +1154,40 @@ def _eblannft_read_profile_stats(plugin_self):
     return out
 
 
-def _eblannft_invoke_native_item(activity, items, link_alias):
-    """Translatica trick: programmatically trigger a native UItem's row tap
-    by invoking PluginSettingsActivity.onClick(item, view, int, float, float)
-    on it. Used by clickable status-card columns to navigate into the
-    standard 'Профиль' subfragment without the user having to scroll down
-    and tap the row manually."""
-    if activity is None or items is None or not link_alias:
+def _eblannft_extract_uitem_text(it):
+    """Best-effort text extraction from a UItem regardless of how it stores
+    it (varies between exteraGram versions)."""
+    for attr in ("text", "title", "name"):
+        try:
+            v = getattr(it, attr, None)
+            if v is not None:
+                s = str(v).strip()
+                if s:
+                    return s
+        except Exception:
+            pass
+    try:
+        si = getattr(it, "settingItem", None)
+        if si is not None:
+            for attr in ("text", "title", "name"):
+                v = getattr(si, attr, None)
+                if v is not None:
+                    s = str(v).strip()
+                    if s:
+                        return s
+    except Exception:
+        pass
+    return ""
+
+
+def _eblannft_invoke_native_item(activity, items, link_alias=None, match_texts=None):
+    """Programmatically trigger a native UItem's row tap. Matches the
+    target row by link_alias OR by text content (case-insensitive) — text
+    fallback covers exteraGram versions where link_alias doesn't propagate
+    to the final UItem. Tries multiple PluginSettingsActivity.onClick
+    signatures since they differ across builds. Surfaces failure via a
+    Bulletin so silent breakage is visible."""
+    if activity is None or items is None:
         return False
     try:
         from hook_utils import find_class
@@ -1168,53 +1195,153 @@ def _eblannft_invoke_native_item(activity, items, link_alias):
     except Exception as e:
         _bootstrap_log(f"invoke native: import err: {e}")
         return False
+
+    wanted_la = str(link_alias or "").strip()
+    wanted_texts = set()
+    for t in (match_texts or []):
+        s = str(t or "").strip().lower()
+        if s:
+            wanted_texts.add(s)
+
     target = None
+    target_idx = -1
     try:
         for i in range(items.size()):
             it = items.get(i)
             if it is None:
                 continue
-            si = getattr(it, "settingItem", None)
+            # Try link_alias on the item AND on its inner settingItem.
             la = ""
             try:
                 la = str(getattr(it, "link_alias", "") or "").strip()
             except Exception:
                 la = ""
-            if not la and si is not None:
+            if not la:
                 try:
-                    la = str(getattr(si, "link_alias", "") or "").strip()
+                    si = getattr(it, "settingItem", None)
+                    if si is not None:
+                        la = str(getattr(si, "link_alias", "") or "").strip()
                 except Exception:
                     la = ""
-            if la == str(link_alias).strip():
+            if wanted_la and la == wanted_la:
                 target = it
+                target_idx = i
                 break
+            # Text-content fallback.
+            if wanted_texts:
+                txt = _eblannft_extract_uitem_text(it).lower()
+                if txt and txt in wanted_texts:
+                    target = it
+                    target_idx = i
+                    break
     except Exception as e:
         _bootstrap_log(f"invoke native: items scan err: {e}")
         return False
+
     if target is None:
-        _bootstrap_log(f"invoke native: no row for link_alias={link_alias}")
+        _bootstrap_log(
+            f"invoke native: no row matched link_alias={wanted_la!r} texts={list(wanted_texts)}"
+        )
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error(
+                f"Не нашёл строку '{(list(wanted_texts) or [wanted_la])[0]}' в меню"
+            )
+        except Exception:
+            pass
         return False
+
+    # Try a handful of known PluginSettingsActivity.onClick signatures.
     try:
         UItemCls = find_class("org.telegram.ui.Components.UItem")
         ViewCls = find_class("android.view.View")
-        IntType = find_class("java.lang.Integer").TYPE
+        IntCls = find_class("java.lang.Integer")
         FloatCls = jclass("java.lang.Float")
-        if not UItemCls or not ViewCls or not IntType or not FloatCls:
-            return False
-        click_method = activity.getClass().getDeclaredMethod(
-            "onClick", UItemCls, ViewCls, IntType, FloatCls.TYPE, FloatCls.TYPE
-        )
-        click_method.setAccessible(True)
+        IntType = IntCls.TYPE if IntCls is not None else None
+        FloatType = FloatCls.TYPE if FloatCls is not None else None
+    except Exception as e:
+        _bootstrap_log(f"invoke native: reflect-class err: {e}")
+        return False
+    if not (UItemCls and ViewCls and IntType and FloatType):
+        return False
+
+    candidates = []
+    try:
+        candidates.append((
+            "onClick(UItem, View, int, float, float)",
+            activity.getClass().getDeclaredMethod("onClick", UItemCls, ViewCls, IntType, FloatType, FloatType),
+            lambda: (target, None, jint(target_idx), FloatCls(0.0), FloatCls(0.0)),
+        ))
+    except Exception:
+        pass
+    try:
+        candidates.append((
+            "onClick(UItem, View, int)",
+            activity.getClass().getDeclaredMethod("onClick", UItemCls, ViewCls, IntType),
+            lambda: (target, None, jint(target_idx)),
+        ))
+    except Exception:
+        pass
+    try:
+        candidates.append((
+            "onSettingClick(UItem, View, int)",
+            activity.getClass().getDeclaredMethod("onSettingClick", UItemCls, ViewCls, IntType),
+            lambda: (target, None, jint(target_idx)),
+        ))
+    except Exception:
+        pass
+    # Walk superclasses too in case the method is on BaseFragment / parent.
+    if not candidates:
+        try:
+            cur = activity.getClass()
+            for _ in range(5):
+                cur = cur.getSuperclass()
+                if cur is None:
+                    break
+                try:
+                    candidates.append((
+                        f"super.onClick(...) on {cur.getName()}",
+                        cur.getDeclaredMethod("onClick", UItemCls, ViewCls, IntType, FloatType, FloatType),
+                        lambda: (target, None, jint(target_idx), FloatCls(0.0), FloatCls(0.0)),
+                    ))
+                    break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    if not candidates:
+        _bootstrap_log("invoke native: no usable onClick signature found")
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error("Ваша версия exteraGram не поддерживает быстрый переход")
+        except Exception:
+            pass
+        return False
+
+    try:
         from android_utils import run_on_ui_thread
         def _invoke():
+            last_err = None
+            for sig_name, method, args_fn in candidates:
+                try:
+                    method.setAccessible(True)
+                    method.invoke(activity, *args_fn())
+                    _bootstrap_log(f"invoke native: opened via {sig_name}")
+                    return
+                except Exception as e:
+                    last_err = e
+                    continue
+            _bootstrap_log(f"invoke native: all signatures failed; last={last_err}")
             try:
-                click_method.invoke(activity, target, None, jint(0), FloatCls(0.0), FloatCls(0.0))
-            except Exception as e:
-                _bootstrap_log(f"invoke native onClick fail: {e}")
+                from ui.bulletin import BulletinHelper
+                BulletinHelper.show_error("Не удалось открыть подменю")
+            except Exception:
+                pass
         run_on_ui_thread(_invoke)
         return True
     except Exception as e:
-        _bootstrap_log(f"invoke native: reflection err: {e}")
+        _bootstrap_log(f"invoke native: dispatch err: {e}")
         return False
 
 
@@ -1281,7 +1408,7 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
         card.setGravity(Gravity.CENTER_VERTICAL)
         try:
             bg = GradientDrawable()
-            bg.setCornerRadius(float(AndroidUtilities.dp(22)))
+            bg.setCornerRadius(float(AndroidUtilities.dp(28)))
             bg.setColor(card_color)
             card.setBackground(bg)
             card.setClipToOutline(True)
@@ -1312,17 +1439,30 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             try:
                 col_root.setClickable(bool(callback))
                 col_root.setFocusable(bool(callback))
-                # Use a rounded transparent background just to enable the
-                # tap-ripple feedback inside the parent card.
-                hl_bg = GradientDrawable()
-                hl_bg.setCornerRadius(float(AndroidUtilities.dp(14)))
-                hl_bg.setColor(_eblannft_jint(0x00000000))
-                col_root.setBackground(hl_bg)
+                # Build a real Material 3 ripple background: rounded mask +
+                # tinted ripple color. Falls back to a plain rounded bg on
+                # devices/exceptions where RippleDrawable isn't available.
+                bg_mask = GradientDrawable()
+                bg_mask.setCornerRadius(float(AndroidUtilities.dp(16)))
+                bg_mask.setColor(_eblannft_jint(0x00000000))
+                if callback is not None:
+                    try:
+                        from android.content.res import ColorStateList
+                        from android.graphics.drawable import RippleDrawable
+                        ripple_color = ColorStateList.valueOf(
+                            _eblannft_jint(0x3322C55E if is_dark else 0x2222C55E)
+                        )
+                        ripple = RippleDrawable(ripple_color, bg_mask, bg_mask)
+                        col_root.setBackground(ripple)
+                    except Exception:
+                        col_root.setBackground(bg_mask)
+                else:
+                    col_root.setBackground(bg_mask)
                 col_root.setPadding(
-                    AndroidUtilities.dp(4),
-                    AndroidUtilities.dp(2),
-                    AndroidUtilities.dp(4),
-                    AndroidUtilities.dp(2),
+                    AndroidUtilities.dp(6),
+                    AndroidUtilities.dp(6),
+                    AndroidUtilities.dp(6),
+                    AndroidUtilities.dp(6),
                 )
             except Exception:
                 pass
@@ -1462,7 +1602,11 @@ def _eblannft_build_status_card(context, plugin_self, activity=None, items=None)
             return col_root
 
         def _open_profile_subfragment():
-            if not _eblannft_invoke_native_item(activity, items, "eblannft_profile_subfragment"):
+            if not _eblannft_invoke_native_item(
+                activity, items,
+                link_alias="eblannft_profile_subfragment",
+                match_texts=["Профиль", "Profile"],
+            ):
                 _bootstrap_log("status col: failed to open Профиль subfragment")
 
         def _open_rating_dialog():
@@ -1570,9 +1714,18 @@ def _eblannft_build_footer_card(context, plugin_self):
             chip.setGravity(Gravity.CENTER_VERTICAL)
             try:
                 bg = GradientDrawable()
-                bg.setCornerRadius(float(AndroidUtilities.dp(18)))
+                bg.setCornerRadius(float(AndroidUtilities.dp(20)))
                 bg.setColor(card_color)
-                chip.setBackground(bg)
+                # MD3 Material Ripple for proper tap feedback.
+                try:
+                    from android.content.res import ColorStateList
+                    from android.graphics.drawable import RippleDrawable
+                    ripple_color = ColorStateList.valueOf(
+                        _eblannft_jint(0x3322C55E if is_dark else 0x2222C55E)
+                    )
+                    chip.setBackground(RippleDrawable(ripple_color, bg, bg))
+                except Exception:
+                    chip.setBackground(bg)
                 chip.setClipToOutline(True)
                 chip.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
                 chip.setClickable(True)
