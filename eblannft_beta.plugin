@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.7"
+__version__ = "1.4.8"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2667,18 +2667,54 @@ def _eblannft_format_gift_label(sg, idx):
         return f"Подарок #{idx + 1}"
 
 
+def _eblannft_resolve_gift_sticker(plugin_self, sg):
+    """Pull out the best sticker Document for a SavedStarGift to use as
+    the tile preview. Mirrors the runtime priority: NFT model.document
+    first (via runtime helper if exposed), gift.sticker as fallback."""
+    inner = None
+    try:
+        inner = getattr(sg, "gift", None)
+    except Exception:
+        pass
+    if inner is None:
+        return None
+    # NFT path: try runtime's own helper first.
+    try:
+        if hasattr(plugin_self, "_resolve_nft_model_document"):
+            doc = plugin_self._resolve_nft_model_document(inner)
+            if doc is not None:
+                return doc
+    except Exception:
+        pass
+    # Regular star gift: .sticker is a TLRPC.TL_document.
+    try:
+        doc = getattr(inner, "sticker", None)
+        if doc is not None:
+            return doc
+    except Exception:
+        pass
+    return None
+
+
 def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
-    """AlertDialog with one checkbox per gift, a 'Выбрать все' toggle
-    above the list, and a confirm button that imports the selection
-    via plugin_self._import_gift_to_library."""
+    """Tile-grid picker for the «Скопировать NFT» dialog. Each tile is
+    a sticker preview + label; tapping toggles selection (green border
+    + checkmark). Two action buttons at the bottom: "В библиотеку"
+    (no profile injection) and "В профиль" (with injection)."""
     try:
         from client_utils import get_last_fragment
-        from android.widget import LinearLayout, TextView, CheckBox, ScrollView
-        from android.view import Gravity
+        from android.widget import (
+            LinearLayout, FrameLayout, TextView, CheckBox, ScrollView, ImageView,
+        )
+        from android.view import Gravity, View, ViewOutlineProvider
         from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
         from java import dynamic_proxy
         from org.telegram.ui.ActionBar import AlertDialog, Theme
-        from org.telegram.messenger import AndroidUtilities
+        from org.telegram.ui.Components import BackupImageView
+        from org.telegram.messenger import (
+            AndroidUtilities, ApplicationLoader, ImageLocation,
+        )
     except Exception as e:
         _bootstrap_log(f"copy gifts dialog imports err: {e}")
         return
@@ -2688,21 +2724,28 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
     if ctx is None:
         return
 
+    try: is_dark = bool(Theme.isCurrentThemeDark())
+    except Exception: is_dark = True
     text_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextBlack))
     sub_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextGray3))
+    tile_bg_color = _eblannft_jint(
+        Theme.getColor(Theme.key_windowBackgroundGray) if hasattr(Theme, "key_windowBackgroundGray")
+        else Theme.getColor(Theme.key_windowBackgroundWhite)
+    )
     accent = _eblannft_jint(0xFF22C55E)
+    accent_soft = _eblannft_jint(0x2622C55E if is_dark else 0x1622C55E)
 
-    # Outer container holds: Select-all row + scrollable list of checkboxes.
     root = LinearLayout(ctx)
     root.setOrientation(LinearLayout.VERTICAL)
     try:
         root.setPadding(
-            AndroidUtilities.dp(8), AndroidUtilities.dp(4),
-            AndroidUtilities.dp(8), AndroidUtilities.dp(4),
+            AndroidUtilities.dp(10), AndroidUtilities.dp(8),
+            AndroidUtilities.dp(10), AndroidUtilities.dp(4),
         )
     except Exception:
         pass
 
+    # "Выбрать все" row — at the top, sticks out above the grid.
     select_all_cb = CheckBox(ctx)
     select_all_cb.setText(f"Выбрать все ({len(gifts)})")
     try:
@@ -2710,88 +2753,237 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
         select_all_cb.setTextColor(accent)
     except Exception:
         pass
-    root.addView(
-        select_all_cb,
-        LinearLayout.LayoutParams(-1, -2),
-    )
+    root.addView(select_all_cb, LinearLayout.LayoutParams(-1, -2))
 
+    # Grid container in a ScrollView. Height capped at 60% of screen.
     scroll = ScrollView(ctx)
-    list_box = LinearLayout(ctx)
-    list_box.setOrientation(LinearLayout.VERTICAL)
-    scroll.addView(list_box, LinearLayout.LayoutParams(-1, -2))
+    try: scroll.setVerticalScrollBarEnabled(False)
+    except Exception: pass
 
-    # Constrain dialog height so very long lists scroll instead of
-    # overflowing the screen.
+    grid = LinearLayout(ctx)
+    grid.setOrientation(LinearLayout.VERTICAL)
     try:
-        dm = ctx.getResources().getDisplayMetrics()
-        max_h = int(dm.heightPixels * 0.55)
-    except Exception:
-        max_h = AndroidUtilities.dp(420)
-    lp_scroll = LinearLayout.LayoutParams(-1, max_h)
-    try:
-        lp_scroll.topMargin = AndroidUtilities.dp(8)
+        grid.setPadding(0, AndroidUtilities.dp(8), 0, 0)
     except Exception:
         pass
+    scroll.addView(grid, LinearLayout.LayoutParams(-1, -2))
+
+    try:
+        dm = ctx.getResources().getDisplayMetrics()
+        max_h = int(dm.heightPixels * 0.60)
+    except Exception:
+        max_h = AndroidUtilities.dp(480)
+    lp_scroll = LinearLayout.LayoutParams(-1, max_h)
     root.addView(scroll, lp_scroll)
 
-    boxes = []  # parallel list to `gifts`
-    for i, sg in enumerate(gifts):
-        cb = CheckBox(ctx)
+    selected = set()        # idx of selected gifts
+    tile_refs = {}          # idx -> (root FrameLayout, border GradientDrawable, badge ImageView)
+    suppress_master = {"flag": False}
+
+    def _update_select_all_visual():
         try:
-            cb.setText(_eblannft_format_gift_label(sg, i))
-            cb.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14)
-            cb.setTextColor(text_color)
+            suppress_master["flag"] = True
+            all_on = (len(selected) == len(gifts))
+            select_all_cb.setChecked(bool(all_on))
         except Exception:
             pass
-        list_box.addView(cb, LinearLayout.LayoutParams(-1, -2))
-        boxes.append(cb)
+        finally:
+            suppress_master["flag"] = False
 
-    # Wire "Select all" to flip every child checkbox.
+    def _set_tile_selected(idx, is_sel):
+        try:
+            tile_root, border_drawable, badge = tile_refs[idx]
+        except KeyError:
+            return
+        try:
+            if is_sel:
+                border_drawable.setStroke(AndroidUtilities.dp(2), accent)
+                badge.setVisibility(View.VISIBLE)
+            else:
+                border_drawable.setStroke(AndroidUtilities.dp(1), _eblannft_jint(0x22000000 if not is_dark else 0x22FFFFFF))
+                badge.setVisibility(View.GONE)
+        except Exception:
+            pass
+
+    def _toggle(idx):
+        if idx in selected:
+            selected.discard(idx)
+            _set_tile_selected(idx, False)
+        else:
+            selected.add(idx)
+            _set_tile_selected(idx, True)
+        _update_select_all_visual()
+
+    def _make_tile(sg, idx):
+        # Root frame holds: card background → sticker on top → label
+        # at bottom → checkmark badge in top-right corner. Tap on the
+        # root toggles selection.
+        tile = FrameLayout(ctx)
+        try:
+            border = GradientDrawable()
+            border.setCornerRadius(float(AndroidUtilities.dp(14)))
+            border.setColor(tile_bg_color)
+            border.setStroke(AndroidUtilities.dp(1), _eblannft_jint(0x22000000 if not is_dark else 0x22FFFFFF))
+            tile.setBackground(border)
+            tile.setClipToOutline(True)
+            tile.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+            tile.setClickable(True)
+            tile.setFocusable(True)
+        except Exception:
+            border = None
+
+        inner = LinearLayout(ctx)
+        inner.setOrientation(LinearLayout.VERTICAL)
+        inner.setGravity(Gravity.CENTER_HORIZONTAL)
+        try:
+            inner.setPadding(
+                AndroidUtilities.dp(6), AndroidUtilities.dp(10),
+                AndroidUtilities.dp(6), AndroidUtilities.dp(8),
+            )
+        except Exception:
+            pass
+
+        # Sticker preview.
+        img = BackupImageView(ctx)
+        try:
+            img.setRoundRadius(AndroidUtilities.dp(36))
+        except Exception:
+            pass
+        try:
+            doc = _eblannft_resolve_gift_sticker(plugin_self, sg)
+            if doc is not None:
+                loc = ImageLocation.getForDocument(doc)
+                if loc is not None:
+                    img.setImage(loc, "72_72", None, 0, doc)
+        except Exception:
+            pass
+        inner.addView(
+            img,
+            LinearLayout.LayoutParams(
+                AndroidUtilities.dp(72), AndroidUtilities.dp(72),
+            ),
+        )
+
+        # Label under sticker (truncated to 2 lines).
+        lbl = TextView(ctx)
+        lbl.setText(_eblannft_format_gift_label(sg, idx))
+        try:
+            lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11)
+            lbl.setTextColor(text_color)
+            lbl.setMaxLines(2)
+            lbl.setGravity(Gravity.CENTER)
+            lbl.setPadding(0, AndroidUtilities.dp(6), 0, 0)
+        except Exception:
+            pass
+        try:
+            from android.text import TextUtils
+            lbl.setEllipsize(TextUtils.TruncateAt.END)
+        except Exception:
+            pass
+        inner.addView(lbl, LinearLayout.LayoutParams(-1, -2))
+
+        tile.addView(
+            inner,
+            FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL),
+        )
+
+        # Checkmark badge in top-right corner (initially hidden).
+        badge = ImageView(ctx)
+        try:
+            badge.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+            rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                "check", "drawable",
+                ApplicationLoader.applicationContext.getPackageName(),
+            )
+            if rid:
+                badge.setImageResource(rid)
+            badge.setColorFilter(_eblannft_jint(0xFFFFFFFF))
+            bbg = GradientDrawable()
+            bbg.setShape(GradientDrawable.OVAL)
+            bbg.setColor(accent)
+            badge.setBackground(bbg)
+            badge.setPadding(
+                AndroidUtilities.dp(3), AndroidUtilities.dp(3),
+                AndroidUtilities.dp(3), AndroidUtilities.dp(3),
+            )
+            badge.setVisibility(View.GONE)
+        except Exception:
+            pass
+        lp_badge = FrameLayout.LayoutParams(
+            AndroidUtilities.dp(20), AndroidUtilities.dp(20),
+            Gravity.TOP | Gravity.END,
+        )
+        try:
+            lp_badge.topMargin = AndroidUtilities.dp(6)
+            lp_badge.rightMargin = AndroidUtilities.dp(6)
+        except Exception:
+            pass
+        tile.addView(badge, lp_badge)
+
+        try:
+            class _TileClick(dynamic_proxy(View.OnClickListener)):
+                def onClick(self_obj, v):
+                    _toggle(idx)
+            tile.setOnClickListener(_TileClick())
+        except Exception:
+            pass
+
+        tile_refs[idx] = (tile, border, badge)
+        return tile
+
+    # Build 3-column grid. Each row is a horizontal LinearLayout
+    # with 3 weighted tiles (last row padded with invisible placeholders).
+    cols = 3
+    row = None
+    for idx, sg in enumerate(gifts):
+        if idx % cols == 0:
+            row = LinearLayout(ctx)
+            row.setOrientation(LinearLayout.HORIZONTAL)
+            lp_row = LinearLayout.LayoutParams(-1, -2)
+            try: lp_row.topMargin = AndroidUtilities.dp(8 if idx > 0 else 0)
+            except Exception: pass
+            grid.addView(row, lp_row)
+        tile = _make_tile(sg, idx)
+        lp_tile = LinearLayout.LayoutParams(0, -2, 1.0)
+        if idx % cols > 0:
+            try: lp_tile.leftMargin = AndroidUtilities.dp(8)
+            except Exception: pass
+        row.addView(tile, lp_tile)
+    # Pad last row.
+    rem = len(gifts) % cols
+    if rem != 0 and row is not None:
+        for _ in range(cols - rem):
+            spacer = View(ctx)
+            lp_sp = LinearLayout.LayoutParams(0, -2, 1.0)
+            try: lp_sp.leftMargin = AndroidUtilities.dp(8)
+            except Exception: pass
+            row.addView(spacer, lp_sp)
+
+    # Wire "Выбрать все" master checkbox.
     try:
         cclass = __import__("android.widget", fromlist=["CompoundButton"]).CompoundButton
-        from java import dynamic_proxy as _dp
-        applying = {"flag": False}
-        class _SelectAllListener(_dp(cclass.OnCheckedChangeListener)):
+        class _SelectAllListener(dynamic_proxy(cclass.OnCheckedChangeListener)):
             def onCheckedChanged(self_obj, _btn, is_checked):
-                applying["flag"] = True
-                try:
-                    for b in boxes:
-                        try: b.setChecked(bool(is_checked))
-                        except Exception: pass
-                finally:
-                    applying["flag"] = False
-        select_all_cb.setOnCheckedChangeListener(_SelectAllListener())
-
-        # If any individual is unchecked while "all" was on, untick the master.
-        class _ChildListener(_dp(cclass.OnCheckedChangeListener)):
-            def onCheckedChanged(self_obj, _btn, is_checked):
-                if applying["flag"]:
+                if suppress_master["flag"]:
                     return
-                try:
-                    all_on = all(b.isChecked() for b in boxes)
-                    if select_all_cb.isChecked() != all_on:
-                        applying["flag"] = True
-                        try:
-                            select_all_cb.setChecked(bool(all_on))
-                        finally:
-                            applying["flag"] = False
-                except Exception:
-                    pass
-        for b in boxes:
-            try: b.setOnCheckedChangeListener(_ChildListener())
-            except Exception: pass
+                if is_checked:
+                    for i in range(len(gifts)):
+                        if i not in selected:
+                            selected.add(i)
+                            _set_tile_selected(i, True)
+                else:
+                    for i in list(selected):
+                        _set_tile_selected(i, False)
+                    selected.clear()
+        select_all_cb.setOnCheckedChangeListener(_SelectAllListener())
     except Exception as e:
-        _bootstrap_log(f"checkbox wiring err: {e}")
+        _bootstrap_log(f"select-all wiring err: {e}")
 
     builder = AlertDialog.Builder(ctx)
     builder.setTitle(f"Скопировать NFT ({len(gifts)})")
     builder.setView(root)
 
-    def _on_confirm(*_a, **_kw):
-        try:
-            selected = [gifts[i] for i, b in enumerate(boxes) if b.isChecked()]
-        except Exception:
-            selected = []
+    def _do_import(inject_into_profile):
         if not selected:
             try:
                 from ui.bulletin import BulletinHelper
@@ -2800,16 +2992,14 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                 pass
             return
         imported = 0
-        for sg in selected:
+        for idx in sorted(selected):
+            sg = gifts[idx]
             try:
-                inner = getattr(sg, "gift", None)
-                # _import_gift_to_library accepts both raw inner gift
-                # and the wrapper. Pass the saved-star-gift wrapper —
-                # it's what the runtime expects when copying from a
-                # foreign profile.
+                inner_gift = getattr(sg, "gift", None)
                 if hasattr(plugin_self, "_import_gift_to_library"):
                     plugin_self._import_gift_to_library(
-                        gift=inner, wrapper=sg, inject=True,
+                        gift=inner_gift, wrapper=sg,
+                        inject=bool(inject_into_profile),
                     )
                     imported += 1
             except Exception as e:
@@ -2817,19 +3007,25 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
         try:
             from ui.bulletin import BulletinHelper
             if imported > 0:
-                BulletinHelper.show_success(f"Скопировано NFT: {imported}")
+                if inject_into_profile:
+                    BulletinHelper.show_success(f"Добавлено в профиль: {imported}")
+                else:
+                    BulletinHelper.show_success(f"Скопировано в библиотеку: {imported}")
             else:
                 BulletinHelper.show_error("Не удалось скопировать")
         except Exception:
             pass
 
     try:
-        from java import dynamic_proxy as _dp
         from android.content import DialogInterface
-        class _OnClick(_dp(DialogInterface.OnClickListener)):
+        class _LibClick(dynamic_proxy(DialogInterface.OnClickListener)):
             def onClick(self_obj, dialog, which):
-                _on_confirm()
-        builder.setPositiveButton("Скопировать", _OnClick())
+                _do_import(False)
+        class _ProfClick(dynamic_proxy(DialogInterface.OnClickListener)):
+            def onClick(self_obj, dialog, which):
+                _do_import(True)
+        builder.setPositiveButton("В профиль", _ProfClick())
+        builder.setNeutralButton("В библиотеку", _LibClick())
         builder.setNegativeButton("Отмена", None)
     except Exception:
         pass
