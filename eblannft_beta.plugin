@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -1032,23 +1032,21 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         except Exception:
             pass
         try:
-            # More generous vertical padding — header feels less cramped.
+            # Tighter padding — header is smaller and tidier now.
             hero.setPadding(
-                AndroidUtilities.dp(20),
-                AndroidUtilities.dp(28),
-                AndroidUtilities.dp(20),
-                AndroidUtilities.dp(26),
+                AndroidUtilities.dp(18),
+                AndroidUtilities.dp(18),
+                AndroidUtilities.dp(18),
+                AndroidUtilities.dp(16),
             )
         except Exception:
             pass
 
-        # Bigger sticker AND drop the circular clipping background —
-        # earlier versions cropped the Pepe's arms/legs at the rounded
-        # outline. The wrap is a FrameLayout sized larger than the
-        # sticker, with a soft radial spotlight behind it (drawn via
-        # a custom Drawable) instead of a hard circle clip.
-        avatar_size_dp = 96 if compact else 116
-        wrap_size_dp = avatar_size_dp + 24  # spotlight headroom
+        # Smaller sticker. Wrap still gives the glow some headroom
+        # but the whole hero now takes about half the vertical space
+        # it did at 116dp.
+        avatar_size_dp = 64 if compact else 76
+        wrap_size_dp = avatar_size_dp + 16
         avatar_wrap = FrameLayout(context)
 
         # Soft radial glow behind the sticker — drawn via dynamic_proxy
@@ -1183,7 +1181,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         # Title — centered, big, just under the sticker.
         title = TextView(context)
         title.setText("eblanNFT Beta")
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26 if not compact else 23)
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 21 if not compact else 19)
         try:
             title.setTextColor(text_color)
         except Exception:
@@ -1203,7 +1201,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         )
         try:
             lp_title.gravity = Gravity.CENTER_HORIZONTAL
-            lp_title.topMargin = AndroidUtilities.dp(16)
+            lp_title.topMargin = AndroidUtilities.dp(10)
         except Exception:
             pass
         hero.addView(title, lp_title)
@@ -1226,7 +1224,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         )
         try:
             lp_sub.gravity = Gravity.CENTER_HORIZONTAL
-            lp_sub.topMargin = AndroidUtilities.dp(6)
+            lp_sub.topMargin = AndroidUtilities.dp(4)
         except Exception:
             pass
         hero.addView(subtitle, lp_sub)
@@ -1293,7 +1291,7 @@ def _eblannft_build_settings_header(context, plugin_self=None):
         )
         try:
             chip_lp.gravity = Gravity.CENTER_HORIZONTAL
-            chip_lp.topMargin = AndroidUtilities.dp(16)
+            chip_lp.topMargin = AndroidUtilities.dp(12)
         except Exception:
             pass
         hero.addView(chip_row_inner, chip_lp)
