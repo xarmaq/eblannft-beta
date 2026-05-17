@@ -26,22 +26,18 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __icon__ = "HappyHappyPepe/31"
-# Minimum essential set. All other code paths fall back to stdlib when
-# their optional pip dep isn't available, so dropping the rest is safe:
-#   - cachetools  → in-process dicts
-#   - humanize    → hand-rolled byte/time formatters
-#   - dateutil    → raw text storage of dates
-#   - markdown    → regex bullet parser
-#   - schema      → manual dict checks
-#   - requests-cache → existing manual TTLCache
-#   - websocket-client → never wired anywhere
-# Kept:
+# Essential set: HTTP + auto-retry + correct version sorting + in-process
+# caches for profile state (NFT count, username/number tokens, rating).
+# Caching makes the settings menu and status card render instantly on
+# repeat opens — runtime helpers (which can be slow) are only called
+# once per TTL window and the result reused.
 #   - requests    → cleaner HTTP than urllib (stream + retries)
-#   - tenacity    → real value: auto-retry on flaky network
+#   - tenacity    → auto-retry on flaky network
 #   - packaging   → correct 1.0.99 < 1.0.100 version comparison
-__requirements__ = "requests, tenacity, packaging"
+#   - cachetools  → TTL caches: stickers, manifest, profile stats
+__requirements__ = "requests, tenacity, packaging, cachetools"
 
 
 # ---------------------------------------------------------------------------
@@ -1520,10 +1516,46 @@ def _eblannft_animate_cascade_in(view, delay_ms=0):
         _bootstrap_log(f"cascade-in animate err: {e}")
 
 
+# 8-second TTL on profile stats: status-card columns query these on
+# every menu render. The runtime helpers (_is_nft_username_active,
+# _display_nft_username, _get_nft_username_tokens, etc.) can be slow
+# on big NFT libraries because they touch disk/state — caching means
+# the menu opens instantly on repeat entries within the window.
+try:
+    from cachetools import TTLCache as _ProfileStatsCache
+    _profile_stats_cache = _ProfileStatsCache(maxsize=4, ttl=8)
+except Exception:
+    _profile_stats_cache = None
+
+
+def _eblannft_invalidate_profile_stats_cache():
+    """Drop the cached snapshot — called by runtime patches when
+    username/number/rating actually changes so the menu reflects the
+    new state immediately."""
+    if _profile_stats_cache is not None:
+        try:
+            _profile_stats_cache.clear()
+        except Exception:
+            pass
+
+
 def _eblannft_read_profile_stats(plugin_self):
     """Best-effort read of {username, number, rating} from the runtime
     instance. Each entry also gets a 'count' field used for the badge
-    overlay on the status card column (None means no badge)."""
+    overlay on the status card column (None means no badge).
+
+    Backed by an 8-second TTL cache (cachetools) keyed by the runtime
+    instance id — repeated calls within the window reuse the dict
+    without touching the runtime."""
+    # Cache short-circuit.
+    if _profile_stats_cache is not None and plugin_self is not None:
+        try:
+            cached = _profile_stats_cache.get(id(plugin_self))
+            if cached is not None:
+                return cached
+        except Exception:
+            pass
+
     out = {
         "username_active": False, "username_value": "выкл", "username_count": None,
         "number_active":   False, "number_value":   "выкл", "number_count":   None,
@@ -1569,6 +1601,14 @@ def _eblannft_read_profile_stats(plugin_self):
         out["rating"] = str(plugin_self._get_local_rating_label() or "—")
     except Exception:
         pass
+
+    # Stash in TTL cache so the next status-card render within 8s
+    # uses this snapshot instead of hitting the runtime again.
+    if _profile_stats_cache is not None:
+        try:
+            _profile_stats_cache[id(plugin_self)] = out
+        except Exception:
+            pass
     return out
 
 
