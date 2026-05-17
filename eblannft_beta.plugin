@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.2"
+__version__ = "1.5.3"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -3184,14 +3184,17 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                 _bootstrap_log(f"import gift err: {e}")
         imported = len(imported_keys)
 
-        # Second-pass reassign after a small delay — catches cases
-        # where the inject cache or wrapper b64 was still in flight
-        # during the first pass and the "От" field stuck on the
-        # original sender. Empirically removes the "id:NNNN" leak.
+        # Hammer reassign at staggered intervals — the runtime has
+        # multiple caches (library entry, wrapper b64, inject cache,
+        # ProfileGiftsContainer render cache) and a single pass after
+        # _import_gift_to_library doesn't always overwrite all of them
+        # before the user opens the StarGiftSheet. 3 passes at
+        # 0/700/3000ms gives the inject pipeline time to flush and
+        # ensures Owner / Telegram / От all eventually resolve to me.
         if imported_keys and my_id > 0 and hasattr(plugin_self, "_reassign_library_entry_owner"):
             try:
                 from android_utils import run_on_ui_thread
-                def _second_pass():
+                def _pass(stage):
                     for k in imported_keys:
                         try:
                             plugin_self._reassign_library_entry_owner(k, my_id)
@@ -3202,7 +3205,22 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                             plugin_self._save_cache()
                     except Exception:
                         pass
-                run_on_ui_thread(_second_pass, 700)
+                    # Drop runtime gift-attribute caches so the next
+                    # render rebuilds the StarGiftSheet from the
+                    # patched wrapper.
+                    try:
+                        for cache_name in ("_remote_gift_meta", "_remote_gift_meta_cache",
+                                          "_gift_attr_cache", "_foreign_snapshot_cache"):
+                            c = getattr(plugin_self, cache_name, None)
+                            if c is not None:
+                                try: c.clear()
+                                except Exception:
+                                    try: c = type(c)()
+                                    except Exception: pass
+                    except Exception:
+                        pass
+                run_on_ui_thread(lambda: _pass(2), 700)
+                run_on_ui_thread(lambda: _pass(3), 3000)
             except Exception:
                 pass
         try:
