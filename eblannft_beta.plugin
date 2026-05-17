@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.3.2"
+__version__ = "1.4.0"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -1610,6 +1610,728 @@ def _eblannft_read_profile_stats(plugin_self):
     return out
 
 
+# ---------------------------------------------------------------------------
+# eblanNFT user profile screen — level, XP, stats grid, achievements.
+# Opens in a BottomSheet on tap of the "Профиль" row injected into the
+# main menu by the fillItems hook.
+# ---------------------------------------------------------------------------
+
+
+_EBLANNFT_ACHIEVEMENTS = (
+    # (key, title, description, predicate-on-stats)
+    ("nft_1",        "Первый NFT",         "Добавлен 1 NFT в библиотеку",   lambda s: s["nft_count"] >= 1),
+    ("nft_5",        "Стартовая коллекция","5 NFT собрано",                  lambda s: s["nft_count"] >= 5),
+    ("nft_10",       "Коллекционер",       "10 NFT в библиотеке",            lambda s: s["nft_count"] >= 10),
+    ("nft_25",       "Энтузиаст",          "25 NFT собрано",                 lambda s: s["nft_count"] >= 25),
+    ("nft_50",       "Магнат",             "50 NFT",                         lambda s: s["nft_count"] >= 50),
+    ("nft_100",      "Кит",                "100+ NFT",                       lambda s: s["nft_count"] >= 100),
+    ("uname_1",      "Псевдоним",          "Сохранён первый NFT-юзернейм",   lambda s: s["username_count"] >= 1),
+    ("uname_3",      "Имён много",         "3+ юзернейма",                   lambda s: s["username_count"] >= 3),
+    ("uname_10",     "Архив имён",         "10+ юзернеймов",                 lambda s: s["username_count"] >= 10),
+    ("num_1",        "Номеролог",          "Сохранён первый NFT-номер",      lambda s: s["number_count"] >= 1),
+    ("num_5",        "Коллекция номеров",  "5+ номеров",                     lambda s: s["number_count"] >= 5),
+    ("rating_1k",    "Старт рейтинга",     "1K+ очков",                      lambda s: s["rating_int"] >= 1000),
+    ("rating_10k",   "Высокий рейтинг",    "10K+ очков",                     lambda s: s["rating_int"] >= 10000),
+    ("rating_50k",   "Эксперт",            "50K+ очков",                     lambda s: s["rating_int"] >= 50000),
+    ("rating_100k",  "Легенда",            "100K+ очков",                    lambda s: s["rating_int"] >= 100000),
+    ("days_1",       "Первый день",        "Плагин установлен",              lambda s: s["days"] >= 1),
+    ("days_7",       "Неделя",             "7+ дней с плагином",             lambda s: s["days"] >= 7),
+    ("days_30",      "Старожил",           "30+ дней",                       lambda s: s["days"] >= 30),
+    ("days_100",     "Постоянный",         "100+ дней",                      lambda s: s["days"] >= 100),
+    ("beta",         "Бета-тестер",        "Установлена бета-версия",        lambda s: True),
+    ("update_5",     "Свежий",             "5+ обновлений",                  lambda s: s["upd_count"] >= 5),
+    ("update_20",    "Адепт",              "20+ обновлений",                 lambda s: s["upd_count"] >= 20),
+    ("profile_active","Активный профиль",  "Username или Number включены",   lambda s: s["username_active"] or s["number_active"]),
+    ("nft_active",   "Витрина",            "NFT и Username и Number включены",
+                                                                              lambda s: s["nft_count"] > 0 and s["username_active"] and s["number_active"]),
+)
+
+
+def _eblannft_get_first_install_ts(plugin_self):
+    """Read or initialise the timestamp of first plugin use. Returns
+    seconds-since-epoch float; falls back to 'just now' if storage fails."""
+    key = "eblannft_first_install_ts"
+    try:
+        v = float(plugin_self.get_setting(key, 0) or 0)
+        if v > 0:
+            return v
+    except Exception:
+        pass
+    try:
+        now = float(time.time())
+        plugin_self.set_setting(key, now)
+        return now
+    except Exception:
+        return float(time.time())
+
+
+def _eblannft_compute_profile_stats(plugin_self):
+    """Compile every stat used by the profile sheet into one dict. Pure
+    function over the plugin instance — no UI here, so it's cheap and
+    fully cacheable."""
+    out = {
+        "nft_count": 0,
+        "username_active": False, "username_count": 0, "username_value": "",
+        "number_active":   False, "number_count":   0, "number_value":   "",
+        "rating_label": "—", "rating_int": 0,
+        "days": 0,
+        "upd_count": 0,
+    }
+    if plugin_self is None:
+        return out
+    try:
+        lib = getattr(plugin_self, "gift_library", None) or []
+        out["nft_count"] = len(lib)
+    except Exception:
+        pass
+    try:
+        out["username_active"] = bool(plugin_self._is_nft_username_active())
+        if out["username_active"]:
+            try: out["username_value"] = str(plugin_self._display_nft_username() or "")
+            except Exception: pass
+        toks = plugin_self._get_nft_username_tokens()
+        out["username_count"] = len(toks) if toks is not None else 0
+    except Exception:
+        pass
+    try:
+        out["number_active"] = bool(plugin_self._is_nft_number_active())
+        if out["number_active"]:
+            try: out["number_value"] = str(plugin_self._display_nft_number() or "")
+            except Exception: pass
+        toks = plugin_self._get_nft_number_tokens()
+        out["number_count"] = len(toks) if toks is not None else 0
+    except Exception:
+        pass
+    try:
+        out["rating_label"] = str(plugin_self._get_local_rating_label() or "—")
+        digits = re.sub(r"[^0-9]", "", out["rating_label"])
+        out["rating_int"] = int(digits) if digits else 0
+    except Exception:
+        pass
+    try:
+        first_ts = _eblannft_get_first_install_ts(plugin_self)
+        out["days"] = max(0, int((time.time() - first_ts) // 86400))
+    except Exception:
+        pass
+    try:
+        out["upd_count"] = int(plugin_self.get_setting("eblannft_chip_taps_upd", 0) or 0)
+    except Exception:
+        pass
+    return out
+
+
+def _eblannft_count_achievements(stats):
+    unlocked = 0
+    rows = []
+    for key, title, desc, pred in _EBLANNFT_ACHIEVEMENTS:
+        try:
+            ok = bool(pred(stats))
+        except Exception:
+            ok = False
+        if ok:
+            unlocked += 1
+        rows.append((key, title, desc, ok))
+    return unlocked, len(_EBLANNFT_ACHIEVEMENTS), rows
+
+
+def _eblannft_compute_level(stats, achievements_unlocked):
+    """Total XP → integer level + progress to next.
+    XP recipe: 10/NFT + 5/(uname+num) + rating/100 + 2/day + 80/achievement."""
+    try:
+        xp = (
+            10 * int(stats.get("nft_count") or 0)
+            + 5 * int(stats.get("username_count") or 0)
+            + 5 * int(stats.get("number_count") or 0)
+            + int(int(stats.get("rating_int") or 0) // 100)
+            + 2 * int(stats.get("days") or 0)
+            + 80 * int(achievements_unlocked or 0)
+        )
+    except Exception:
+        xp = 0
+    # Level threshold: 100 * level² . So total XP for level N is 100*N².
+    # level = floor(sqrt(xp / 100))
+    level = 0
+    while (level + 1) * (level + 1) * 100 <= xp:
+        level += 1
+    cur_threshold = level * level * 100
+    next_threshold = (level + 1) * (level + 1) * 100
+    return {
+        "xp": xp,
+        "level": level,
+        "in_level": max(0, xp - cur_threshold),
+        "to_next": max(1, next_threshold - cur_threshold),
+        "next_threshold": next_threshold,
+    }
+
+
+def _eblannft_greeting():
+    try:
+        from datetime import datetime
+        h = datetime.now().hour
+    except Exception:
+        h = 12
+    if 5 <= h < 11: return "Доброе утро, надеюсь, у тебя всё хорошо."
+    if 11 <= h < 17: return "Привет, надеюсь, у тебя всё хорошо."
+    if 17 <= h < 23: return "Добрый вечер, надеюсь, у тебя всё хорошо."
+    return "Доброй ночи, надеюсь, у тебя всё хорошо."
+
+
+def _eblannft_open_profile_sheet(context, plugin_self):
+    """Build and show the user profile BottomSheet — avatar, level bar,
+    stats grid, achievements list. Mirrors the design the user asked
+    for (similar to the Profile Share screen)."""
+    try:
+        from android.widget import (
+            LinearLayout, FrameLayout, TextView, ImageView, ScrollView,
+        )
+        from android.view import Gravity, View, ViewOutlineProvider
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
+        from org.telegram.ui.ActionBar import BottomSheet, Theme
+        from org.telegram.ui.Components import BackupImageView, AvatarDrawable
+        from org.telegram.messenger import (
+            AndroidUtilities, ApplicationLoader, UserConfig, UserObject,
+            ImageLocation,
+        )
+    except Exception as e:
+        _bootstrap_log(f"profile sheet imports err: {e}")
+        return
+
+    try:
+        is_dark = bool(Theme.isCurrentThemeDark())
+    except Exception:
+        is_dark = True
+    text_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextBlack))
+    sub_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextGray3))
+    card_color = _eblannft_jint(Theme.getColor(Theme.key_dialogBackground))
+    surface_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+    accent = _eblannft_jint(0xFF22C55E)
+    accent_soft = _eblannft_jint(0x2622C55E if is_dark else 0x1622C55E)
+    track_bg = _eblannft_jint(0x33FFFFFF if is_dark else 0x1A000000)
+
+    stats = _eblannft_compute_profile_stats(plugin_self)
+    unlocked, total, ach_rows = _eblannft_count_achievements(stats)
+    level = _eblannft_compute_level(stats, unlocked)
+
+    sheet = BottomSheet(context, False)
+    try:
+        sheet.setApplyTopPadding(False)
+        sheet.setApplyBottomPadding(False)
+    except Exception:
+        pass
+
+    scroll = ScrollView(context)
+    try:
+        scroll.setVerticalScrollBarEnabled(False)
+    except Exception:
+        pass
+
+    root = LinearLayout(context)
+    root.setOrientation(LinearLayout.VERTICAL)
+    try:
+        root.setPadding(
+            AndroidUtilities.dp(18), AndroidUtilities.dp(20),
+            AndroidUtilities.dp(18), AndroidUtilities.dp(20),
+        )
+    except Exception:
+        pass
+
+    # ------------- hero (avatar + name + greeting) ----------------------
+    hero = LinearLayout(context)
+    hero.setOrientation(LinearLayout.VERTICAL)
+    hero.setGravity(Gravity.CENTER_HORIZONTAL)
+    try:
+        hbg = GradientDrawable()
+        hbg.setCornerRadius(float(AndroidUtilities.dp(20)))
+        hbg.setColor(surface_color)
+        hero.setBackground(hbg)
+        hero.setPadding(
+            AndroidUtilities.dp(18), AndroidUtilities.dp(22),
+            AndroidUtilities.dp(18), AndroidUtilities.dp(22),
+        )
+    except Exception:
+        pass
+
+    # Real user avatar.
+    av_size = 80
+    avatar = BackupImageView(context)
+    try:
+        avatar.setRoundRadius(AndroidUtilities.dp(av_size // 2))
+        me = UserConfig.getInstance(int(UserConfig.selectedAccount)).getCurrentUser()
+        if me is not None:
+            ad = AvatarDrawable()
+            try:
+                ad.setInfo(int(UserConfig.selectedAccount), me)
+            except Exception:
+                try: ad.setInfo(me)
+                except Exception: pass
+            try:
+                avatar.setForUserOrChat(me, ad)
+            except Exception:
+                try:
+                    loc = ImageLocation.getForUserOrChat(me, ImageLocation.TYPE_SMALL)
+                    avatar.setImage(loc, "100_100", ad, me)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    lp_av = LinearLayout.LayoutParams(
+        AndroidUtilities.dp(av_size), AndroidUtilities.dp(av_size)
+    )
+    try: lp_av.gravity = Gravity.CENTER_HORIZONTAL
+    except Exception: pass
+    hero.addView(avatar, lp_av)
+
+    # Display name.
+    name_tv = TextView(context)
+    try:
+        me = UserConfig.getInstance(int(UserConfig.selectedAccount)).getCurrentUser()
+        nm = UserObject.getUserName(me) if me is not None else "Профиль"
+    except Exception:
+        nm = "Профиль"
+    name_tv.setText(f"Профиль {nm}")
+    name_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22)
+    try:
+        name_tv.setTextColor(text_color)
+        name_tv.setTypeface(name_tv.getTypeface(), 1)
+    except Exception:
+        pass
+    name_tv.setGravity(Gravity.CENTER)
+    lp_nm = LinearLayout.LayoutParams(-2, -2)
+    try:
+        lp_nm.gravity = Gravity.CENTER_HORIZONTAL
+        lp_nm.topMargin = AndroidUtilities.dp(14)
+    except Exception:
+        pass
+    hero.addView(name_tv, lp_nm)
+
+    # Greeting.
+    greet = TextView(context)
+    greet.setText(_eblannft_greeting())
+    greet.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+    try:
+        greet.setTextColor(sub_color)
+    except Exception:
+        pass
+    greet.setGravity(Gravity.CENTER)
+    lp_gr = LinearLayout.LayoutParams(-2, -2)
+    try:
+        lp_gr.gravity = Gravity.CENTER_HORIZONTAL
+        lp_gr.topMargin = AndroidUtilities.dp(6)
+    except Exception:
+        pass
+    hero.addView(greet, lp_gr)
+
+    root.addView(hero, LinearLayout.LayoutParams(-1, -2))
+
+    # ------------- level + progress -----------------------------------
+    lvl_box = LinearLayout(context)
+    lvl_box.setOrientation(LinearLayout.VERTICAL)
+    lp_lvl_box = LinearLayout.LayoutParams(-1, -2)
+    try:
+        lp_lvl_box.topMargin = AndroidUtilities.dp(20)
+    except Exception:
+        pass
+    root.addView(lvl_box, lp_lvl_box)
+
+    lvl_title = TextView(context)
+    lvl_title.setText(f"Уровень аккаунта: {level['level']}")
+    lvl_title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17)
+    try:
+        lvl_title.setTextColor(text_color)
+        lvl_title.setTypeface(lvl_title.getTypeface(), 1)
+    except Exception:
+        pass
+    lvl_box.addView(lvl_title)
+
+    # Bar track + fill.
+    bar_track = FrameLayout(context)
+    try:
+        bt = GradientDrawable()
+        bt.setCornerRadius(float(AndroidUtilities.dp(999)))
+        bt.setColor(track_bg)
+        bar_track.setBackground(bt)
+    except Exception:
+        pass
+    lp_track = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(10))
+    try:
+        lp_track.topMargin = AndroidUtilities.dp(10)
+    except Exception:
+        pass
+    lvl_box.addView(bar_track, lp_track)
+
+    bar_fill = View(context)
+    try:
+        bf = GradientDrawable()
+        bf.setCornerRadius(float(AndroidUtilities.dp(999)))
+        bf.setColor(accent)
+        bar_fill.setBackground(bf)
+    except Exception:
+        pass
+    progress_frac = float(level["in_level"]) / float(level["to_next"])
+    progress_frac = max(0.02, min(1.0, progress_frac))
+    # Width is set in pixels once track is laid out; pre-set via weight trick.
+    lp_fill = FrameLayout.LayoutParams(0, AndroidUtilities.dp(10))
+    bar_track.addView(bar_fill, lp_fill)
+    # Apply width when bar_track measures.
+    try:
+        from android.view import View as _Vv
+        class _BarLayout(dynamic_proxy(_Vv.OnLayoutChangeListener)):
+            def onLayoutChange(self_obj, v, l, t, r, b, ol, ot, orr, ob):
+                try:
+                    w = int((r - l) * progress_frac)
+                    lp = bar_fill.getLayoutParams()
+                    lp.width = max(AndroidUtilities.dp(4), w)
+                    bar_fill.setLayoutParams(lp)
+                except Exception:
+                    pass
+        bar_track.addOnLayoutChangeListener(_BarLayout())
+    except Exception:
+        pass
+
+    lvl_info = TextView(context)
+    lvl_info.setText(
+        f"До следующего уровня: {level['in_level']}/{level['to_next']} очков"
+    )
+    lvl_info.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+    try:
+        lvl_info.setTextColor(sub_color)
+    except Exception:
+        pass
+    lp_info = LinearLayout.LayoutParams(-1, -2)
+    try:
+        lp_info.topMargin = AndroidUtilities.dp(8)
+    except Exception:
+        pass
+    lvl_box.addView(lvl_info, lp_info)
+
+    # ------------- stats grid (2 columns) -----------------------------
+    grid = LinearLayout(context)
+    grid.setOrientation(LinearLayout.VERTICAL)
+    lp_grid = LinearLayout.LayoutParams(-1, -2)
+    try:
+        lp_grid.topMargin = AndroidUtilities.dp(20)
+    except Exception:
+        pass
+    root.addView(grid, lp_grid)
+
+    def _stat_cell(icon_name, label, value):
+        cell = LinearLayout(context)
+        cell.setOrientation(LinearLayout.HORIZONTAL)
+        cell.setGravity(Gravity.CENTER_VERTICAL)
+
+        icon = ImageView(context)
+        try:
+            icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+            rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+                str(icon_name or ""), "drawable",
+                ApplicationLoader.applicationContext.getPackageName(),
+            )
+            if rid:
+                icon.setImageResource(rid)
+                icon.setColorFilter(accent)
+        except Exception:
+            pass
+        cell.addView(
+            icon,
+            LinearLayout.LayoutParams(
+                AndroidUtilities.dp(20), AndroidUtilities.dp(20)
+            ),
+        )
+
+        texts = LinearLayout(context)
+        texts.setOrientation(LinearLayout.VERTICAL)
+        lp_texts = LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0
+        )
+        lp_texts.leftMargin = AndroidUtilities.dp(10)
+
+        lbl = TextView(context)
+        lbl.setText(str(label))
+        lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+        try:
+            lbl.setTextColor(accent)
+            lbl.setTypeface(lbl.getTypeface(), 1)
+        except Exception:
+            pass
+        texts.addView(lbl)
+
+        val = TextView(context)
+        val.setText(str(value))
+        val.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+        try:
+            val.setTextColor(sub_color)
+        except Exception:
+            pass
+        texts.addView(val)
+
+        cell.addView(texts, lp_texts)
+        return cell
+
+    stats_grid_pairs = [
+        (("msg_emoji_gem", "NFT", str(stats["nft_count"])),
+         ("msg_calendar",  "Дней", str(stats["days"]))),
+        (("msg_edit",      "Username", str(stats["username_count"])),
+         ("msg_link",      "Number",   str(stats["number_count"]))),
+        (("msg_stats_solar","Рейтинг", stats["rating_label"]),
+         ("msg_download",   "Апдейтов", str(stats["upd_count"]))),
+        (("msg2_reactions2","Достижения", f"{unlocked}/{total}"),
+         ("msg_retry",      "Версия", f"v{__version__}")),
+    ]
+    for left, right in stats_grid_pairs:
+        row = LinearLayout(context)
+        row.setOrientation(LinearLayout.HORIZONTAL)
+        lp_left = LinearLayout.LayoutParams(0, -2, 1.0)
+        lp_right = LinearLayout.LayoutParams(0, -2, 1.0)
+        row.addView(_stat_cell(*left), lp_left)
+        row.addView(_stat_cell(*right), lp_right)
+        lp_row = LinearLayout.LayoutParams(-1, -2)
+        try:
+            lp_row.topMargin = AndroidUtilities.dp(14)
+        except Exception:
+            pass
+        grid.addView(row, lp_row)
+
+    # ------------- achievements section -------------------------------
+    ach_title = TextView(context)
+    ach_title.setText(f"Достижения  {unlocked}/{total}")
+    ach_title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16)
+    try:
+        ach_title.setTextColor(text_color)
+        ach_title.setTypeface(ach_title.getTypeface(), 1)
+    except Exception:
+        pass
+    lp_at = LinearLayout.LayoutParams(-1, -2)
+    try:
+        lp_at.topMargin = AndroidUtilities.dp(24)
+        lp_at.bottomMargin = AndroidUtilities.dp(10)
+    except Exception:
+        pass
+    root.addView(ach_title, lp_at)
+
+    for key, atitle, adesc, ok in ach_rows:
+        row = LinearLayout(context)
+        row.setOrientation(LinearLayout.HORIZONTAL)
+        row.setGravity(Gravity.CENTER_VERTICAL)
+        try:
+            rbg = GradientDrawable()
+            rbg.setCornerRadius(float(AndroidUtilities.dp(14)))
+            rbg.setColor(surface_color)
+            row.setBackground(rbg)
+            row.setPadding(
+                AndroidUtilities.dp(12), AndroidUtilities.dp(10),
+                AndroidUtilities.dp(12), AndroidUtilities.dp(10),
+            )
+        except Exception:
+            pass
+
+        badge = TextView(context)
+        badge.setText("★" if ok else "·")
+        badge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18)
+        try:
+            badge.setTextColor(accent if ok else sub_color)
+            badge.setTypeface(badge.getTypeface(), 1)
+        except Exception:
+            pass
+        badge.setGravity(Gravity.CENTER)
+        try:
+            bbg = GradientDrawable()
+            bbg.setShape(GradientDrawable.OVAL)
+            bbg.setColor(accent_soft if ok else _eblannft_jint(0x14FFFFFF))
+            badge.setBackground(bbg)
+        except Exception:
+            pass
+        lp_b = LinearLayout.LayoutParams(
+            AndroidUtilities.dp(34), AndroidUtilities.dp(34)
+        )
+        row.addView(badge, lp_b)
+
+        texts = LinearLayout(context)
+        texts.setOrientation(LinearLayout.VERTICAL)
+        lp_tt = LinearLayout.LayoutParams(0, -2, 1.0)
+        lp_tt.leftMargin = AndroidUtilities.dp(12)
+
+        atv = TextView(context)
+        atv.setText(atitle)
+        atv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14)
+        try:
+            atv.setTextColor(text_color if ok else sub_color)
+            atv.setTypeface(atv.getTypeface(), 1)
+        except Exception:
+            pass
+        texts.addView(atv)
+
+        dtv = TextView(context)
+        dtv.setText(adesc)
+        dtv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+        try:
+            dtv.setTextColor(sub_color)
+        except Exception:
+            pass
+        texts.addView(dtv)
+
+        row.addView(texts, lp_tt)
+
+        lp_row = LinearLayout.LayoutParams(-1, -2)
+        try:
+            lp_row.topMargin = AndroidUtilities.dp(8)
+        except Exception:
+            pass
+        root.addView(row, lp_row)
+
+    # Footer breathing room.
+    root.addView(View(context), LinearLayout.LayoutParams(-1, AndroidUtilities.dp(20)))
+
+    scroll.addView(root, FrameLayout.LayoutParams(-1, -2))
+
+    try:
+        sheet.setCustomView(scroll)
+        sheet.show()
+    except Exception as e:
+        _bootstrap_log(f"profile sheet show err: {e}")
+
+
+def _eblannft_build_profile_row(context, plugin_self):
+    """Custom UItem row card — matches the look of native menu rows
+    (icon + title + subtitle) but tapping opens the profile sheet."""
+    try:
+        from android.widget import LinearLayout, FrameLayout, TextView, ImageView
+        from android.view import Gravity, View, ViewOutlineProvider
+        from android.util import TypedValue
+        from android.graphics.drawable import GradientDrawable
+        from java import dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities, ApplicationLoader
+        from org.telegram.ui.ActionBar import Theme
+    except Exception as e:
+        _bootstrap_log(f"profile row imports err: {e}")
+        return None
+    try:
+        text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+        sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
+        card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
+    except Exception:
+        text_color = _eblannft_jint(0xFFF8FAFC); sub_color = _eblannft_jint(0xFFAAB7CF); card_color = _eblannft_jint(0xFF182336)
+    is_dark = True
+    try: is_dark = bool(Theme.isCurrentThemeDark())
+    except Exception: pass
+    accent = _eblannft_jint(0xFF22C55E)
+    accent_soft = _eblannft_jint(0x1422C55E if is_dark else 0x1022C55E)
+
+    stats = _eblannft_compute_profile_stats(plugin_self)
+    unlocked, total, _r = _eblannft_count_achievements(stats)
+    level = _eblannft_compute_level(stats, unlocked)
+
+    outer = LinearLayout(context)
+    outer.setOrientation(LinearLayout.VERTICAL)
+    try:
+        outer.setPadding(
+            AndroidUtilities.dp(12), AndroidUtilities.dp(0),
+            AndroidUtilities.dp(12), AndroidUtilities.dp(4),
+        )
+    except Exception:
+        pass
+
+    row = LinearLayout(context)
+    row.setOrientation(LinearLayout.HORIZONTAL)
+    row.setGravity(Gravity.CENTER_VERTICAL)
+    try:
+        bg = GradientDrawable()
+        bg.setCornerRadius(float(AndroidUtilities.dp(20)))
+        bg.setColor(card_color)
+        try:
+            from android.content.res import ColorStateList
+            from android.graphics.drawable import RippleDrawable
+            row.setBackground(RippleDrawable(
+                ColorStateList.valueOf(_eblannft_jint(0x3322C55E if is_dark else 0x2222C55E)),
+                bg, bg,
+            ))
+        except Exception:
+            row.setBackground(bg)
+        row.setClipToOutline(True)
+        row.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        row.setClickable(True)
+        row.setFocusable(True)
+        row.setPadding(
+            AndroidUtilities.dp(14), AndroidUtilities.dp(12),
+            AndroidUtilities.dp(14), AndroidUtilities.dp(12),
+        )
+    except Exception:
+        pass
+
+    icon_wrap = FrameLayout(context)
+    try:
+        ib = GradientDrawable()
+        ib.setCornerRadius(float(AndroidUtilities.dp(14)))
+        ib.setColor(accent_soft)
+        icon_wrap.setBackground(ib)
+    except Exception:
+        pass
+    icon = ImageView(context)
+    try:
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+        rid = ApplicationLoader.applicationContext.getResources().getIdentifier(
+            "msg2_reactions2", "drawable",
+            ApplicationLoader.applicationContext.getPackageName(),
+        )
+        if rid:
+            icon.setImageResource(rid)
+            icon.setColorFilter(accent)
+    except Exception:
+        pass
+    icon_wrap.addView(icon, FrameLayout.LayoutParams(
+        AndroidUtilities.dp(18), AndroidUtilities.dp(18), Gravity.CENTER,
+    ))
+    row.addView(icon_wrap, LinearLayout.LayoutParams(
+        AndroidUtilities.dp(36), AndroidUtilities.dp(36),
+    ))
+
+    texts = LinearLayout(context)
+    texts.setOrientation(LinearLayout.VERTICAL)
+    lp_tt = LinearLayout.LayoutParams(0, -2, 1.0)
+    lp_tt.leftMargin = AndroidUtilities.dp(14)
+
+    title = TextView(context)
+    title.setText("Профиль eblanNFT")
+    title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15)
+    try:
+        title.setTextColor(text_color)
+        title.setTypeface(title.getTypeface(), 1)
+    except Exception:
+        pass
+    texts.addView(title)
+
+    sub = TextView(context)
+    sub.setText(
+        f"Уровень {level['level']} · {unlocked} из {total} достижений"
+    )
+    sub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+    try:
+        sub.setTextColor(sub_color)
+        sub.setPadding(0, AndroidUtilities.dp(2), 0, 0)
+    except Exception:
+        pass
+    texts.addView(sub)
+
+    row.addView(texts, lp_tt)
+
+    try:
+        from android.view import View as _V
+        from java import dynamic_proxy as _dp
+        class _RowTap(_dp(_V.OnClickListener)):
+            def onClick(self_obj, v):
+                try:
+                    _eblannft_open_profile_sheet(context, plugin_self)
+                except Exception as e:
+                    _bootstrap_log(f"profile open err: {e}")
+        row.setOnClickListener(_RowTap())
+    except Exception:
+        pass
+
+    outer.addView(row, LinearLayout.LayoutParams(-1, -2))
+    return outer
+
+
 def _eblannft_extract_uitem_text(it):
     """Best-effort text extraction from a UItem regardless of how it stores
     it (varies between exteraGram versions)."""
@@ -2516,6 +3238,30 @@ def _eblannft_install_header_hook(plugin_self):
                         next_idx += 1
                 except Exception as e:
                     _bootstrap_log(f"status card inject err: {e}")
+
+                # "Профиль eblanNFT" row — opens the achievements /
+                # level / stats BottomSheet on tap. Sits between the
+                # status card and the native plugin rows.
+                try:
+                    profile_view = _eblannft_build_profile_row(activity.getContext(), plugin_ref())
+                    if profile_view is not None:
+                        prof_item = UItem.asCustom(profile_view)
+                        try:
+                            prof_item.settingItem = HeaderSetting("eblannft_beta_profile")
+                        except Exception:
+                            pass
+                        try:
+                            prof_item.object2 = "__eblannft_beta_profile__"
+                        except Exception:
+                            pass
+                        try:
+                            prof_item.setTransparent(True)
+                        except Exception:
+                            pass
+                        items.add(next_idx, prof_item)
+                        next_idx += 1
+                except Exception as e:
+                    _bootstrap_log(f"profile row inject err: {e}")
 
                 # Footer card at the very bottom (action chips + version + channel).
                 try:
