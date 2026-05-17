@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.5"
+__version__ = "1.4.6"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2872,9 +2872,74 @@ def _eblannft_open_copy_nft_dialog(plugin_self):
         access_hash = 0
 
     # Build payments.getSavedStarGifts(peer=user, offset='', limit=100).
+    # The class lives in different packages depending on Telegram-Android
+    # schema version, so try a handful of candidate fully-qualified
+    # names and use whichever resolves.
     try:
-        req = TLRPC.TL_payments_getSavedStarGifts()
-        peer = TLRPC.TL_inputPeerUser()
+        from hook_utils import find_class
+    except Exception:
+        find_class = None
+
+    req_cls = None
+    req_class_candidates = [
+        "org.telegram.tgnet.tl.TL_payments$TL_getSavedStarGifts",
+        "org.telegram.tgnet.tl.TL_payments$getSavedStarGifts",
+        "org.telegram.tgnet.TLRPC$TL_payments_getSavedStarGifts",
+        "org.telegram.tgnet.tl.TL_payments$TL_payments_getSavedStarGifts",
+    ]
+    # Also try attribute access on TLRPC and TL_payments since those work
+    # for classes registered through Chaquopy reflection.
+    try:
+        req_cls = getattr(TLRPC, "TL_payments_getSavedStarGifts", None)
+    except Exception:
+        req_cls = None
+    if req_cls is None:
+        try:
+            from org.telegram.tgnet.tl import TL_payments as _TL_payments
+            for nm in ("TL_getSavedStarGifts", "getSavedStarGifts", "TL_payments_getSavedStarGifts"):
+                req_cls = getattr(_TL_payments, nm, None)
+                if req_cls is not None:
+                    break
+        except Exception:
+            pass
+    if req_cls is None and find_class is not None:
+        for name in req_class_candidates:
+            try:
+                c = find_class(name)
+                if c is not None:
+                    req_cls = c
+                    break
+            except Exception:
+                pass
+
+    peer_cls = None
+    try:
+        peer_cls = getattr(TLRPC, "TL_inputPeerUser", None)
+    except Exception:
+        pass
+    if peer_cls is None and find_class is not None:
+        try:
+            peer_cls = find_class("org.telegram.tgnet.TLRPC$TL_inputPeerUser")
+        except Exception:
+            pass
+
+    if req_cls is None or peer_cls is None:
+        _bootstrap_log(
+            f"copy nft: TL class not found (req_cls={req_cls is not None}, "
+            f"peer_cls={peer_cls is not None})"
+        )
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error(
+                "Не поддерживается в этой сборке exteraGram (TL-класс не найден)"
+            )
+        except Exception:
+            pass
+        return
+
+    try:
+        req = req_cls()
+        peer = peer_cls()
         peer.user_id = int(user_id)
         peer.access_hash = int(access_hash)
         req.peer = peer
@@ -2884,7 +2949,7 @@ def _eblannft_open_copy_nft_dialog(plugin_self):
         _bootstrap_log(f"copy nft build req err: {e}")
         try:
             from ui.bulletin import BulletinHelper
-            BulletinHelper.show_error("Не удалось собрать запрос")
+            BulletinHelper.show_error(f"Не удалось собрать запрос: {e}")
         except Exception:
             pass
         return
