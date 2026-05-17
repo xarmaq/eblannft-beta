@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2153,7 +2153,8 @@ def _eblannft_build_profile_hero_view(context, plugin_self):
 
 
 def _eblannft_build_profile_level_view(context, plugin_self):
-    """Level title + progress bar + 'X/Y очков' caption card."""
+    """Level title + progress bar + caption — laid out flat on the
+    page background (no card / no border) to match the target design."""
     try:
         from android.widget import LinearLayout, FrameLayout, TextView
         from android.view import Gravity, View
@@ -2169,7 +2170,6 @@ def _eblannft_build_profile_level_view(context, plugin_self):
     except Exception: is_dark = True
     text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
     sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
-    card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
     accent = _eblannft_jint(0xFF22C55E)
     track_bg = _eblannft_jint(0x33FFFFFF if is_dark else 0x1A000000)
 
@@ -2182,34 +2182,21 @@ def _eblannft_build_profile_level_view(context, plugin_self):
     outer.setOrientation(LinearLayout.VERTICAL)
     try:
         outer.setPadding(
-            AndroidUtilities.dp(12), AndroidUtilities.dp(4),
-            AndroidUtilities.dp(12), AndroidUtilities.dp(8),
-        )
-    except Exception:
-        pass
-    card = LinearLayout(context)
-    card.setOrientation(LinearLayout.VERTICAL)
-    try:
-        bg = GradientDrawable()
-        bg.setCornerRadius(float(AndroidUtilities.dp(20)))
-        bg.setColor(card_color)
-        card.setBackground(bg)
-        card.setPadding(
-            AndroidUtilities.dp(18), AndroidUtilities.dp(16),
-            AndroidUtilities.dp(18), AndroidUtilities.dp(16),
+            AndroidUtilities.dp(20), AndroidUtilities.dp(22),
+            AndroidUtilities.dp(20), AndroidUtilities.dp(8),
         )
     except Exception:
         pass
 
     title = TextView(context)
     title.setText(f"Уровень аккаунта: {level['level']}")
-    title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16)
+    title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17)
     try:
         title.setTextColor(text_color)
         title.setTypeface(title.getTypeface(), 1)
     except Exception:
         pass
-    card.addView(title)
+    outer.addView(title)
 
     track = FrameLayout(context)
     try:
@@ -2219,10 +2206,10 @@ def _eblannft_build_profile_level_view(context, plugin_self):
         track.setBackground(tb)
     except Exception:
         pass
-    lp_t = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(10))
-    try: lp_t.topMargin = AndroidUtilities.dp(10)
+    lp_t = LinearLayout.LayoutParams(-1, AndroidUtilities.dp(8))
+    try: lp_t.topMargin = AndroidUtilities.dp(12)
     except Exception: pass
-    card.addView(track, lp_t)
+    outer.addView(track, lp_t)
 
     fill = View(context)
     try:
@@ -2232,7 +2219,7 @@ def _eblannft_build_profile_level_view(context, plugin_self):
         fill.setBackground(fb)
     except Exception:
         pass
-    track.addView(fill, FrameLayout.LayoutParams(0, AndroidUtilities.dp(10)))
+    track.addView(fill, FrameLayout.LayoutParams(0, AndroidUtilities.dp(8)))
     try:
         from java import dynamic_proxy as _dp
         class _BarLayout(_dp(View.OnLayoutChangeListener)):
@@ -2254,29 +2241,27 @@ def _eblannft_build_profile_level_view(context, plugin_self):
     try: info.setTextColor(sub_color)
     except Exception: pass
     lp_i = LinearLayout.LayoutParams(-1, -2)
-    try: lp_i.topMargin = AndroidUtilities.dp(8)
+    try: lp_i.topMargin = AndroidUtilities.dp(10)
     except Exception: pass
-    card.addView(info, lp_i)
+    outer.addView(info, lp_i)
 
-    outer.addView(card, LinearLayout.LayoutParams(-1, -2))
     return outer
 
 
 def _eblannft_build_profile_stats_view(context, plugin_self):
-    """4-row 2-column stats grid card."""
+    """4-row × 2-column stats grid, laid out flat on the page bg with
+    no card. Label is bigger and accent-coloured; value sits under it
+    in muted gray. Matches the target Profile design exactly."""
     try:
         from android.widget import LinearLayout, TextView, ImageView
         from android.view import Gravity
         from android.util import TypedValue
-        from android.graphics.drawable import GradientDrawable
         from org.telegram.messenger import AndroidUtilities, ApplicationLoader
         from org.telegram.ui.ActionBar import Theme
     except Exception as e:
         _bootstrap_log(f"profile stats imports err: {e}")
         return None
-    text_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
     sub_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText2))
-    card_color = _eblannft_jint(Theme.getColor(Theme.key_windowBackgroundWhite))
     accent = _eblannft_jint(0xFF22C55E)
 
     stats = _eblannft_compute_profile_stats(plugin_self)
@@ -2286,21 +2271,8 @@ def _eblannft_build_profile_stats_view(context, plugin_self):
     outer.setOrientation(LinearLayout.VERTICAL)
     try:
         outer.setPadding(
-            AndroidUtilities.dp(12), AndroidUtilities.dp(4),
-            AndroidUtilities.dp(12), AndroidUtilities.dp(8),
-        )
-    except Exception:
-        pass
-    card = LinearLayout(context)
-    card.setOrientation(LinearLayout.VERTICAL)
-    try:
-        bg = GradientDrawable()
-        bg.setCornerRadius(float(AndroidUtilities.dp(20)))
-        bg.setColor(card_color)
-        card.setBackground(bg)
-        card.setPadding(
-            AndroidUtilities.dp(18), AndroidUtilities.dp(14),
-            AndroidUtilities.dp(18), AndroidUtilities.dp(14),
+            AndroidUtilities.dp(20), AndroidUtilities.dp(10),
+            AndroidUtilities.dp(20), AndroidUtilities.dp(10),
         )
     except Exception:
         pass
@@ -2322,15 +2294,15 @@ def _eblannft_build_profile_stats_view(context, plugin_self):
         except Exception:
             pass
         cell.addView(icon, LinearLayout.LayoutParams(
-            AndroidUtilities.dp(18), AndroidUtilities.dp(18),
+            AndroidUtilities.dp(22), AndroidUtilities.dp(22),
         ))
         texts = LinearLayout(context)
         texts.setOrientation(LinearLayout.VERTICAL)
         lp_t = LinearLayout.LayoutParams(0, -2, 1.0)
-        lp_t.leftMargin = AndroidUtilities.dp(10)
+        lp_t.leftMargin = AndroidUtilities.dp(14)
         lbl = TextView(context)
         lbl.setText(str(label))
-        lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12)
+        lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15)
         try:
             lbl.setTextColor(accent)
             lbl.setTypeface(lbl.getTypeface(), 1)
@@ -2347,13 +2319,13 @@ def _eblannft_build_profile_stats_view(context, plugin_self):
         return cell
 
     pairs = [
-        (("msg_emoji_gem",   "NFT",        str(stats["nft_count"])),
+        (("msg2_reactions2", "Достижения", f"{unlocked}/{total}"),
          ("msg_calendar",    "Дней",       str(stats["days"]))),
+        (("msg_emoji_gem",   "NFT",        str(stats["nft_count"])),
+         ("msg_stats_solar", "Рейтинг",    stats["rating_label"])),
         (("msg_edit",        "Username",   str(stats["username_count"])),
          ("msg_link",        "Number",     str(stats["number_count"]))),
-        (("msg_stats_solar", "Рейтинг",    stats["rating_label"]),
-         ("msg_download",    "Апдейтов",   str(stats["upd_count"]))),
-        (("msg2_reactions2", "Достижения", f"{unlocked}/{total}"),
+        (("msg_download",    "Апдейтов",   str(stats["upd_count"])),
          ("msg_retry",       "Версия",     f"v{__version__}")),
     ]
     for i, (left, right) in enumerate(pairs):
@@ -2362,12 +2334,12 @@ def _eblannft_build_profile_stats_view(context, plugin_self):
         row.addView(_cell(*left), LinearLayout.LayoutParams(0, -2, 1.0))
         row.addView(_cell(*right), LinearLayout.LayoutParams(0, -2, 1.0))
         lp_r = LinearLayout.LayoutParams(-1, -2)
-        if i > 0:
-            try: lp_r.topMargin = AndroidUtilities.dp(14)
-            except Exception: pass
-        card.addView(row, lp_r)
+        try:
+            lp_r.topMargin = AndroidUtilities.dp(14 if i > 0 else 4)
+        except Exception:
+            pass
+        outer.addView(row, lp_r)
 
-    outer.addView(card, LinearLayout.LayoutParams(-1, -2))
     return outer
 
 
@@ -2423,8 +2395,42 @@ def _eblannft_build_profile_subfragment(plugin_self, parent_view=None):
     except Exception as e:
         _bootstrap_log(f"check new achievements err: {e}")
 
-    items.append(Header(text="Достижения по категориям"))
+    # Two bottom buttons — mirrors the target Profile design exactly:
+    # one row opens the achievements list (grouped into categories),
+    # the other triggers .profile export via the runtime helper.
+    items.append(Text(
+        text="Достижения",
+        icon="msg2_reactions2",
+        create_sub_fragment=lambda pv=None: _eblannft_build_achievements_root_subfragment(plugin_self, pv),
+        link_alias="eblannft_profile_achievements",
+    ))
+
+    def _on_export(*_a, **_kw):
+        try:
+            if hasattr(plugin_self, "_open_profile_export_name_dialog"):
+                plugin_self._open_profile_export_name_dialog()
+        except Exception as e:
+            _bootstrap_log(f"profile export err: {e}")
+    items.append(Text(
+        text="Экспорт базы данных",
+        icon="msg_share",
+        on_click=_on_export,
+    ))
+
+    return items
+
+
+def _eblannft_build_achievements_root_subfragment(plugin_self, parent_view=None):
+    """Subfragment listing the six achievement categories — opened from
+    the main Profile screen via the 'Достижения' row."""
+    try:
+        from ui.settings import Text, Divider
+    except Exception as e:
+        _bootstrap_log(f"achievements root imports err: {e}")
+        return []
     stats = _eblannft_compute_profile_stats(plugin_self)
+    total_unlocked, total_total, _ = _eblannft_count_achievements(stats)
+    items = [Divider(text=f"Получено {total_unlocked} из {total_total} достижений.")]
     for ckey, ctitle, csub, cicon in _EBLANNFT_CATEGORIES:
         u, t, _ = _eblannft_count_achievements(stats, category=ckey)
         items.append(Text(
