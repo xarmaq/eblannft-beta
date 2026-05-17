@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.8"
+__version__ = "1.4.9"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2667,32 +2667,85 @@ def _eblannft_format_gift_label(sg, idx):
         return f"Подарок #{idx + 1}"
 
 
+def _eblannft_walk_model_attribute(gift_obj):
+    """For a TL_starGiftUnique-like object, iterate its `attributes`
+    java.util.ArrayList looking for the model attribute (its class
+    simple-name contains 'model') and return its .document. None when
+    not found. Reproduces the runtime's _resolve_nft_model_document
+    logic so we don't depend on the helper being exposed/callable."""
+    try:
+        attrs = getattr(gift_obj, "attributes", None)
+        if attrs is None:
+            return None
+        try:
+            n = int(attrs.size() or 0)
+        except Exception:
+            return None
+        for i in range(n):
+            try:
+                a = attrs.get(i)
+            except Exception:
+                continue
+            if a is None:
+                continue
+            try:
+                cls_low = str(a.getClass().getSimpleName() or "").lower()
+            except Exception:
+                cls_low = ""
+            if "model" in cls_low:
+                try:
+                    doc = getattr(a, "document", None)
+                    if doc is not None:
+                        return doc
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return None
+
+
 def _eblannft_resolve_gift_sticker(plugin_self, sg):
-    """Pull out the best sticker Document for a SavedStarGift to use as
-    the tile preview. Mirrors the runtime priority: NFT model.document
-    first (via runtime helper if exposed), gift.sticker as fallback."""
-    inner = None
+    """Pull out the best sticker Document for a SavedStarGift to use
+    as the tile preview. Tries, in order: runtime helper, our own
+    attributes-walker (NFT unique gifts), gift.sticker (regular star
+    gifts), and a one-level nested unwrap (some schemas double-wrap)."""
     try:
         inner = getattr(sg, "gift", None)
     except Exception:
-        pass
-    if inner is None:
-        return None
-    # NFT path: try runtime's own helper first.
-    try:
-        if hasattr(plugin_self, "_resolve_nft_model_document"):
-            doc = plugin_self._resolve_nft_model_document(inner)
+        inner = None
+    candidates = []
+    if inner is not None:
+        candidates.append(inner)
+        try:
+            inner2 = getattr(inner, "gift", None)
+            if inner2 is not None and inner2 is not inner:
+                candidates.append(inner2)
+        except Exception:
+            pass
+
+    for obj in candidates:
+        # 1. Runtime helper (cleanest, knows the project's edge cases).
+        try:
+            if hasattr(plugin_self, "_resolve_nft_model_document"):
+                doc = plugin_self._resolve_nft_model_document(obj)
+                if doc is not None:
+                    return doc
+        except Exception:
+            pass
+        # 2. Direct attribute walk for unique gifts.
+        try:
+            doc = _eblannft_walk_model_attribute(obj)
             if doc is not None:
                 return doc
-    except Exception:
-        pass
-    # Regular star gift: .sticker is a TLRPC.TL_document.
-    try:
-        doc = getattr(inner, "sticker", None)
-        if doc is not None:
-            return doc
-    except Exception:
-        pass
+        except Exception:
+            pass
+        # 3. Plain regular-star-gift sticker.
+        try:
+            doc = getattr(obj, "sticker", None)
+            if doc is not None:
+                return doc
+        except Exception:
+            pass
     return None
 
 
@@ -2770,9 +2823,13 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
 
     try:
         dm = ctx.getResources().getDisplayMetrics()
-        max_h = int(dm.heightPixels * 0.60)
+        # Cap at ~45% of screen height so the AlertDialog's title,
+        # Select-all row, and three action buttons all fit on screen
+        # alongside the scrollable grid. Without this the buttons get
+        # pushed off the bottom on smaller phones.
+        max_h = int(dm.heightPixels * 0.45)
     except Exception:
-        max_h = AndroidUtilities.dp(480)
+        max_h = AndroidUtilities.dp(380)
     lp_scroll = LinearLayout.LayoutParams(-1, max_h)
     root.addView(scroll, lp_scroll)
 
