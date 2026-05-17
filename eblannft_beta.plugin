@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -3134,17 +3134,37 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
             except Exception:
                 pass
             return
+        # Resolve my own user id once — every imported gift gets its
+        # owner reassigned to me so the StarGiftSheet header shows my
+        # name instead of the original sender's. Without this step the
+        # imported gift visually still belongs to whoever I scraped
+        # from, even though it lives in my library.
+        my_id = 0
+        try:
+            if hasattr(plugin_self, "_get_my_user_id"):
+                my_id = int(plugin_self._get_my_user_id() or 0)
+        except Exception:
+            my_id = 0
+
         imported = 0
         for idx in sorted(selected):
             sg = gifts[idx]
             try:
                 inner_gift = getattr(sg, "gift", None)
                 if hasattr(plugin_self, "_import_gift_to_library"):
-                    plugin_self._import_gift_to_library(
+                    key = plugin_self._import_gift_to_library(
                         gift=inner_gift, wrapper=sg,
                         inject=bool(inject_into_profile),
                     )
-                    imported += 1
+                    if key:
+                        imported += 1
+                        # Rewrite owner/from/to to point at me so the
+                        # bottom sheet renders me as the visible owner.
+                        if my_id > 0 and hasattr(plugin_self, "_reassign_library_entry_owner"):
+                            try:
+                                plugin_self._reassign_library_entry_owner(key, my_id)
+                            except Exception as e:
+                                _bootstrap_log(f"reassign owner err: {e}")
             except Exception as e:
                 _bootstrap_log(f"import gift err: {e}")
         try:
