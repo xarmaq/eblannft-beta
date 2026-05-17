@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.2.8"
+__version__ = "1.2.9"
 __icon__ = "HappyHappyPepe/31"
 # exteraGram's PipController refuses binary wheels — pure-Python only.
 # Removed: pillow (C ext), zstandard (C ext), jsonschema (pulls rpds-py
@@ -5878,11 +5878,123 @@ def _schedule_update_check():
 # ---------------------------------------------------------------------------
 
 
+def _is_network_error(err):
+    """Best-effort detection of network/DNS failures so we can show a
+    friendly 'no internet' message instead of a cryptic stacktrace."""
+    if err is None:
+        return False
+    try:
+        msg = str(err) or ""
+    except Exception:
+        msg = ""
+    low = msg.lower()
+    needles = (
+        "no address associated with hostname",  # Errno 7, DNS failure
+        "errno 7",
+        "name or service not known",
+        "name resolution",
+        "nodename nor servname",
+        "temporary failure in name resolution",
+        "network is unreachable",
+        "no route to host",
+        "connection refused",
+        "connection reset",
+        "connection timed out",
+        "timed out",
+        "unable to resolve host",
+        "unreachable",
+        "ssl",
+        "urlopen error",
+        "urlerror",
+        "max retries exceeded",
+        "newconnectionerror",
+        "connectionerror",
+        "remotedisconnected",
+        "incompletereadт",
+    )
+    for n in needles:
+        if n in low:
+            return True
+    # Also classify by exception type — urllib.error.URLError and
+    # OSError with errno-like attribute.
+    try:
+        from urllib.error import URLError
+        if isinstance(err, URLError):
+            return True
+    except Exception:
+        pass
+    try:
+        import socket
+        if isinstance(err, (socket.gaierror, socket.timeout, ConnectionError, OSError)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _maybe_show_network_error_alert(err):
+    """If the bootstrap died on a network error, surface a friendly
+    Bulletin + AlertDialog so the user understands what's wrong instead
+    of being faced with a stacktrace. No-op otherwise."""
+    if not _is_network_error(err):
+        return False
+    try:
+        from android_utils import run_on_ui_thread
+    except Exception:
+        return False
+
+    def _show():
+        # Bulletin (toast-y) — fast and unobtrusive.
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error(
+                "eblanNFT: нет интернета. Подключитесь к сети и включите плагин снова."
+            )
+        except Exception:
+            pass
+        # Full AlertDialog with explanation + actionable hints.
+        try:
+            from client_utils import get_last_fragment
+            from org.telegram.ui.ActionBar import AlertDialog
+            frag = get_last_fragment()
+            ctx = frag.getParentActivity() if frag else None
+            if ctx is None:
+                return
+            b = AlertDialog.Builder(ctx)
+            b.setTitle("eblanNFT не запустился")
+            b.setMessage(
+                "Для первого включения плагин качает рантайм с GitHub'а, но устройство сейчас не видит сеть.\n\n"
+                "Что сделать:\n"
+                "1. Проверь интернет в Telegram (открой любой канал — грузится?).\n"
+                "2. Если используешь VPN/Tor — попробуй выключить.\n"
+                "3. Переключись между Wi-Fi и мобильной сетью.\n"
+                "4. В Настройки → Сеть → Приватный DNS — попробуй 'dns.google' или 'one.one.one.one'.\n\n"
+                "Когда сеть появится — выключи и снова включи плагин."
+            )
+            b.setPositiveButton("Понял", None)
+            b.show()
+        except Exception as e:
+            _bootstrap_log(f"network error alert err: {e}")
+
+    try:
+        run_on_ui_thread(_show)
+    except Exception:
+        try:
+            _show()
+        except Exception:
+            pass
+    return True
+
+
 if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
     class EblanNftPlugin(_EblanNftImpl):
         def on_plugin_load(self):
             if _LOAD_ERROR is not None:
                 _maybe_show_storage_permission_alert(_LOAD_ERROR)
+                if _maybe_show_network_error_alert(_LOAD_ERROR):
+                    raise RuntimeError(
+                        "Нет интернета. Подключите сеть и включите плагин снова."
+                    )
                 raise RuntimeError(f"eblanNFT runtime unavailable: {_LOAD_ERROR}")
             parent = getattr(super(), "on_plugin_load", None)
             if callable(parent):
@@ -5924,6 +6036,10 @@ else:
     class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
             _maybe_show_storage_permission_alert(_LOAD_ERROR)
+            if _maybe_show_network_error_alert(_LOAD_ERROR):
+                raise RuntimeError(
+                    "Нет интернета. Подключите сеть и включите плагин снова."
+                )
             err_text = (
                 str(_LOAD_ERROR) if _LOAD_ERROR is not None
                 else (
