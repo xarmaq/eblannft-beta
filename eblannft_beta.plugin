@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.6"
+__version__ = "1.4.7"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2881,18 +2881,33 @@ def _eblannft_open_copy_nft_dialog(plugin_self):
         find_class = None
 
     req_cls = None
+    # Candidate fully-qualified names. Newer schemas live in
+    # org.telegram.tgnet.tl.TL_stars (verified in the AyuGram build);
+    # older ones used TL_payments or TLRPC directly.
     req_class_candidates = [
+        "org.telegram.tgnet.tl.TL_stars$getSavedStarGifts",
+        "org.telegram.tgnet.tl.TL_stars$TL_getSavedStarGifts",
         "org.telegram.tgnet.tl.TL_payments$TL_getSavedStarGifts",
         "org.telegram.tgnet.tl.TL_payments$getSavedStarGifts",
         "org.telegram.tgnet.TLRPC$TL_payments_getSavedStarGifts",
         "org.telegram.tgnet.tl.TL_payments$TL_payments_getSavedStarGifts",
     ]
-    # Also try attribute access on TLRPC and TL_payments since those work
-    # for classes registered through Chaquopy reflection.
+    # Prefer attribute access on the TL_stars / TL_payments modules
+    # (works for classes registered through Chaquopy reflection) before
+    # falling back to find_class with the raw inner-class name.
     try:
-        req_cls = getattr(TLRPC, "TL_payments_getSavedStarGifts", None)
+        from org.telegram.tgnet.tl import TL_stars as _TL_stars
+        for nm in ("getSavedStarGifts", "TL_getSavedStarGifts"):
+            req_cls = getattr(_TL_stars, nm, None)
+            if req_cls is not None:
+                break
     except Exception:
-        req_cls = None
+        pass
+    if req_cls is None:
+        try:
+            req_cls = getattr(TLRPC, "TL_payments_getSavedStarGifts", None)
+        except Exception:
+            pass
     if req_cls is None:
         try:
             from org.telegram.tgnet.tl import TL_payments as _TL_payments
