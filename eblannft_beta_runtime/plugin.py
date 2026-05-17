@@ -20,7 +20,56 @@ from org.telegram.tgnet import TLRPC
 from ui.bulletin import BulletinHelper
 from ui.alert import AlertDialogBuilder
 from ui.settings import Header, Text, Divider, Switch
-from file_utils import write_file, read_file, get_plugins_dir, ensure_dir_exists
+# file_utils ships with the stock exteraGram plugin host but is missing
+# in some custom forks (AyuGram-derived builds etc.) — fall back to a
+# minimal stdlib reimplementation so the plugin still loads instead of
+# dying with "No module named 'file_utils'" on on_plugin_load.
+try:
+    from file_utils import write_file, read_file, get_plugins_dir, ensure_dir_exists
+except ImportError:
+    import os as _os_fu
+    def ensure_dir_exists(path):
+        try:
+            _os_fu.makedirs(str(path), exist_ok=True)
+            return True
+        except Exception:
+            return False
+    def write_file(path, content):
+        try:
+            parent = _os_fu.path.dirname(str(path))
+            if parent:
+                ensure_dir_exists(parent)
+            mode = "wb" if isinstance(content, (bytes, bytearray)) else "w"
+            with open(str(path), mode) as _f:
+                _f.write(content)
+            return True
+        except Exception:
+            return False
+    def read_file(path):
+        try:
+            with open(str(path), "rb") as _f:
+                data = _f.read()
+            try:
+                return data.decode("utf-8")
+            except Exception:
+                return data
+        except Exception:
+            return None
+    def get_plugins_dir():
+        # Try the most likely Android paths a plugin host would use.
+        try:
+            from org.telegram.messenger import ApplicationLoader
+            ctx = ApplicationLoader.applicationContext
+            base = str(ctx.getFilesDir().getAbsolutePath())
+            cand = _os_fu.path.join(base, "plugins")
+            ensure_dir_exists(cand)
+            return cand
+        except Exception:
+            pass
+        try:
+            return _os_fu.path.dirname(_os_fu.path.dirname(__file__))
+        except Exception:
+            return _os_fu.getcwd()
 from hook_utils import find_class
 
 from android.view import View, Gravity, ViewGroup, ViewTreeObserver, WindowManager, ViewOutlineProvider

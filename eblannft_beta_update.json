@@ -1,7 +1,7 @@
 {
-  "version": "1.5.3",
-  "released": "2026-05-17T08:30:00+03:00",
-  "notes": "Beta 1.5.3 — добиваю «От» / «Telegram» в копированных NFT.\n\nРеализован тройной reassign-проход с инвалидацией runtime-кешей:\n• Проход 1: сразу после _import_gift_to_library — патчит identity_config и wrapper.\n• Проход 2 через 700мс на UI-thread — добивает поля, перетёртые асинхронным inject-кешем.\n• Проход 3 через 3 секунды — финальная гарантия для медленных пайплайнов.\n\nКаждый проход:\n• Re-вызывает _reassign_library_entry_owner\n• Чистит runtime-кеши: _remote_gift_meta, _gift_attr_cache, _foreign_snapshot_cache — следующий рендер StarGiftSheet точно построится из патченных данных.\n• Вызывает _save_cache чтобы изменения ушли на диск.\n\nВажный нюанс: «Telegram: none» в скрине — это нативное поле Telegram-Android (отправитель подарка). Я ничего не могу записать туда напрямую — это поле берётся из from_id Peer на нативном уровне отрисовки. Тройной проход должен помочь когда from_id всё-таки удаётся перезаписать; в самых упрямых случаях поле может остаться «none».",
+  "version": "1.5.4",
+  "released": "2026-05-17T08:50:00+03:00",
+  "notes": "Beta 1.5.4 — фикс «No module named file_utils» для нестандартных сборок exteraGram.\n\nМодуль file_utils есть в стоковом exteraGram, но в кастомных форках (AyuGram-derived и другие) его может не быть. Раньше плагин падал на on_plugin_load с импорт-ошибкой.\n\nТеперь импорт обёрнут в try/except, и при отсутствии модуля используются минимальные stdlib-fallback реализации:\n• write_file — открытие файла на запись через open()\n• read_file — чтение через open() с автодекодом utf-8\n• ensure_dir_exists — os.makedirs(exist_ok=True)\n• get_plugins_dir — пробует ApplicationLoader.applicationContext.getFilesDir()/plugins, иначе путь к рантайму через __file__\n\nПлагин теперь грузится на форках где file_utils отсутствует.\n\nЗАМЕТКА: краш у юзера показан был в прод-плагине (eblanNFT.py) — это отдельный репозиторий xarmaq/eblannft. Этот фикс закрывает баг только в бете. Если друг хочет рабочую версию — пусть ставит бету.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
