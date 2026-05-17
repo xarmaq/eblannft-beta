@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.1"
+__version__ = "1.5.2"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -3146,7 +3146,22 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
         except Exception:
             my_id = 0
 
-        imported = 0
+        # Make sure my own User object is hydrated in MessagesController
+        # before we reassign. Without this the bottom-sheet's «От» row
+        # falls back to "id:NNNN" because the display layer looks up
+        # the user by id and gets None.
+        try:
+            if my_id > 0:
+                from org.telegram.messenger import MessagesController, UserConfig
+                acc = int(UserConfig.selectedAccount)
+                me_user = MessagesController.getInstance(acc).getUser(int(my_id))
+                if me_user is None and hasattr(plugin_self, "_get_my_user_object"):
+                    try: plugin_self._get_my_user_object()
+                    except Exception: pass
+        except Exception:
+            pass
+
+        imported_keys = []
         for idx in sorted(selected):
             sg = gifts[idx]
             try:
@@ -3157,9 +3172,9 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                         inject=bool(inject_into_profile),
                     )
                     if key:
-                        imported += 1
-                        # Rewrite owner/from/to to point at me so the
-                        # bottom sheet renders me as the visible owner.
+                        imported_keys.append(key)
+                        # First-pass reassign — patches owner/from/to in
+                        # the library entry's identity_config + wrapper.
                         if my_id > 0 and hasattr(plugin_self, "_reassign_library_entry_owner"):
                             try:
                                 plugin_self._reassign_library_entry_owner(key, my_id)
@@ -3167,6 +3182,29 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                                 _bootstrap_log(f"reassign owner err: {e}")
             except Exception as e:
                 _bootstrap_log(f"import gift err: {e}")
+        imported = len(imported_keys)
+
+        # Second-pass reassign after a small delay — catches cases
+        # where the inject cache or wrapper b64 was still in flight
+        # during the first pass and the "От" field stuck on the
+        # original sender. Empirically removes the "id:NNNN" leak.
+        if imported_keys and my_id > 0 and hasattr(plugin_self, "_reassign_library_entry_owner"):
+            try:
+                from android_utils import run_on_ui_thread
+                def _second_pass():
+                    for k in imported_keys:
+                        try:
+                            plugin_self._reassign_library_entry_owner(k, my_id)
+                        except Exception:
+                            pass
+                    try:
+                        if hasattr(plugin_self, "_save_cache"):
+                            plugin_self._save_cache()
+                    except Exception:
+                        pass
+                run_on_ui_thread(_second_pass, 700)
+            except Exception:
+                pass
         try:
             from ui.bulletin import BulletinHelper
             if imported > 0:
