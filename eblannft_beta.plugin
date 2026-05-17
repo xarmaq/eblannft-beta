@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.4"
+__version__ = "1.4.5"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2596,6 +2596,397 @@ def _patch_runtime_settings_header():
 
 
 _patch_runtime_settings_header()
+
+
+# ---------------------------------------------------------------------------
+# "Скопировать NFT" menu item on user profile → Плагины. Fetches the
+# viewed user's saved star gifts, lets the local user pick which ones
+# (with checkboxes + Select-all), then imports the picks into the
+# local gift_library via the runtime's _import_gift_to_library helper.
+# ---------------------------------------------------------------------------
+
+
+def _eblannft_get_profile_user_id(frag):
+    """Best-effort extraction of user_id from a ProfileActivity-like
+    fragment. Tries several common field/attribute names because
+    private field names vary across exteraGram / Telegram-Android
+    builds."""
+    if frag is None:
+        return 0
+    try:
+        from hook_utils import get_private_field
+    except Exception:
+        get_private_field = lambda obj, name: None
+    for attr in ("user_id", "userId", "dialog_id", "dialogId", "currentUserId"):
+        try:
+            v = get_private_field(frag, attr)
+            if v is not None:
+                try:
+                    iv = int(v)
+                    if iv > 0:
+                        return iv
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    # Last resort: look for a User TL object and pull .id.
+    for attr in ("currentUser", "user", "userInfo"):
+        try:
+            obj = get_private_field(frag, attr)
+            if obj is not None:
+                try:
+                    iv = int(getattr(obj, "id", 0) or 0)
+                    if iv > 0:
+                        return iv
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return 0
+
+
+def _eblannft_format_gift_label(sg, idx):
+    """One-line label for a SavedStarGift suitable for the multi-select
+    dialog. Prefers the unique-gift title when available; otherwise
+    falls back to gift type + index."""
+    try:
+        inner = getattr(sg, "gift", None)
+        if inner is not None:
+            ttl = getattr(inner, "title", None)
+            if ttl:
+                num = getattr(inner, "num", None)
+                if num:
+                    return f"{ttl} #{int(num)}"
+                return str(ttl)
+            # Regular star gift fallback
+            stars = getattr(inner, "stars", None)
+            if stars:
+                return f"Подарок · {int(stars)} ⭐"
+        return f"Подарок #{idx + 1}"
+    except Exception:
+        return f"Подарок #{idx + 1}"
+
+
+def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
+    """AlertDialog with one checkbox per gift, a 'Выбрать все' toggle
+    above the list, and a confirm button that imports the selection
+    via plugin_self._import_gift_to_library."""
+    try:
+        from client_utils import get_last_fragment
+        from android.widget import LinearLayout, TextView, CheckBox, ScrollView
+        from android.view import Gravity
+        from android.util import TypedValue
+        from java import dynamic_proxy
+        from org.telegram.ui.ActionBar import AlertDialog, Theme
+        from org.telegram.messenger import AndroidUtilities
+    except Exception as e:
+        _bootstrap_log(f"copy gifts dialog imports err: {e}")
+        return
+
+    frag = get_last_fragment()
+    ctx = frag.getParentActivity() if frag else None
+    if ctx is None:
+        return
+
+    text_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextBlack))
+    sub_color = _eblannft_jint(Theme.getColor(Theme.key_dialogTextGray3))
+    accent = _eblannft_jint(0xFF22C55E)
+
+    # Outer container holds: Select-all row + scrollable list of checkboxes.
+    root = LinearLayout(ctx)
+    root.setOrientation(LinearLayout.VERTICAL)
+    try:
+        root.setPadding(
+            AndroidUtilities.dp(8), AndroidUtilities.dp(4),
+            AndroidUtilities.dp(8), AndroidUtilities.dp(4),
+        )
+    except Exception:
+        pass
+
+    select_all_cb = CheckBox(ctx)
+    select_all_cb.setText(f"Выбрать все ({len(gifts)})")
+    try:
+        select_all_cb.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14)
+        select_all_cb.setTextColor(accent)
+    except Exception:
+        pass
+    root.addView(
+        select_all_cb,
+        LinearLayout.LayoutParams(-1, -2),
+    )
+
+    scroll = ScrollView(ctx)
+    list_box = LinearLayout(ctx)
+    list_box.setOrientation(LinearLayout.VERTICAL)
+    scroll.addView(list_box, LinearLayout.LayoutParams(-1, -2))
+
+    # Constrain dialog height so very long lists scroll instead of
+    # overflowing the screen.
+    try:
+        dm = ctx.getResources().getDisplayMetrics()
+        max_h = int(dm.heightPixels * 0.55)
+    except Exception:
+        max_h = AndroidUtilities.dp(420)
+    lp_scroll = LinearLayout.LayoutParams(-1, max_h)
+    try:
+        lp_scroll.topMargin = AndroidUtilities.dp(8)
+    except Exception:
+        pass
+    root.addView(scroll, lp_scroll)
+
+    boxes = []  # parallel list to `gifts`
+    for i, sg in enumerate(gifts):
+        cb = CheckBox(ctx)
+        try:
+            cb.setText(_eblannft_format_gift_label(sg, i))
+            cb.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14)
+            cb.setTextColor(text_color)
+        except Exception:
+            pass
+        list_box.addView(cb, LinearLayout.LayoutParams(-1, -2))
+        boxes.append(cb)
+
+    # Wire "Select all" to flip every child checkbox.
+    try:
+        cclass = __import__("android.widget", fromlist=["CompoundButton"]).CompoundButton
+        from java import dynamic_proxy as _dp
+        applying = {"flag": False}
+        class _SelectAllListener(_dp(cclass.OnCheckedChangeListener)):
+            def onCheckedChanged(self_obj, _btn, is_checked):
+                applying["flag"] = True
+                try:
+                    for b in boxes:
+                        try: b.setChecked(bool(is_checked))
+                        except Exception: pass
+                finally:
+                    applying["flag"] = False
+        select_all_cb.setOnCheckedChangeListener(_SelectAllListener())
+
+        # If any individual is unchecked while "all" was on, untick the master.
+        class _ChildListener(_dp(cclass.OnCheckedChangeListener)):
+            def onCheckedChanged(self_obj, _btn, is_checked):
+                if applying["flag"]:
+                    return
+                try:
+                    all_on = all(b.isChecked() for b in boxes)
+                    if select_all_cb.isChecked() != all_on:
+                        applying["flag"] = True
+                        try:
+                            select_all_cb.setChecked(bool(all_on))
+                        finally:
+                            applying["flag"] = False
+                except Exception:
+                    pass
+        for b in boxes:
+            try: b.setOnCheckedChangeListener(_ChildListener())
+            except Exception: pass
+    except Exception as e:
+        _bootstrap_log(f"checkbox wiring err: {e}")
+
+    builder = AlertDialog.Builder(ctx)
+    builder.setTitle(f"Скопировать NFT ({len(gifts)})")
+    builder.setView(root)
+
+    def _on_confirm(*_a, **_kw):
+        try:
+            selected = [gifts[i] for i, b in enumerate(boxes) if b.isChecked()]
+        except Exception:
+            selected = []
+        if not selected:
+            try:
+                from ui.bulletin import BulletinHelper
+                BulletinHelper.show_info("Ничего не выбрано")
+            except Exception:
+                pass
+            return
+        imported = 0
+        for sg in selected:
+            try:
+                inner = getattr(sg, "gift", None)
+                # _import_gift_to_library accepts both raw inner gift
+                # and the wrapper. Pass the saved-star-gift wrapper —
+                # it's what the runtime expects when copying from a
+                # foreign profile.
+                if hasattr(plugin_self, "_import_gift_to_library"):
+                    plugin_self._import_gift_to_library(
+                        gift=inner, wrapper=sg, inject=True,
+                    )
+                    imported += 1
+            except Exception as e:
+                _bootstrap_log(f"import gift err: {e}")
+        try:
+            from ui.bulletin import BulletinHelper
+            if imported > 0:
+                BulletinHelper.show_success(f"Скопировано NFT: {imported}")
+            else:
+                BulletinHelper.show_error("Не удалось скопировать")
+        except Exception:
+            pass
+
+    try:
+        from java import dynamic_proxy as _dp
+        from android.content import DialogInterface
+        class _OnClick(_dp(DialogInterface.OnClickListener)):
+            def onClick(self_obj, dialog, which):
+                _on_confirm()
+        builder.setPositiveButton("Скопировать", _OnClick())
+        builder.setNegativeButton("Отмена", None)
+    except Exception:
+        pass
+
+    try:
+        builder.show()
+    except Exception as e:
+        _bootstrap_log(f"copy gifts dialog show err: {e}")
+
+
+def _eblannft_open_copy_nft_dialog(plugin_self):
+    """Click handler for the 'Скопировать NFT' menu item — fetches the
+    viewed user's saved star gifts via TL and hands them to the
+    multi-select dialog."""
+    try:
+        from client_utils import get_last_fragment, send_request, RequestCallback
+        from android_utils import run_on_ui_thread
+        from org.telegram.tgnet import TLRPC
+        from org.telegram.messenger import MessagesController, UserConfig
+    except Exception as e:
+        _bootstrap_log(f"copy nft fetch imports err: {e}")
+        return
+
+    frag = get_last_fragment()
+    user_id = _eblannft_get_profile_user_id(frag)
+    if user_id <= 0:
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error("Не нашёл пользователя")
+        except Exception:
+            pass
+        return
+
+    try:
+        account = int(UserConfig.selectedAccount)
+        user = MessagesController.getInstance(account).getUser(int(user_id))
+        access_hash = int(getattr(user, "access_hash", 0) or 0) if user else 0
+    except Exception:
+        account = 0
+        access_hash = 0
+
+    # Build payments.getSavedStarGifts(peer=user, offset='', limit=100).
+    try:
+        req = TLRPC.TL_payments_getSavedStarGifts()
+        peer = TLRPC.TL_inputPeerUser()
+        peer.user_id = int(user_id)
+        peer.access_hash = int(access_hash)
+        req.peer = peer
+        req.offset = ""
+        req.limit = 100
+    except Exception as e:
+        _bootstrap_log(f"copy nft build req err: {e}")
+        try:
+            from ui.bulletin import BulletinHelper
+            BulletinHelper.show_error("Не удалось собрать запрос")
+        except Exception:
+            pass
+        return
+
+    try:
+        from ui.bulletin import BulletinHelper
+        BulletinHelper.show_info("Загружаю подарки...")
+    except Exception:
+        pass
+
+    def _on_response(response, error):
+        if error is not None:
+            try:
+                msg = str(getattr(error, "text", "") or error)
+            except Exception:
+                msg = "error"
+            _bootstrap_log(f"copy nft fetch err: {msg}")
+            try:
+                from ui.bulletin import BulletinHelper
+                BulletinHelper.show_error(f"Не удалось получить подарки: {msg}")
+            except Exception:
+                pass
+            return
+        gifts = []
+        try:
+            arr = getattr(response, "gifts", None)
+            if arr is not None:
+                for i in range(arr.size()):
+                    gifts.append(arr.get(i))
+        except Exception as e:
+            _bootstrap_log(f"copy nft parse err: {e}")
+        if not gifts:
+            try:
+                from ui.bulletin import BulletinHelper
+                BulletinHelper.show_info("У пользователя нет подарков")
+            except Exception:
+                pass
+            return
+        run_on_ui_thread(lambda gs=gifts: _eblannft_show_copy_gifts_dialog(plugin_self, gs))
+
+    try:
+        send_request(req, RequestCallback(_on_response))
+    except Exception as e:
+        _bootstrap_log(f"copy nft send err: {e}")
+
+
+def _patch_runtime_copy_nft_menu():
+    """Wrap on_plugin_load so the runtime additionally registers a
+    'Скопировать NFT' entry in the user-profile Плагины submenu."""
+    if _LOAD_ERROR is not None or _EblanNftImpl is BasePlugin:
+        return
+    try:
+        original_load = _EblanNftImpl.__dict__.get("on_plugin_load")
+    except Exception as e:
+        _bootstrap_log(f"copy nft menu lookup failed: {e}")
+        return
+    if original_load is None:
+        for base in getattr(_EblanNftImpl, "__mro__", ()):
+            cand = base.__dict__.get("on_plugin_load") if hasattr(base, "__dict__") else None
+            if cand is not None:
+                original_load = cand
+                break
+    if original_load is None or getattr(original_load, "_eblannft_copy_nft_added", False):
+        return
+
+    def patched_load(self, *a, **kw):
+        try:
+            res = original_load(self, *a, **kw)
+        except Exception as e:
+            _bootstrap_log(f"copy nft on_load original error: {e}")
+            res = None
+        try:
+            from base_plugin import MenuItemData, MenuItemType
+            self.add_menu_item(MenuItemData(
+                menu_type=MenuItemType.PROFILE_ACTION_MENU,
+                item_id="eblannft_copy_nft_btn",
+                text="Скопировать NFT",
+                icon="msg_emoji_gem",
+                on_click=lambda *_a, **_kw: _eblannft_open_copy_nft_dialog(self),
+                condition="user != null",
+            ))
+        except Exception as e:
+            _bootstrap_log(f"copy nft menu add err: {e}")
+        return res
+
+    patched_load._eblannft_copy_nft_added = True
+    # Preserve markers from earlier on_plugin_load wraps.
+    for marker in (
+        "_eblannft_header_hook_installed",
+        "_eblannft_nft_chat_patched",
+        "_eblannft_resume_check_patched",
+    ):
+        if getattr(original_load, marker, False):
+            setattr(patched_load, marker, True)
+    try:
+        _EblanNftImpl.on_plugin_load = patched_load
+        _bootstrap_log("on_plugin_load wrapped for copy-nft menu")
+    except Exception as e:
+        _bootstrap_log(f"copy nft attr set failed: {e}")
+
+
+_patch_runtime_copy_nft_menu()
 
 
 def _patch_runtime_nft_to_chat():
