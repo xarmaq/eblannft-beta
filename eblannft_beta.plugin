@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.1"
+__version__ = "1.4.2"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -1729,6 +1729,247 @@ def _eblannft_compute_profile_stats(plugin_self):
     return out
 
 
+def _eblannft_load_seen_achievements(plugin_self):
+    """Return set of achievement keys the user has previously seen
+    unlocked. Stored in plugin settings as a JSON list."""
+    if plugin_self is None:
+        return set()
+    try:
+        raw = plugin_self.get_setting("eblannft_seen_achievements", "") or ""
+        if not raw:
+            return set()
+        return set(json.loads(raw) or [])
+    except Exception:
+        return set()
+
+
+def _eblannft_save_seen_achievements(plugin_self, seen):
+    if plugin_self is None:
+        return
+    try:
+        plugin_self.set_setting(
+            "eblannft_seen_achievements",
+            json.dumps(sorted(list(seen)), ensure_ascii=False),
+        )
+    except Exception:
+        pass
+
+
+def _eblannft_check_new_achievements(plugin_self):
+    """Compare current unlocked set vs stored "seen" set. For each newly
+    unlocked achievement: fire a Bulletin notification + a confetti
+    burst. Persists the updated seen set so each unlock only celebrates
+    once.
+
+    Called from the same code path that computes stats — but throttled
+    via a quick instance flag so we don't run more than once per menu
+    render."""
+    if plugin_self is None:
+        return
+    # Skip if computed within the last second (status card may recompute on
+    # every render — celebrating multiple times in a row is awful).
+    try:
+        last = float(getattr(plugin_self, "_eblannft_last_ach_check", 0) or 0)
+        if (time.time() - last) < 1.0:
+            return
+        plugin_self._eblannft_last_ach_check = time.time()
+    except Exception:
+        pass
+
+    try:
+        stats = _eblannft_compute_profile_stats(plugin_self)
+    except Exception:
+        return
+    seen = _eblannft_load_seen_achievements(plugin_self)
+    newly_unlocked = []
+    unlocked_now = set()
+    for cat, key, title, desc, pred in _EBLANNFT_ACHIEVEMENTS:
+        try:
+            ok = bool(pred(stats))
+        except Exception:
+            ok = False
+        if ok:
+            unlocked_now.add(key)
+            if key not in seen:
+                newly_unlocked.append((key, title, desc))
+
+    if not newly_unlocked:
+        # Even with no new ones, persist the union so de-unlocked entries
+        # (rating dropped back below threshold etc.) get re-celebrated if
+        # they re-unlock later.
+        if seen != unlocked_now:
+            _eblannft_save_seen_achievements(plugin_self, unlocked_now)
+        return
+
+    # First-ever check (no seen set persisted) is a special case — the
+    # user already has these unlocked, don't spam them with bulletins
+    # on first install. Just save and move on.
+    first_run = (len(seen) == 0)
+    _eblannft_save_seen_achievements(plugin_self, unlocked_now)
+    if first_run:
+        return
+
+    # Stagger the celebrations so 2+ simultaneous unlocks don't all fire
+    # at the same instant.
+    try:
+        from android_utils import run_on_ui_thread
+        for idx, (key, title, desc) in enumerate(newly_unlocked):
+            def _celebrate(t=title, d=desc, i=idx):
+                try:
+                    from ui.bulletin import BulletinHelper
+                    BulletinHelper.show_success(f"🏆 Достижение: {t}\n{d}")
+                except Exception:
+                    pass
+                if i == 0:
+                    # Confetti only once even if 5 unlocked simultaneously
+                    # — keeps the screen sane.
+                    try:
+                        _eblannft_show_confetti()
+                    except Exception as e:
+                        _bootstrap_log(f"confetti err: {e}")
+            run_on_ui_thread(_celebrate, idx * 700)
+    except Exception as e:
+        _bootstrap_log(f"celebrate err: {e}")
+
+
+def _eblannft_show_confetti():
+    """Burst of falling confetti particles overlaid on the foreground
+    activity for ~2.5 seconds. Implemented via a custom View that
+    paints rotated rectangles in random colors; auto-removes itself
+    after the animation completes."""
+    try:
+        from client_utils import get_last_fragment
+        from android.widget import FrameLayout
+        from android.graphics import Paint, Color
+        from android.view import View, Gravity
+        from android.animation import ValueAnimator
+        from java import dynamic_proxy
+        from org.telegram.messenger import AndroidUtilities
+        import random
+    except Exception as e:
+        _bootstrap_log(f"confetti imports err: {e}")
+        return
+
+    try:
+        frag = get_last_fragment()
+        activity = frag.getParentActivity() if frag else None
+        if activity is None:
+            return
+        decor = activity.getWindow().getDecorView()
+        if decor is None:
+            return
+    except Exception as e:
+        _bootstrap_log(f"confetti host err: {e}")
+        return
+
+    try:
+        dm = activity.getResources().getDisplayMetrics()
+        w_px = int(dm.widthPixels)
+        h_px = int(dm.heightPixels)
+    except Exception:
+        w_px = AndroidUtilities.dp(360)
+        h_px = AndroidUtilities.dp(720)
+
+    palette = [
+        _eblannft_jint(0xFF22C55E),  # green
+        _eblannft_jint(0xFF3B82F6),  # blue
+        _eblannft_jint(0xFFFACC15),  # yellow
+        _eblannft_jint(0xFFEF4444),  # red
+        _eblannft_jint(0xFFA855F7),  # purple
+        _eblannft_jint(0xFFFFFFFF),  # white sparkle
+    ]
+    particles = []
+    for _ in range(48):
+        particles.append({
+            "x": random.random() * w_px,
+            "y": -random.uniform(0, 200),
+            "vx": (random.random() - 0.5) * 8,
+            "vy": 8 + random.random() * 12,
+            "rot": random.random() * 360,
+            "vrot": (random.random() - 0.5) * 24,
+            "color": random.choice(palette),
+            "w": float(AndroidUtilities.dp(6 + random.random() * 5)),
+            "h": float(AndroidUtilities.dp(10 + random.random() * 6)),
+        })
+
+    paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    class _ConfettiView(dynamic_proxy(View)):
+        def onDraw(self_obj, canvas):
+            try:
+                for p in particles:
+                    paint.setColor(p["color"])
+                    canvas.save()
+                    canvas.rotate(float(p["rot"]), float(p["x"]), float(p["y"]))
+                    canvas.drawRect(
+                        float(p["x"] - p["w"] / 2.0),
+                        float(p["y"] - p["h"] / 2.0),
+                        float(p["x"] + p["w"] / 2.0),
+                        float(p["y"] + p["h"] / 2.0),
+                        paint,
+                    )
+                    canvas.restore()
+            except Exception:
+                pass
+
+    try:
+        view = _ConfettiView(activity)
+    except Exception as e:
+        _bootstrap_log(f"confetti view init err: {e}")
+        return
+
+    # Add the confetti overlay as a child of the decor view so it sits
+    # above EVERY other view (action bar, list, sheets, etc.).
+    try:
+        lp = FrameLayout.LayoutParams(-1, -1)
+        decor.addView(view, lp)
+    except Exception as e:
+        _bootstrap_log(f"confetti attach err: {e}")
+        return
+
+    duration_ms = 2500
+    anim = ValueAnimator.ofFloat(0.0, 1.0)
+    anim.setDuration(duration_ms)
+
+    try:
+        from android.animation import Animator
+        class _AnimUpdate(dynamic_proxy(ValueAnimator.AnimatorUpdateListener)):
+            def onAnimationUpdate(self_obj, animation):
+                try:
+                    for p in particles:
+                        p["x"] += p["vx"]
+                        p["y"] += p["vy"]
+                        p["rot"] += p["vrot"]
+                        # Gentle horizontal drift damping.
+                        p["vx"] *= 0.99
+                    # Fade out in the last third.
+                    frac = float(animation.getAnimatedValue())
+                    if frac > 0.7:
+                        view.setAlpha(max(0.0, 1.0 - (frac - 0.7) / 0.3))
+                    view.invalidate()
+                except Exception:
+                    pass
+        anim.addUpdateListener(_AnimUpdate())
+
+        class _AnimEnd(dynamic_proxy(Animator.AnimatorListener)):
+            def onAnimationEnd(self_obj, animation):
+                try:
+                    decor.removeView(view)
+                except Exception:
+                    pass
+            def onAnimationStart(self_obj, animation): pass
+            def onAnimationCancel(self_obj, animation):
+                try: decor.removeView(view)
+                except Exception: pass
+            def onAnimationRepeat(self_obj, animation): pass
+        anim.addListener(_AnimEnd())
+        anim.start()
+    except Exception as e:
+        _bootstrap_log(f"confetti anim err: {e}")
+        try: decor.removeView(view)
+        except Exception: pass
+
+
 def _eblannft_count_achievements(stats, category=None):
     """Returns (unlocked, total, rows). Optionally filtered to a single
     category (e.g. 'nft', 'rating', 'time')."""
@@ -2174,6 +2415,13 @@ def _eblannft_build_profile_subfragment(plugin_self, parent_view=None):
                 items.append(Custom(item=UItem.asCustom(stv)))
         except Exception as e:
             _bootstrap_log(f"profile stats err: {e}")
+
+    # Fire achievement-unlock notifications + confetti if the user
+    # has reached anything new since the last time we celebrated.
+    try:
+        _eblannft_check_new_achievements(plugin_self)
+    except Exception as e:
+        _bootstrap_log(f"check new achievements err: {e}")
 
     items.append(Header(text="Достижения по категориям"))
     stats = _eblannft_compute_profile_stats(plugin_self)
