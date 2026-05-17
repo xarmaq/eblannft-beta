@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.4.9"
+__version__ = "1.5.0"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -2792,13 +2792,93 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
     root.setOrientation(LinearLayout.VERTICAL)
     try:
         root.setPadding(
-            AndroidUtilities.dp(10), AndroidUtilities.dp(8),
+            AndroidUtilities.dp(10), AndroidUtilities.dp(14),
             AndroidUtilities.dp(10), AndroidUtilities.dp(4),
         )
     except Exception:
         pass
 
-    # "Выбрать все" row — at the top, sticks out above the grid.
+    # Header bar: title on the left, prominent "✓ В профиль" pill on
+    # the right. Replaces the AlertDialog's built-in title so the
+    # primary action stays glued to the top of the dialog regardless
+    # of how long the gift grid is.
+    header = LinearLayout(ctx)
+    header.setOrientation(LinearLayout.HORIZONTAL)
+    header.setGravity(Gravity.CENTER_VERTICAL)
+
+    title_tv = TextView(ctx)
+    title_tv.setText(f"Скопировать NFT ({len(gifts)})")
+    try:
+        title_tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18)
+        title_tv.setTextColor(text_color)
+        title_tv.setTypeface(title_tv.getTypeface(), 1)
+    except Exception:
+        pass
+    lp_title = LinearLayout.LayoutParams(0, -2, 1.0)
+    header.addView(title_tv, lp_title)
+
+    # Primary action pill — green, with a check icon + "В профиль" text.
+    profile_btn = LinearLayout(ctx)
+    profile_btn.setOrientation(LinearLayout.HORIZONTAL)
+    profile_btn.setGravity(Gravity.CENTER_VERTICAL)
+    try:
+        pbg = GradientDrawable()
+        pbg.setCornerRadius(float(AndroidUtilities.dp(18)))
+        pbg.setColor(accent)
+        try:
+            from android.content.res import ColorStateList
+            from android.graphics.drawable import RippleDrawable
+            ripple_color = ColorStateList.valueOf(
+                _eblannft_jint(0x33FFFFFF)
+            )
+            profile_btn.setBackground(RippleDrawable(ripple_color, pbg, pbg))
+        except Exception:
+            profile_btn.setBackground(pbg)
+        profile_btn.setClipToOutline(True)
+        profile_btn.setOutlineProvider(ViewOutlineProvider.BACKGROUND)
+        profile_btn.setClickable(True)
+        profile_btn.setFocusable(True)
+        profile_btn.setPadding(
+            AndroidUtilities.dp(12), AndroidUtilities.dp(7),
+            AndroidUtilities.dp(12), AndroidUtilities.dp(7),
+        )
+    except Exception:
+        pass
+
+    pb_check = ImageView(ctx)
+    try:
+        pb_check.setScaleType(ImageView.ScaleType.CENTER_INSIDE)
+        rid_chk = ApplicationLoader.applicationContext.getResources().getIdentifier(
+            "check", "drawable",
+            ApplicationLoader.applicationContext.getPackageName(),
+        )
+        if rid_chk:
+            pb_check.setImageResource(rid_chk)
+        pb_check.setColorFilter(_eblannft_jint(0xFFFFFFFF))
+    except Exception:
+        pass
+    profile_btn.addView(
+        pb_check,
+        LinearLayout.LayoutParams(
+            AndroidUtilities.dp(16), AndroidUtilities.dp(16),
+        ),
+    )
+    pb_lbl = TextView(ctx)
+    pb_lbl.setText("В профиль")
+    try:
+        pb_lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13)
+        pb_lbl.setTextColor(_eblannft_jint(0xFFFFFFFF))
+        pb_lbl.setTypeface(pb_lbl.getTypeface(), 1)
+    except Exception:
+        pass
+    lp_pblbl = LinearLayout.LayoutParams(-2, -2)
+    lp_pblbl.leftMargin = AndroidUtilities.dp(6)
+    profile_btn.addView(pb_lbl, lp_pblbl)
+
+    header.addView(profile_btn, LinearLayout.LayoutParams(-2, -2))
+    root.addView(header, LinearLayout.LayoutParams(-1, -2))
+
+    # "Выбрать все" row — under the header.
     select_all_cb = CheckBox(ctx)
     select_all_cb.setText(f"Выбрать все ({len(gifts)})")
     try:
@@ -2806,7 +2886,10 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
         select_all_cb.setTextColor(accent)
     except Exception:
         pass
-    root.addView(select_all_cb, LinearLayout.LayoutParams(-1, -2))
+    lp_sa = LinearLayout.LayoutParams(-1, -2)
+    try: lp_sa.topMargin = AndroidUtilities.dp(8)
+    except Exception: pass
+    root.addView(select_all_cb, lp_sa)
 
     # Grid container in a ScrollView. Height capped at 60% of screen.
     scroll = ScrollView(ctx)
@@ -3037,8 +3120,11 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
         _bootstrap_log(f"select-all wiring err: {e}")
 
     builder = AlertDialog.Builder(ctx)
-    builder.setTitle(f"Скопировать NFT ({len(gifts)})")
+    # No setTitle — our custom header view above already carries the
+    # title plus the prominent "В профиль" action button.
     builder.setView(root)
+
+    dialog_holder = {"d": None}
 
     def _do_import(inject_into_profile):
         if not selected:
@@ -3072,23 +3158,36 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
                 BulletinHelper.show_error("Не удалось скопировать")
         except Exception:
             pass
+        # Auto-dismiss after the import.
+        try:
+            d = dialog_holder.get("d")
+            if d is not None:
+                d.dismiss()
+        except Exception:
+            pass
 
+    # Wire the prominent "В профиль" pill in the header.
+    try:
+        class _HeaderProfileClick(dynamic_proxy(View.OnClickListener)):
+            def onClick(self_obj, v):
+                _do_import(True)
+        profile_btn.setOnClickListener(_HeaderProfileClick())
+    except Exception as e:
+        _bootstrap_log(f"header profile-btn wire err: {e}")
+
+    # Bottom bar keeps secondary actions: library-only and cancel.
     try:
         from android.content import DialogInterface
         class _LibClick(dynamic_proxy(DialogInterface.OnClickListener)):
             def onClick(self_obj, dialog, which):
                 _do_import(False)
-        class _ProfClick(dynamic_proxy(DialogInterface.OnClickListener)):
-            def onClick(self_obj, dialog, which):
-                _do_import(True)
-        builder.setPositiveButton("В профиль", _ProfClick())
-        builder.setNeutralButton("В библиотеку", _LibClick())
+        builder.setPositiveButton("В библиотеку", _LibClick())
         builder.setNegativeButton("Отмена", None)
     except Exception:
         pass
 
     try:
-        builder.show()
+        dialog_holder["d"] = builder.show()
     except Exception as e:
         _bootstrap_log(f"copy gifts dialog show err: {e}")
 
