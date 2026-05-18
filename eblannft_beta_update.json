@@ -1,7 +1,7 @@
 {
-  "version": "1.5.7",
+  "version": "1.5.17",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.7 - fixed update changelog encoding.\n\nWhat changed:\n- Fixed broken release notes in eblannft_beta_update.json.\n- The update popup no longer shows question marks instead of readable changelog text.\n- v1.5.6 changes are preserved: cachetools caches for profile NFT gifts, wear status data, NFT username, and NFT number.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.17 - server badges patched at cache-write, not just cache-read.\n\nFix: residual flicker still happened on the very first bind of a freshly-cached chat (read happened before our per-read hook re-patched). PutChatBadgeHook now intercepts putChat / putChats / putChatFull and applies the server badge BEFORE the chat lands in MessagesController, so the icon is present at the first read. All cache paths now use allow_fetch=False so the hook never blocks on network.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

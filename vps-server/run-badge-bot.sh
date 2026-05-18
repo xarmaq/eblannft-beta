@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+SERVER_URL="${SERVER_URL:-http://127.0.0.1:8787}"
+PLUGIN_KEY="${PLUGIN_KEY:-changeme}"
+
+EBLANNFT_SERVER_URL="$SERVER_URL" EBLANNFT_PLUGIN_KEY="$PLUGIN_KEY" python3 badge_bot.py

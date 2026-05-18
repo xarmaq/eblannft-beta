@@ -64,6 +64,23 @@ def clean_int(value, default=0):
         return default
 
 
+def normalize_entity_type(value):
+    value = clean_str(value, 24).strip().lower()
+    if value in {"user", "users", "tg"}:
+        return "user"
+    if value in {"chat", "channel", "channels"}:
+        return "chat"
+    return ""
+
+
+def make_badge_key(entity_type, entity_id):
+    entity_type = normalize_entity_type(entity_type)
+    entity_id = clean_int(entity_id, 0)
+    if not entity_type or entity_id == 0:
+        return ""
+    return f"{entity_type}:{entity_id}"
+
+
 def clean_list(value, max_items=64):
     if not isinstance(value, list):
         return []
@@ -125,6 +142,7 @@ class JsonStorage:
     def __init__(self, root_dir):
         self.root_dir = Path(root_dir)
         self.users_dir = self.root_dir / "users"
+        self.badges_path = self.root_dir / "badges.json"
         self.users_dir.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
@@ -162,6 +180,57 @@ class JsonStorage:
             return len(list(self.users_dir.glob("*.json")))
         except Exception:
             return 0
+
+    def load_badges(self):
+        if not self.badges_path.exists():
+            return {}
+        try:
+            with self.badges_path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                return {}
+            out = {}
+            for key, raw in data.items():
+                item = sanitize_badge(raw)
+                if not item:
+                    continue
+                out[item["key"]] = item
+            return out
+        except Exception:
+            return {}
+
+    def save_badges(self, badges):
+        if not isinstance(badges, dict):
+            badges = {}
+        tmp_path = self.badges_path.with_suffix(".json.tmp")
+        with self._lock:
+            with tmp_path.open("w", encoding="utf-8") as fh:
+                json.dump(badges, fh, ensure_ascii=False, separators=(",", ":"))
+            os.replace(tmp_path, self.badges_path)
+        return badges
+
+    def upsert_badge(self, payload):
+        item = sanitize_badge(payload)
+        if not item:
+            return None
+        badges = self.load_badges()
+        badges[item["key"]] = item
+        self.save_badges(badges)
+        return item
+
+    def delete_badge(self, key):
+        key = clean_str(key, 128).strip()
+        if not key:
+            return False
+        badges = self.load_badges()
+        item = badges.get(key)
+        existed = item is not None
+        if existed:
+            item["enabled"] = False
+            item["updated_at"] = now_ts()
+            badges[key] = item
+            self.save_badges(badges)
+        return existed
 
     @staticmethod
     def empty_record(user_key):
@@ -258,6 +327,39 @@ def sanitize_record(payload, user_key):
     }
 
 
+def sanitize_badge(payload):
+    if not isinstance(payload, dict):
+        return None
+    entity_type = normalize_entity_type(payload.get("entity_type", ""))
+    entity_id = clean_int(payload.get("entity_id", 0), 0)
+    key = clean_str(payload.get("key", ""), 128).strip()
+    if not key:
+        key = make_badge_key(entity_type, entity_id)
+    if ":" in key:
+        parts = key.split(":", 1)
+        entity_type = normalize_entity_type(parts[0])
+        entity_id = clean_int(parts[1], entity_id)
+    key = make_badge_key(entity_type, entity_id)
+    icon = clean_int(payload.get("icon_emoji_id", payload.get("icon", 0)), 0)
+    text = clean_str(payload.get("text", payload.get("description", "")), 512).strip()
+    text_markdown = clean_str(payload.get("text_markdown", payload.get("markdown", text)), 1024).strip()
+    if not key or icon <= 0 or not text:
+        return None
+    now = now_ts()
+    return {
+        "key": key,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "icon_emoji_id": icon,
+        "text": text,
+        "text_markdown": text_markdown or text,
+        "enabled": clean_bool(payload.get("enabled", True)),
+        "updated_at": clean_int(payload.get("updated_at", now), now),
+        "created_at": clean_int(payload.get("created_at", now), now),
+        "updated_by": clean_int(payload.get("updated_by", 0), 0),
+    }
+
+
 class ApiHandler(BaseHTTPRequestHandler):
     server_version = "eblannft-beta-server"
 
@@ -308,6 +410,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             return None, None
         return user_key, route
 
+    def _extract_badge_key(self):
+        path = urlparse(self.path).path
+        parts = [p for p in path.split("/") if p]
+        if len(parts) == 3 and parts[0] == "api" and parts[1] == "v1" and parts[2] == "badges":
+            return ""
+        if len(parts) == 4 and parts[0] == "api" and parts[1] == "v1" and parts[2] == "badges":
+            return unquote(parts[3]).strip()
+        return None
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/health":
@@ -315,6 +426,23 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "ok": True,
                 "version": VERSION,
                 "users": self.server.storage.count_users(),
+                "badges": len(self.server.storage.load_badges()),
+            })
+            return
+        badge_key = self._extract_badge_key()
+        if badge_key is not None:
+            badges = self.server.storage.load_badges()
+            if badge_key:
+                item = badges.get(badge_key)
+                if item is None:
+                    self._error(404, "badge not found")
+                    return
+                self._json(200, {"ok": True, "badge": item})
+                return
+            self._json(200, {
+                "ok": True,
+                "updated_at": max([int(v.get("updated_at", 0) or 0) for v in badges.values()] or [0]),
+                "badges": list(badges.values()),
             })
             return
         user_key, route = self._extract_user_key()
@@ -325,6 +453,24 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json(200, record)
 
     def do_PUT(self):
+        badge_key = self._extract_badge_key()
+        if badge_key is not None:
+            if not self._check_auth():
+                self._error(401, "invalid plugin key")
+                return
+            try:
+                payload = self._read_json_body()
+            except Exception as e:
+                self._error(400, str(e))
+                return
+            if badge_key:
+                payload["key"] = badge_key
+            item = self.server.storage.upsert_badge(payload)
+            if item is None:
+                self._error(400, "invalid badge")
+                return
+            self._json(200, {"ok": True, "badge": item})
+            return
         user_key, route = self._extract_user_key()
         if not user_key:
             self._error(404, "not found")
@@ -344,6 +490,17 @@ class ApiHandler(BaseHTTPRequestHandler):
             "count": len(record.get("gifts", []) or []),
             "updated_at": record.get("updated_at", 0),
         })
+
+    def do_DELETE(self):
+        badge_key = self._extract_badge_key()
+        if badge_key is None or not badge_key:
+            self._error(404, "not found")
+            return
+        if not self._check_auth():
+            self._error(401, "invalid plugin key")
+            return
+        ok = self.server.storage.delete_badge(badge_key)
+        self._json(200, {"ok": True, "deleted": bool(ok), "key": badge_key})
 
     def log_message(self, fmt, *args):
         msg = "%s - - [%s] %s\n" % (
