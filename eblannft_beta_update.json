@@ -1,7 +1,7 @@
 {
-  "version": "1.5.11",
+  "version": "1.5.12",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.11 - harden wear and developer badge updates.\n\nWhat changed:\n- Incoming Telegram Updates are now patched before Telegram applies them, including wear status and developer verification for user id 5406195402.\n- Post-update restore now runs immediately and repeats several times, with profile notifications and visible ProfileActivity repatch.\n- updateUserEmojiStatus now rebuilds wear status data from the gift library before giving up.\n- Developer verification is also patched inside update containers so the text does not disappear after UserFull updates.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.12 - server-managed verification badges.\n\nWhat changed:\n- Added VPS badge API and a Telegram admin bot for issuing, editing, listing, and deleting badges.\n- Badges can target users and channels, with custom premium emoji id plus verification text.\n- Plugin now fetches server badges and applies them to User, UserFull, Chat, and ChatFull objects.\n- Badge changes are polled live and repatch the visible profile; deletions sync as disabled tombstones so clients can clear cached visual badges.\n\nVerified: py_compile, git diff --check.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
