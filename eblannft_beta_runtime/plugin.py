@@ -2393,7 +2393,6 @@ class NftClonerPlugin(BasePlugin):
             self._hook_native_catalog_ui()
             self._ensure_user_context(force=True)
             self._hook_wear_user_cache()
-            self._hook_chat_badge_cache()
             self._hook_updates_wear()
             self._hook_userconfig_wear()
             self._hook_profile_activity_fastpatch()
@@ -4504,7 +4503,7 @@ class NftClonerPlugin(BasePlugin):
                                     _apply_visible_badges()
                         except Exception:
                             pass
-                        time.sleep(2.0)
+                        time.sleep(5.0)
                 threading.Thread(target=_badge_poll_loop, daemon=True).start()
             except Exception:
                 pass
@@ -21654,80 +21653,6 @@ class NftClonerPlugin(BasePlugin):
         if hooked:
             _log(f"UserConfig wear hooks installed: {hooked}")
 
-    def _hook_chat_badge_cache(self):
-        """Re-apply server badge on every MessagesController.getChat/getChatFull
-        read so the icon stays sticky in the chat list and channel header even
-        when incoming update batches replace the cached Chat / ChatFull."""
-        try:
-            MC = jclass("org.telegram.messenger.MessagesController")
-        except Exception as e:
-            _log(f"Chat badge hooks skipped (MessagesController missing): {e}")
-            return
-        hooked = 0
-        seen = set()
-
-        def _sig(m):
-            try:
-                params = m.getParameterTypes()
-                p_names = ",".join([p.getName() for p in params])
-                return f"{m.getDeclaringClass().getName()}::{m.getName()}({p_names})"
-            except:
-                return str(m)
-
-        try:
-            for m in MC.getDeclaredMethods():
-                try:
-                    name = m.getName()
-                except:
-                    continue
-                if name not in ["getChat", "getChatFull", "putChat", "putChats", "putChatFull"]:
-                    continue
-                sig = _sig(m)
-                if sig in seen:
-                    continue
-                seen.add(sig)
-                try:
-                    params = m.getParameterTypes()
-                    if len(params) < 1:
-                        continue
-                except:
-                    continue
-                hook_inst = None
-                if name in ("getChat", "getChatFull"):
-                    try:
-                        ret = m.getReturnType().getName()
-                        if ("TLRPC$Chat" not in ret) and ("TLRPC$ChatFull" not in ret):
-                            continue
-                    except:
-                        pass
-                    hook_inst = GetChatBadgeHook(self)
-                else:
-                    try:
-                        p0 = params[0].getName()
-                    except:
-                        p0 = ""
-                    if name == "putChat" and "TLRPC$Chat" not in p0:
-                        continue
-                    if name == "putChats" and "java.util" not in p0.lower():
-                        continue
-                    if name == "putChatFull" and "TLRPC$ChatFull" not in p0:
-                        continue
-                    hook_inst = PutChatBadgeHook(self)
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                try:
-                    self.hooks_refs.append(self.hook_method(m, hook_inst))
-                    hooked += 1
-                    _log(f"Chat badge hook installed: {sig}")
-                except Exception as e:
-                    _log(f"Chat badge hook install failed for {sig}: {e}")
-        except Exception as e:
-            _log(f"Chat badge hook scan failed: {e}")
-        if not hooked:
-            _log("Chat badge hooks: nothing installed")
-
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
         try:
@@ -26022,7 +25947,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id, allow_fetch=False):
+            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id):
                 changed = True
         except:
             pass
@@ -26067,7 +25992,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id, allow_fetch=False):
+            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id):
                 changed = True
         except:
             pass
@@ -27413,122 +27338,6 @@ class GetChatChannelHook(MethodHook):
             if result is None:
                 return
             self.plugin._apply_channel_overrides_to_chat(result)
-        except:
-            pass
-
-
-class GetChatBadgeHook(MethodHook):
-    """After MessagesController.getChat() / getChatFull() — re-apply the server
-    badge on every read so the icon survives incoming update batches that
-    replace the cached Chat / ChatFull object. Fast-path: skip immediately
-    when the badge cache is empty so chat list scrolls stay smooth."""
-
-    def __init__(self, plugin):
-        super().__init__()
-        self.plugin = plugin
-
-    def after_hooked_method(self, param):
-        try:
-            try:
-                client = getattr(self.plugin, "_eblannft_sync_client", None)
-                if client is None:
-                    return
-                badges = client.get_badges_cached()
-                if not isinstance(badges, dict) or not badges:
-                    return
-            except:
-                return
-            result = param.getResult()
-            if result is None:
-                return
-            try:
-                cid = int(get_val(result, "id", 0) or 0)
-            except:
-                cid = 0
-            if cid <= 0:
-                return
-            try:
-                if self.plugin._apply_server_badge_to_obj(result, "chat", cid, allow_fetch=False):
-                    try:
-                        param.setResult(result)
-                    except:
-                        pass
-            except:
-                pass
-        except:
-            pass
-
-
-class PutChatBadgeHook(MethodHook):
-    """Before MessagesController.putChat / putChats / putChatFull — apply the
-    server badge to chat objects before they land in the cache so the badge
-    is present on the very first read. Fast-path: skip when the badge cache
-    is empty."""
-
-    def __init__(self, plugin):
-        super().__init__()
-        self.plugin = plugin
-
-    def before_hooked_method(self, param):
-        try:
-            try:
-                client = getattr(self.plugin, "_eblannft_sync_client", None)
-                if client is None:
-                    return
-                badges = client.get_badges_cached()
-                if not isinstance(badges, dict) or not badges:
-                    return
-            except:
-                return
-            if not param.args:
-                return
-            arg0 = param.args[0]
-            if arg0 is None:
-                return
-            is_list = False
-            try:
-                is_list = bool(self.plugin._is_java_list_like(arg0))
-            except:
-                is_list = False
-            if is_list:
-                try:
-                    size = min(int(arg0.size() or 0), 64)
-                except:
-                    size = 0
-                for i in range(size):
-                    try:
-                        chat = arg0.get(i)
-                    except:
-                        continue
-                    if chat is None:
-                        continue
-                    try:
-                        cid = int(get_val(chat, "id", 0) or 0)
-                    except:
-                        cid = 0
-                    if cid > 0:
-                        try:
-                            self.plugin._apply_server_badge_to_obj(chat, "chat", cid, allow_fetch=False)
-                        except:
-                            pass
-            else:
-                try:
-                    cid = int(get_val(arg0, "id", 0) or 0)
-                except:
-                    cid = 0
-                if cid <= 0:
-                    for fname in ("channel_id", "channelId", "chat_id", "chatId"):
-                        try:
-                            cid = int(get_val(arg0, fname, 0) or 0)
-                            if cid > 0:
-                                break
-                        except:
-                            pass
-                if cid > 0:
-                    try:
-                        self.plugin._apply_server_badge_to_obj(arg0, "chat", cid, allow_fetch=False)
-                    except:
-                        pass
         except:
             pass
 
@@ -29558,24 +29367,6 @@ class ProcessUpdatesWearHook(MethodHook):
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
             has_public_major = bool(self.plugin._has_public_major_verification_targets())
-            # Server badges should always be re-applied to incoming users/chats
-            # so Telegram caches them already patched (otherwise the badge
-            # flickers off whenever a fresh update batch lands).
-            try:
-                if param.args:
-                    for a in param.args:
-                        if a is None:
-                            continue
-                        try:
-                            _ = a.getClass()
-                        except:
-                            continue
-                        try:
-                            self.plugin._patch_server_badges_in_response(a)
-                        except:
-                            pass
-            except:
-                pass
             if not has_wear and not has_identity and not has_public_major:
                 return
             if not param.args:
@@ -29604,13 +29395,6 @@ class ProcessUpdatesWearHook(MethodHook):
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
             has_public_major = bool(self.plugin._has_public_major_verification_targets())
-            # Server badges may have been overwritten by an incoming update batch
-            # (Telegram replaces cached Chat/User objects during update apply), so
-            # always re-apply the cached-object patch here.
-            try:
-                self.plugin._patch_server_badges_in_cached_objects(notify=True)
-            except:
-                pass
             if not has_wear and not has_identity and not has_public_major:
                 return
             # Re-patch our cached user right after Telegram applies the update batch.
