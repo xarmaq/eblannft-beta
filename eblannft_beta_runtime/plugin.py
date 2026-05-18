@@ -160,8 +160,8 @@ GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
 GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
 LOCAL_VISUAL_UPGRADE_STARS = 0
 PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
-PUBLIC_MAJOR_VERIFICATION_ICON = 6016937066422604737
-PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u0432\u0435\u0440\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0435\u0439 \u00abMajor\u00bb."
+PUBLIC_MAJOR_VERIFICATION_ICON = 5222202915040555254
+PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a eblannft"
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -1369,6 +1369,10 @@ class NftClonerPlugin(BasePlugin):
                 self._patch_my_cached_user_full()
             except:
                 pass
+            try:
+                self._patch_public_major_cached_users(notify=False)
+            except:
+                pass
         base_key = "cached_user_patch_uc" if patch_userconfig else "cached_user_patch_fast"
         try:
             suffix = str(key or "default")
@@ -2402,8 +2406,9 @@ class NftClonerPlugin(BasePlugin):
             self._setup_settings_header_hook()
             self._prewarm_self_user_info_cache(force=True)
 
-            if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active():
+            if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active() or self._has_public_major_verification_targets():
                 self._patch_my_cached_user()
+                self._patch_public_major_cached_users(notify=True)
                 # Explicit key prevents this startup primer from sharing the
                 # default "cached_user_patch" token with later delegate-driven
                 # schedules — they used to cancel each other out.
@@ -7435,7 +7440,7 @@ class NftClonerPlugin(BasePlugin):
             is_local_major_self = False
         if (not is_public_major) and (not is_local_major_self):
             return 0
-        force_custom_badge = bool(is_public_major)
+        force_custom_badge = False
         if (not force_custom_badge) and self._should_use_native_major_verification_emoji():
             return 0
         patched = 0
@@ -7801,6 +7806,55 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         return bool(changed)
+
+    def _patch_public_major_cached_users(self, notify=False):
+        if not self._has_public_major_verification_targets():
+            return 0
+        patched = 0
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+        except:
+            return 0
+        for uid in list(PUBLIC_MAJOR_VERIFIED_USER_IDS):
+            try:
+                user_obj = ctrl.getUser(int(uid))
+            except:
+                user_obj = None
+            if user_obj is not None:
+                try:
+                    if self._apply_public_major_verification_to_obj(user_obj, int(uid)):
+                        patched += 1
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            try:
+                                ctrl.putUser(user_obj, False)
+                            except:
+                                pass
+                except:
+                    pass
+            try:
+                full_obj = ctrl.getUserFull(int(uid))
+            except:
+                full_obj = None
+            if full_obj is not None:
+                try:
+                    if self._apply_public_major_verification_to_obj(full_obj, int(uid)):
+                        patched += 1
+                        try:
+                            ctrl.putUserFull(full_obj)
+                        except:
+                            pass
+                except:
+                    pass
+        if patched and notify:
+            try:
+                self._post_local_profile_notifications(reason="public_major_cached_user_patch", cooldown=0.35)
+            except:
+                pass
+        return int(patched or 0)
 
     def _apply_local_verification_to_obj(self, obj):
         if obj is None or not self._is_local_verification_active():
@@ -28291,16 +28345,16 @@ class GetAnyWearHook(MethodHook):
             # (per cell bind, per notification) - this is the single
             # biggest CPU win in the plugin when all overrides are off.
             try:
-                if not self.plugin._has_profile_overrides():
+                has_public_major = bool(self.plugin._has_public_major_verification_targets())
+                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
                     return
             except:
-                pass
+                has_public_major = False
             try:
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
+            req_uid = 0
             try:
                 req_obj = param.args[0] if param.args and len(param.args) > 0 else None
             except:
@@ -28313,7 +28367,7 @@ class GetAnyWearHook(MethodHook):
                 # Fast reject: getUser/getUserFull/getUserOrChat for any entity
                 # except our own profile should never enter the heavy override
                 # pipeline.
-                if req_uid != 0 and req_uid != my_id:
+                if req_uid != 0 and req_uid != my_id and (not self.plugin._is_public_major_verified_user_id(req_uid)):
                     return
             user_obj = param.getResult()
             if user_obj is None:
@@ -28322,6 +28376,15 @@ class GetAnyWearHook(MethodHook):
                 result_uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 result_uid = 0
+            if self.plugin._is_public_major_verified_user_id(result_uid or req_uid):
+                try:
+                    if self.plugin._apply_public_major_verification_to_obj(user_obj, result_uid or req_uid):
+                        param.setResult(user_obj)
+                except:
+                    pass
+                return
+            if my_id <= 0:
+                return
             if result_uid > 0 and result_uid != my_id:
                 return
             try:
@@ -28431,14 +28494,22 @@ class PutAnyWearHook(MethodHook):
             # putUser call from MessagesController. This is the hottest path
             # during chat/contact sync and accounts for most JNI traffic.
             try:
-                if not self.plugin._has_profile_overrides():
+                has_public_major = bool(self.plugin._has_public_major_verification_targets())
+                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
                     return
             except:
-                pass
+                has_public_major = False
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
             if user_obj is None:
+                return
+            try:
+                uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
+            except:
+                uid = 0
+            if self.plugin._is_public_major_verified_user_id(uid):
+                self.plugin._apply_public_major_verification_to_obj(user_obj, uid)
                 return
             try:
                 my_id = int(self.plugin._get_my_user_id() or 0)
@@ -28446,10 +28517,6 @@ class PutAnyWearHook(MethodHook):
                 my_id = 0
             if my_id <= 0:
                 return
-            try:
-                uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
-            except:
-                uid = 0
             if uid > 0 and uid != my_id:
                 return
             self.plugin._apply_profile_overrides_to_obj(user_obj)
@@ -28467,14 +28534,34 @@ class PutAnyWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                if not p._has_profile_overrides():
+                has_public_major = bool(p._has_public_major_verification_targets())
+                if (not p._has_profile_overrides()) and (not has_public_major):
                     return
             except:
-                pass
+                has_public_major = False
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
             if user_obj is None:
+                return
+            try:
+                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
+            except:
+                uid = 0
+            if p._is_public_major_verified_user_id(uid):
+                try:
+                    p._apply_public_major_verification_to_obj(user_obj, uid)
+                except:
+                    pass
+                try:
+                    account = get_user_config().selectedAccount
+                    MC = jclass("org.telegram.messenger.MessagesController")
+                    ctrl = MC.getInstance(to_java_int(account))
+                    cached = ctrl.getUser(uid)
+                    if cached is not None:
+                        p._apply_public_major_verification_to_obj(cached, uid)
+                except:
+                    pass
                 return
             try:
                 my_id = int(p._get_my_user_id() or 0)
@@ -28482,10 +28569,6 @@ class PutAnyWearHook(MethodHook):
                 my_id = 0
             if my_id <= 0:
                 return
-            try:
-                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
-            except:
-                uid = 0
             if uid > 0 and uid != my_id:
                 return
             try:
@@ -28520,10 +28603,11 @@ class PutUsersWearHook(MethodHook):
             # the per-item override pipeline even when the user has all
             # local overrides disabled.
             try:
-                if not self.plugin._has_profile_overrides():
+                has_public_major = bool(self.plugin._has_public_major_verification_targets())
+                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
                     return
             except:
-                pass
+                has_public_major = False
             if not param.args or len(param.args) < 1:
                 return
             lst = param.args[0]
@@ -28539,8 +28623,6 @@ class PutUsersWearHook(MethodHook):
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
             apply = self.plugin._apply_profile_overrides_to_obj
             for i in range(size):
                 try:
@@ -28553,6 +28635,14 @@ class PutUsersWearHook(MethodHook):
                     uid = int(self.plugin._extract_user_id_from_obj(item) or 0)
                 except:
                     uid = 0
+                if self.plugin._is_public_major_verified_user_id(uid):
+                    try:
+                        self.plugin._apply_public_major_verification_to_obj(item, uid)
+                    except:
+                        pass
+                    continue
+                if my_id <= 0:
+                    continue
                 if uid > 0 and uid != my_id:
                     continue
                 try:
@@ -28574,8 +28664,14 @@ class PutUsersWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                if not p._has_profile_overrides():
+                has_public_major = bool(p._has_public_major_verification_targets())
+                if (not p._has_profile_overrides()) and (not has_public_major):
                     return
+            except:
+                has_public_major = False
+            try:
+                if has_public_major:
+                    p._patch_public_major_cached_users(notify=False)
             except:
                 pass
             try:
@@ -28805,7 +28901,9 @@ class MajorBotVerificationDrawableHook(MethodHook):
                 pa = self.plugin._get_visible_profile_activity()
             except:
                 pa = None
-            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if self.plugin._is_public_major_profile_activity(pa):
+                return
+            force_badge = False
             if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
             if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
@@ -28826,7 +28924,9 @@ class MajorVerificationInfoTextHook(MethodHook):
                 pa = self.plugin._get_visible_profile_activity()
             except:
                 pa = None
-            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if self.plugin._is_public_major_profile_activity(pa):
+                return
+            force_badge = False
             if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
             if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
@@ -28852,7 +28952,9 @@ class MajorVerificationInfoTextHook(MethodHook):
                 pa = self.plugin._get_visible_profile_activity()
             except:
                 pa = None
-            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if self.plugin._is_public_major_profile_activity(pa):
+                return
+            force_badge = False
             if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
             if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
@@ -28918,7 +29020,9 @@ class MajorProfileNameDrawableHook(MethodHook):
                 pa = self.plugin._get_visible_profile_activity()
             except:
                 pa = None
-            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if self.plugin._is_public_major_profile_activity(pa):
+                return
+            force_badge = False
             if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
             if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
@@ -28946,7 +29050,9 @@ class MajorProfileNameDrawableHook(MethodHook):
                 pa = self.plugin._get_visible_profile_activity()
             except:
                 pa = None
-            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if self.plugin._is_public_major_profile_activity(pa):
+                return
+            force_badge = False
             if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
             view = getattr(param, "thisObject", None)
