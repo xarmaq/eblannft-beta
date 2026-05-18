@@ -1,7 +1,7 @@
 {
-  "version": "1.5.10",
+  "version": "1.5.11",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.10 - stable developer badge and wear profile patch.\n\nWhat changed:\n- Fixed a conflict where own-profile wear/NFT overrides could overwrite the public developer verification for user id 5406195402.\n- Developer badge is now applied last in self profile, UserFull, ProfileActivity, processUserInfo, and cache refresh paths.\n- Fixed cases where Telegram could show only the badge icon without the developer eblannft text after UserFull cache merges.\n- Kept the custom emoji id 5222202915040555254 and developer eblannft verification text.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.11 - harden wear and developer badge updates.\n\nWhat changed:\n- Incoming Telegram Updates are now patched before Telegram applies them, including wear status and developer verification for user id 5406195402.\n- Post-update restore now runs immediately and repeats several times, with profile notifications and visible ProfileActivity repatch.\n- updateUserEmojiStatus now rebuilds wear status data from the gift library before giving up.\n- Developer verification is also patched inside update containers so the text does not disappear after UserFull updates.\n\nVerified: py_compile, git diff --check.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
