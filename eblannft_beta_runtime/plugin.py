@@ -2390,6 +2390,7 @@ class NftClonerPlugin(BasePlugin):
                 )
             )
             self._hook_network()
+            self._init_sfx()
             self._hook_native_catalog_ui()
             self._ensure_user_context(force=True)
             self._hook_wear_user_cache()
@@ -4669,6 +4670,10 @@ class NftClonerPlugin(BasePlugin):
         if not notify:
             return
         try:
+            self._sfx_play("success")
+        except:
+            pass
+        try:
             if self.local_rating_enabled:
                 BulletinHelper.show_success(f"Локальный рейтинг сохранен: {self._get_local_rating_label()}")
             else:
@@ -4677,6 +4682,10 @@ class NftClonerPlugin(BasePlugin):
             pass
 
     def _open_local_rating_dialog(self):
+        try:
+            self._sfx_play("open")
+        except:
+            pass
         try:
             actions = [
                 (
@@ -4745,6 +4754,10 @@ class NftClonerPlugin(BasePlugin):
         if not notify:
             return
         try:
+            self._sfx_play("success")
+        except:
+            pass
+        try:
             if self._is_local_stars_balance_active():
                 BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´: {self._get_local_stars_balance_label()}")
             else:
@@ -4753,6 +4766,10 @@ class NftClonerPlugin(BasePlugin):
             pass
 
     def _open_local_stars_balance_dialog(self):
+        try:
+            self._sfx_play("open")
+        except:
+            pass
         self._show_text_input_dialog(
             "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´",
             str(self._get_local_stars_balance_value() or ""),
@@ -4862,6 +4879,10 @@ class NftClonerPlugin(BasePlugin):
                     daemon=True,
                 ).start()
         except Exception:
+            pass
+        try:
+            self._sfx_play("toggle")
+        except:
             pass
         try:
             BulletinHelper.show_info("Official gifts hidden locally" if enabled else "Official gifts are visible again")
@@ -21653,6 +21674,40 @@ class NftClonerPlugin(BasePlugin):
             _log(f"UserConfig wear hook scan failed: {e}")
         if hooked:
             _log(f"UserConfig wear hooks installed: {hooked}")
+
+    def _init_sfx(self):
+        """Pre-generate SFX WAVs and load them into SoundPool. Idempotent."""
+        try:
+            from . import _sfx as _sfx_module
+        except Exception:
+            try:
+                import eblannft_beta_runtime._sfx as _sfx_module  # type: ignore
+            except Exception as e:
+                _log(f"sfx module import failed: {e}")
+                self._sfx_module = None
+                return
+        self._sfx_module = _sfx_module
+        try:
+            ctx = ApplicationLoader.applicationContext
+        except Exception:
+            ctx = None
+        if ctx is None:
+            _log("sfx init: no app context yet")
+            return
+        try:
+            _sfx_module.init(ctx)
+        except Exception as e:
+            _log(f"sfx init failed: {e}")
+
+    def _sfx_play(self, kind="click"):
+        """Play a short feedback tone. Best-effort, never raises."""
+        try:
+            mod = getattr(self, "_sfx_module", None)
+            if mod is None:
+                return
+            mod.play(str(kind or "click"))
+        except Exception:
+            pass
 
     def _hook_chat_badge_cache(self):
         """Re-apply server badge on every MessagesController.getChat/getChatFull
