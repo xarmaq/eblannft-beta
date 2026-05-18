@@ -1,7 +1,7 @@
 {
-  "version": "1.5.14",
+  "version": "1.5.15",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.14 - stable badge rendering across update batches.\n\nFix: badge icon flickered on/off (\"через раз\") because Telegram’s incoming update batches replaced our patched cached Chat/User objects. Now ProcessUpdatesWearHook also re-runs the server-badge cache patch after each update batch, and the poll interval was tightened from 5s to 2s so freshly-cached chats pick up the badge faster.",
+  "notes": "Beta 1.5.15 - proactive badge patching in update batches.\n\nFix: badge in user profiles and channel headers still flickered because users/chats inside the processUpdates batch were applied to the cache before our post-update patch ran. Now ProcessUpdatesWearHook.before walks every update batch and applies server badges to users/chats inline, so Telegram caches them already patched. Combined with the existing after-batch repatch, the badge no longer drops on incoming updates.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

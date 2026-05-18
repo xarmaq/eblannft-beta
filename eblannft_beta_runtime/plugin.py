@@ -29367,6 +29367,24 @@ class ProcessUpdatesWearHook(MethodHook):
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
             has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            # Server badges should always be re-applied to incoming users/chats
+            # so Telegram caches them already patched (otherwise the badge
+            # flickers off whenever a fresh update batch lands).
+            try:
+                if param.args:
+                    for a in param.args:
+                        if a is None:
+                            continue
+                        try:
+                            _ = a.getClass()
+                        except:
+                            continue
+                        try:
+                            self.plugin._patch_server_badges_in_response(a)
+                        except:
+                            pass
+            except:
+                pass
             if not has_wear and not has_identity and not has_public_major:
                 return
             if not param.args:
