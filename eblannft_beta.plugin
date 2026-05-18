@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.19"
+__version__ = "1.5.7"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -56,7 +56,6 @@ _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
     f"{_RUNTIME_PACKAGE_NAME}/sync_client.py",
     f"{_RUNTIME_PACKAGE_NAME}/legacy_gifts.py",
-    f"{_RUNTIME_PACKAGE_NAME}/_sfx.py",
 )
 # Names by which the wrapper file may appear in update manifests. The very
 # old prod manifest used "eblannft.plugin"; beta builds use
@@ -919,76 +918,6 @@ def _eblannft_jint(value):
         return jint(v)
     except Exception:
         return int(value)
-
-
-# SFX: short non-intrusive tones for key plugin actions. Uses Android's
-# ToneGenerator so we don't ship any audio resources. Silent fallback on
-# any failure (older Androids, missing audio service, etc.).
-_EBLANNFT_SFX_ENABLED = True
-
-_EBLANNFT_SFX_TONES = {
-    # (tone constant attr name, duration_ms, volume_0_100)
-    "click":    ("TONE_PROP_BEEP",  60,  35),
-    "open":     ("TONE_PROP_PROMPT", 120, 45),
-    "success":  ("TONE_PROP_ACK",    180, 55),
-    "complete": ("TONE_PROP_BEEP2",  220, 60),
-    "error":    ("TONE_PROP_NACK",   320, 60),
-}
-
-
-def _eblannft_play_sfx(kind="click"):
-    """Play a short feedback tone for the given action kind. Best-effort:
-    swallows all failures so SFX never affects the host app.
-
-    Prefers the runtime's higher-fidelity SoundPool SFX (real synthesised
-    WAVs, pre-loaded). Falls back to ToneGenerator if the runtime module
-    isn't ready yet (e.g. during the very first install before the
-    runtime files are downloaded).
-    """
-    if not _EBLANNFT_SFX_ENABLED:
-        return
-    # 1) preferred: runtime _sfx module (richer tones via SoundPool)
-    try:
-        from eblannft_beta_runtime import _sfx as _rt_sfx  # type: ignore
-        try:
-            _rt_sfx.play(str(kind or "click"))
-            return
-        except Exception:
-            pass
-    except Exception:
-        pass
-    # 2) fallback: built-in ToneGenerator (always available)
-    try:
-        attr, duration_ms, volume = _EBLANNFT_SFX_TONES.get(
-            kind, _EBLANNFT_SFX_TONES["click"]
-        )
-    except Exception:
-        return
-    try:
-        from java import jclass
-        AudioManager = jclass("android.media.AudioManager")
-        ToneGenerator = jclass("android.media.ToneGenerator")
-        stream = AudioManager.STREAM_NOTIFICATION
-        gen = ToneGenerator(stream, int(volume))
-        tone_const = int(getattr(ToneGenerator, attr))
-        gen.startTone(tone_const, int(duration_ms))
-        try:
-            import threading as _t
-            def _release():
-                try:
-                    import time as _time
-                    _time.sleep(float(duration_ms + 80) / 1000.0)
-                except Exception:
-                    pass
-                try:
-                    gen.release()
-                except Exception:
-                    pass
-            _t.Thread(target=_release, daemon=True).start()
-        except Exception:
-            pass
-    except Exception:
-        pass
 
 
 def _eblannft_resolve_icon_pack(random_pick=False):
@@ -2825,11 +2754,6 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
     a sticker preview + label; tapping toggles selection (green border
     + checkmark). Two action buttons at the bottom: "В библиотеку"
     (no profile injection) and "В профиль" (with injection)."""
-    try:
-        if plugin_self is not None and hasattr(plugin_self, "_sfx_play"):
-            plugin_self._sfx_play("open")
-    except Exception:
-        pass
     try:
         from client_utils import get_last_fragment
         from android.widget import (
@@ -5854,47 +5778,222 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 _is_upgrade = True
             title = TextView(ctx)
             title.setText(
-                "Обновление" if _is_upgrade else "Откат"
+                "Обновление готово" if _is_upgrade else f"Откат на v{manifest.get('version', '?')}"
             )
             try:
-                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 26)
+                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
                 title.setTextColor(text_color)
                 title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
-                title.setLetterSpacing(-0.01)
             except Exception:
                 pass
             hero_text.addView(title, LinearLayout.LayoutParams(-1, -2))
 
-            # M3 Expressive subtitle: one quiet line with the version
-            # transition inline. No pills, no arrow animation, no shimmer —
-            # just clean type. Accent colour highlights the new version.
-            remote_v = str(manifest.get('version', '?'))
             subtitle = TextView(ctx)
+            subtitle.setText("eblanNFT")
             try:
-                from android.text import SpannableStringBuilder
-                from android.text.style import ForegroundColorSpan, StyleSpan
-                from android.graphics import Typeface as _TF
-                sb = SpannableStringBuilder()
-                sb.append(f"eblanNFT · v{__version__}  →  ")
-                start = sb.length()
-                sb.append(f"v{remote_v}")
-                end = sb.length()
-                sb.setSpan(ForegroundColorSpan(accent), start, end, 0)
-                sb.setSpan(StyleSpan(_TF.BOLD), start, end, 0)
-                subtitle.setText(sb)
-            except Exception:
-                subtitle.setText(f"eblanNFT · v{__version__} → v{remote_v}")
-            try:
-                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
                 subtitle.setTextColor(muted_color)
             except Exception:
                 pass
             lp_sub = LinearLayout.LayoutParams(-1, -2)
             try:
-                lp_sub.topMargin = AndroidUtilities.dp(4)
+                lp_sub.topMargin = AndroidUtilities.dp(2)
             except Exception:
                 pass
             hero_text.addView(subtitle, lp_sub)
+
+            # Version chip on its own line, slightly indented under hero.
+            chip_row = LinearLayout(ctx)
+            chip_row.setOrientation(LinearLayout.HORIZONTAL)
+            chip_row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL)
+            lp_chip_row = LinearLayout.LayoutParams(-1, -2)
+            try:
+                lp_chip_row.topMargin = AndroidUtilities.dp(14)
+            except Exception:
+                pass
+            outer.addView(chip_row, lp_chip_row)
+
+            # Two version pills with an animated arrow between them.
+            # The "new version" pill carries an Apple-style shimmer:
+            # a moving LinearGradient bright spot that travels across
+            # the pill background in a loop.
+            remote_v = str(manifest.get('version', '?'))
+
+            def _make_version_pill(text, *, highlight=False):
+                tv = TextView(ctx)
+                try:
+                    tv.setText(text)
+                    tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13)
+                    try:
+                        tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                    except Exception:
+                        pass
+                    tv.setGravity(Gravity.CENTER)
+                    tv.setPadding(
+                        AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(7),
+                        AndroidUtilities.dp(12),
+                        AndroidUtilities.dp(7),
+                    )
+                    if highlight:
+                        tv.setTextColor(_eblannft_jint(0xFFFFFFFF))
+                        # Solid accent fill — the shimmer paints on top.
+                        bg = GradientDrawable()
+                        bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                        bg.setColor(accent)
+                        tv.setBackground(bg)
+                    else:
+                        tv.setTextColor(muted_color)
+                        bg = GradientDrawable()
+                        bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                        bg.setColor(_blend(0xFFFFFFFF, bg_color, 0.06))
+                        # Thin outline so the muted pill has definition.
+                        try:
+                            bg.setStroke(
+                                AndroidUtilities.dp(1),
+                                _eblannft_jint(0x22FFFFFF),
+                            )
+                        except Exception:
+                            pass
+                        tv.setBackground(bg)
+                except Exception:
+                    pass
+                return tv
+
+            old_pill = _make_version_pill(f"v{__version__}", highlight=False)
+            new_pill = _make_version_pill(f"v{remote_v}", highlight=True)
+            chip_row.addView(old_pill, LinearLayout.LayoutParams(-2, -2))
+
+            # Animated arrow → between the two pills. The arrow uses a
+            # ValueAnimator-driven translationX to "pulse" forward.
+            arrow_tv = TextView(ctx)
+            try:
+                arrow_tv.setText("→")
+                arrow_tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16)
+                arrow_tv.setTextColor(accent)
+                arrow_tv.setGravity(Gravity.CENTER)
+                try:
+                    arrow_tv.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            lp_arrow = LinearLayout.LayoutParams(-2, -2)
+            try:
+                lp_arrow.leftMargin = AndroidUtilities.dp(8)
+                lp_arrow.rightMargin = AndroidUtilities.dp(8)
+            except Exception:
+                pass
+            chip_row.addView(arrow_tv, lp_arrow)
+            chip_row.addView(new_pill, LinearLayout.LayoutParams(-2, -2))
+
+            # Arrow pulse: small forward translation that repeats.
+            try:
+                from android.animation import ValueAnimator
+                from android.view.animation import LinearInterpolator
+                from java import dynamic_proxy as _dp_anim
+                arrow_anim = ValueAnimator.ofFloat(0.0, 1.0)
+                arrow_anim.setDuration(1100)
+                arrow_anim.setRepeatCount(ValueAnimator.INFINITE)
+                arrow_anim.setInterpolator(LinearInterpolator())
+                shift_px = float(AndroidUtilities.dp(4))
+                class _ArrowUpdate(_dp_anim(ValueAnimator.AnimatorUpdateListener)):
+                    def onAnimationUpdate(self_obj, anim):
+                        try:
+                            v = float(anim.getAnimatedValue())
+                            # Triangle wave for back-and-forth motion + alpha pulse.
+                            wave = v * 2.0 if v < 0.5 else (1.0 - v) * 2.0
+                            arrow_tv.setTranslationX(shift_px * wave)
+                            arrow_tv.setAlpha(0.55 + 0.45 * wave)
+                        except Exception:
+                            pass
+                arrow_anim.addUpdateListener(_ArrowUpdate())
+                arrow_anim.start()
+            except Exception as _ae:
+                _bootstrap_log(f"arrow anim err: {_ae}")
+
+            # Apple-style shimmer on the new-version pill: a moving
+            # LinearGradient highlight that sweeps left → right and
+            # loops. Drawn as a LayerDrawable on top of the solid fill.
+            try:
+                from android.graphics import LinearGradient, Shader, Paint, RectF
+                from android.graphics.drawable import Drawable
+                from android.animation import ValueAnimator as _VA
+                from java import dynamic_proxy as _dp_sh
+
+                shimmer_state = {"progress": 0.0}
+                paint_sh = Paint(Paint.ANTI_ALIAS_FLAG)
+
+                class _ShimmerDrawable(_dp_sh(Drawable)):
+                    def draw(self_obj, canvas):
+                        try:
+                            b = self_obj.getBounds()
+                            w = float(b.right - b.left)
+                            h = float(b.bottom - b.top)
+                            if w <= 0 or h <= 0:
+                                return
+                            # The shimmer band is ~35% wide, sliding
+                            # from x=-band to x=w+band over the loop.
+                            band_w = w * 0.35
+                            travel = w + band_w * 2.0
+                            x = -band_w + travel * float(shimmer_state["progress"])
+                            shader = LinearGradient(
+                                float(x), 0.0,
+                                float(x + band_w), 0.0,
+                                [
+                                    _eblannft_jint(0x00FFFFFF),
+                                    _eblannft_jint(0x55FFFFFF),  # bright streak
+                                    _eblannft_jint(0x00FFFFFF),
+                                ],
+                                [0.0, 0.5, 1.0],
+                                Shader.TileMode.CLAMP,
+                            )
+                            paint_sh.setShader(shader)
+                            # Round-rect clip so the shimmer respects the
+                            # pill's rounded corners.
+                            rect = RectF(float(b.left), float(b.top),
+                                         float(b.right), float(b.bottom))
+                            radius = h / 2.0
+                            canvas.drawRoundRect(rect, radius, radius, paint_sh)
+                        except Exception:
+                            pass
+                    def setAlpha(self_obj, a):
+                        try: paint_sh.setAlpha(int(a))
+                        except Exception: pass
+                    def setColorFilter(self_obj, cf):
+                        try: paint_sh.setColorFilter(cf)
+                        except Exception: pass
+                    def getOpacity(self_obj):
+                        return -3
+
+                # Layer the shimmer ON TOP of the solid fill so the
+                # gradient passes over the green pill.
+                from android.graphics.drawable import LayerDrawable
+                base_bg = GradientDrawable()
+                base_bg.setCornerRadius(float(AndroidUtilities.dp(999)))
+                base_bg.setColor(accent)
+                shimmer = _ShimmerDrawable()
+                layer = LayerDrawable([base_bg, shimmer])
+                try:
+                    new_pill.setBackground(layer)
+                except Exception:
+                    pass
+
+                shimmer_anim = _VA.ofFloat(0.0, 1.0)
+                shimmer_anim.setDuration(1600)
+                shimmer_anim.setRepeatCount(_VA.INFINITE)
+                shimmer_anim.setStartDelay(300)
+                class _ShimmerUpdate(_dp_sh(_VA.AnimatorUpdateListener)):
+                    def onAnimationUpdate(self_obj, anim):
+                        try:
+                            shimmer_state["progress"] = float(anim.getAnimatedValue())
+                            new_pill.invalidate()
+                        except Exception:
+                            pass
+                shimmer_anim.addUpdateListener(_ShimmerUpdate())
+                shimmer_anim.start()
+            except Exception as _she:
+                _bootstrap_log(f"shimmer setup err: {_she}")
 
             # Optional "released N ago" line under the chip — only shown
             # if the manifest carries a parseable 'released' ISO date.
@@ -5974,10 +6073,35 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 if not bullet_items:
                     bullet_items = [notes_text]
 
-                # M3 Expressive: single quiet bullet colour for every line.
-                # No heuristic colour wheel — keeps the surface minimal.
+                # Heuristic: colour each bullet by what the line is about.
+                # Strips HTML tags first because markdown rendering may
+                # wrap the leading verb in <strong>. Pattern matched
+                # against lowercase normalised text.
                 def _classify_bullet_color(raw):
-                    return accent
+                    try:
+                        clean = _strip_html_tags(str(raw or "")).strip().lower()
+                    except Exception:
+                        clean = str(raw or "").strip().lower()
+                    # Strip a leading bullet/dash/digit etc.
+                    while clean and clean[0] in "•-*·(0123456789).":
+                        clean = clean[1:].lstrip()
+                    fix_words = ("фикс", "пофикш", "исправ", "починен", "почин", "hotfix", "fix", "крах", "баг")
+                    add_words = ("добавл", "новое", "новый", "новая", "новые", "added", "new ", "новинк")
+                    chg_words = ("измен", "обнов", "перепис", "переделан", "переход", "updated", "changed", "улучш", "перевед")
+                    rm_words  = ("убран", "удал", "снят", "remov", "drop", "стёрт")
+                    for w in fix_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFF22C55E)  # green
+                    for w in add_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFF3B82F6)  # blue
+                    for w in chg_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFFFACC15)  # yellow
+                    for w in rm_words:
+                        if w in clean:
+                            return _eblannft_jint(0xFFEF4444)  # red
+                    return accent  # default = accent green
 
                 for idx, item_text in enumerate(bullet_items):
                     if not item_text:
@@ -6444,10 +6568,6 @@ def _show_update_popup(manifest, _retry_attempt=0):
                         except Exception:
                             pass
                         try:
-                            _eblannft_play_sfx("success")
-                        except Exception:
-                            pass
-                        try:
                             _start_restart_countdown(seconds=5)
                         except Exception:
                             pass
@@ -6464,10 +6584,6 @@ def _show_update_popup(manifest, _retry_attempt=0):
                             action_btn.setAlpha(1.0)
                         except Exception:
                             pass
-                        try:
-                            _eblannft_play_sfx("error")
-                        except Exception:
-                            pass
                     run_on_ui_thread(_err)
 
             try:
@@ -6477,19 +6593,11 @@ def _show_update_popup(manifest, _retry_attempt=0):
 
             def _on_action():
                 if state["done"]:
-                    try:
-                        _eblannft_play_sfx("complete")
-                    except Exception:
-                        pass
                     _restart_application()
                     return
                 if state["started"]:
                     return
                 state["started"] = True
-                try:
-                    _eblannft_play_sfx("click")
-                except Exception:
-                    pass
                 try:
                     action_btn.setEnabled(False)
                     action_btn.setAlpha(0.85)
@@ -6501,10 +6609,6 @@ def _show_update_popup(manifest, _retry_attempt=0):
                 threading.Thread(target=_do_download, daemon=True).start()
 
             def _on_close():
-                try:
-                    _eblannft_play_sfx("click")
-                except Exception:
-                    pass
                 if countdown_state.get("active"):
                     _cancel_restart_countdown()
                     try:
@@ -6553,10 +6657,6 @@ def _show_update_popup(manifest, _retry_attempt=0):
 
             try:
                 sheet.show()
-                try:
-                    _eblannft_play_sfx("open")
-                except Exception:
-                    pass
             except Exception:
                 run_on_ui_thread(sheet.show)
 
@@ -6626,10 +6726,6 @@ def _check_for_update_interactive():
             except Exception:
                 pass
 
-    try:
-        _eblannft_play_sfx("click")
-    except Exception:
-        pass
     _toast("show_info", f"Проверяю обновления для v{__version__}…")
 
     def _worker():
@@ -6638,19 +6734,11 @@ def _check_for_update_interactive():
             _write_last_check_ts(time.time())
             remote_v = str(manifest.get("version", "?"))
             if not _is_remote_different(remote_v):
-                try:
-                    _eblannft_play_sfx("success")
-                except Exception:
-                    pass
                 _toast("show_success", f"В репо та же версия: v{__version__}")
                 return
             _bootstrap_log(f"manual update check: v{__version__} -> v{remote_v}")
             _show_update_popup(manifest)
         except Exception as e:
-            try:
-                _eblannft_play_sfx("error")
-            except Exception:
-                pass
             _toast("show_error", f"Не удалось проверить обновления: {e}")
             _bootstrap_log(f"manual update check error: {e}")
 
