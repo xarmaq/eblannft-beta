@@ -126,7 +126,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.90"
+__version__ = "1.5.5"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -955,6 +955,9 @@ class NftClonerPlugin(BasePlugin):
 
         self.hooks_refs = []
         self._profile_fastpatch_last_ts = 0.0
+        self._profile_fastpatch_phase_ts = {}
+        self._profile_entity_id_cache = {}
+        self._profile_user_id_cache = {}
         self._profile_patch_session = 0
         self._profile_runtime_gen = 0
         self._market_floor_cache = {}
@@ -1202,6 +1205,12 @@ class NftClonerPlugin(BasePlugin):
             pass
         try:
             self._profile_gifts_deep_scan_key = 0
+        except:
+            pass
+        try:
+            self._profile_fastpatch_phase_ts = {}
+            self._profile_entity_id_cache = {}
+            self._profile_user_id_cache = {}
         except:
             pass
         try:
@@ -2058,7 +2067,7 @@ class NftClonerPlugin(BasePlugin):
                 # after async userInfo callbacks; do not re-enter the expensive
                 # major view-tree scan here or the profile will hitch every time
                 # Telegram emits a follow-up notification.
-                changed = int(self._patch_profile_activity_in_place(pa, notify=False, include_major_views=False) or 0)
+                changed = int(self._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False) or 0)
             except:
                 changed = 0
             if changed > 0:
@@ -7270,13 +7279,22 @@ class NftClonerPlugin(BasePlugin):
     def _patch_local_major_profile_views(self, profile_activity):
         if profile_activity is None or not self._is_local_major_verification_active():
             return 0
+        try:
+            if not self._is_my_profile_activity(profile_activity):
+                return 0
+        except:
+            return 0
         if self._should_use_native_major_verification_emoji():
             return 0
         patched = 0
         try:
-            heavy_pass = bool(self._should_run_major_profile_heavy_pass(profile_activity, window_sec=1.15))
+            cold_open = bool(self._is_profile_activity_cold_open(profile_activity, window_sec=0.72))
         except:
-            heavy_pass = True
+            cold_open = False
+        try:
+            heavy_pass = (not cold_open) and bool(self._should_run_major_profile_heavy_pass(profile_activity, window_sec=2.4))
+        except:
+            heavy_pass = not cold_open
         try:
             drawable = self._get_local_major_badge_drawable(17.0)
         except:
@@ -7318,7 +7336,7 @@ class NftClonerPlugin(BasePlugin):
             # Pre-bind attribute lookups outside the tight loop.
             _cs2txt = self._charsequence_to_plain_text
             _skip_texts = ("в сети", "online")
-            for view in self._iter_view_tree(fragment_view, max_depth=9):
+            for view in self._iter_view_tree(fragment_view, max_depth=6):
                 if view is None:
                     continue
                 try:
@@ -7363,7 +7381,7 @@ class NftClonerPlugin(BasePlugin):
                     roots.append(holder)
             seen_views = set()
             for root in roots:
-                for child in self._iter_view_tree(root, max_depth=9):
+                for child in self._iter_view_tree(root, max_depth=6):
                     if child is None:
                         continue
                     try:
@@ -7932,7 +7950,7 @@ class NftClonerPlugin(BasePlugin):
         if pa is not None:
             try:
                 if self._is_my_profile_activity(pa):
-                    if self._patch_profile_activity_in_place(pa, notify=False, include_major_views=False):
+                    if self._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False):
                         changed = True
             except:
                 pass
@@ -20880,9 +20898,61 @@ class NftClonerPlugin(BasePlugin):
                 pass
         return 0
 
+    def _profile_activity_cache_key(self, profile_activity):
+        if profile_activity is None:
+            return 0
+        try:
+            return int(profile_activity.hashCode())
+        except:
+            try:
+                return int(id(profile_activity))
+            except:
+                return 0
+
+    def _should_skip_profile_fastpatch_phase(self, profile_activity, method_name, phase, min_interval=0.55):
+        try:
+            frag_key = int(self._profile_activity_cache_key(profile_activity) or 0)
+        except:
+            frag_key = 0
+        if frag_key <= 0:
+            return False
+        try:
+            min_interval = float(min_interval or 0.0)
+        except:
+            min_interval = 0.0
+        now = time.time()
+        try:
+            cache = getattr(self, "_profile_fastpatch_phase_ts", None)
+            if not isinstance(cache, dict):
+                cache = {}
+                self._profile_fastpatch_phase_ts = cache
+            key = (frag_key, str(method_name or ""), str(phase or ""))
+            prev = float(cache.get(key, 0.0) or 0.0)
+            if min_interval > 0.0 and (now - prev) < min_interval:
+                return True
+            cache[key] = now
+            if len(cache) > 96:
+                stale = [k for k, ts in cache.items() if (now - float(ts or 0.0)) > 18.0]
+                for k in stale:
+                    cache.pop(k, None)
+                if len(cache) > 128:
+                    for k in list(cache.keys())[:32]:
+                        cache.pop(k, None)
+        except:
+            pass
+        return False
+
     def _get_profile_activity_entity_id(self, profile_activity):
         if profile_activity is None:
             return 0
+        cache_key = self._profile_activity_cache_key(profile_activity)
+        if cache_key:
+            try:
+                cached = int((getattr(self, "_profile_entity_id_cache", None) or {}).get(cache_key, 0) or 0)
+                if cached != 0:
+                    return cached
+            except:
+                pass
         for name in ["dialogId", "dialog_id", "peerId", "peer_id", "chatId", "chat_id", "userId", "user_id", "uid", "currentUserId", "current_user_id"]:
             try:
                 v = get_val(profile_activity, name, None)
@@ -20895,6 +20965,11 @@ class NftClonerPlugin(BasePlugin):
             except:
                 eid = 0
             if eid != 0:
+                if cache_key:
+                    try:
+                        self._profile_entity_id_cache[cache_key] = eid
+                    except:
+                        pass
                 return eid
         for name in ["user", "currentUser", "userInfo", "userFull", "chat", "currentChat", "chatInfo", "chatFull"]:
             try:
@@ -20914,19 +20989,37 @@ class NftClonerPlugin(BasePlugin):
             except:
                 eid = 0
             if eid != 0:
+                if cache_key:
+                    try:
+                        self._profile_entity_id_cache[cache_key] = eid
+                    except:
+                        pass
                 return eid
         return 0
 
     def _get_profile_activity_user_id(self, profile_activity):
+        cache_key = self._profile_activity_cache_key(profile_activity)
+        if cache_key:
+            try:
+                cached = int((getattr(self, "_profile_user_id_cache", None) or {}).get(cache_key, 0) or 0)
+                if cached > 0:
+                    return cached
+            except:
+                pass
         try:
             eid = int(self._get_profile_activity_entity_id(profile_activity) or 0)
         except:
             eid = 0
         if eid > 0:
+            if cache_key:
+                try:
+                    self._profile_user_id_cache[cache_key] = eid
+                except:
+                    pass
             return eid
         return 0
 
-    def _patch_profile_activity_in_place(self, profile_activity, notify=True, include_major_views=True):
+    def _patch_profile_activity_in_place(self, profile_activity, notify=True, include_major_views=True, include_gifts_layout=True):
         """Patch ProfileActivity fields directly to avoid 'blink' on first render."""
         if profile_activity is None:
             return 0
@@ -20957,10 +21050,11 @@ class NftClonerPlugin(BasePlugin):
             patched += int(self._patch_profile_activity_boosts(profile_activity) or 0)
         except:
             pass
-        try:
-            patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
-        except:
-            pass
+        if include_gifts_layout:
+            try:
+                patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
+            except:
+                pass
         try:
             if include_major_views:
                 patched += int(self._patch_local_major_profile_views(profile_activity) or 0)
@@ -27319,6 +27413,12 @@ class ProfileActivityFastPatchHook(MethodHook):
             if not p._has_profile_fastpatch_overrides():
                 return
             try:
+                _min_interval = 0.18 if method_name in ["onFragmentCreate", "createView"] else 0.62
+                if p._should_skip_profile_fastpatch_phase(pa, method_name, "before", min_interval=_min_interval):
+                    return
+            except:
+                pass
+            try:
                 if pa is not None and p._is_my_profile_activity(pa):
                     if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
                         if method_name not in ["onFragmentCreate", "createView", "onResume"]:
@@ -27377,7 +27477,7 @@ class ProfileActivityFastPatchHook(MethodHook):
                 except:
                     pass
             try:
-                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False) or 0)
+                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False) or 0)
             except:
                 patched_local = 0
             if patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
@@ -27396,6 +27496,12 @@ class ProfileActivityFastPatchHook(MethodHook):
                 method_name = str(param.method.getName() or "")
             except:
                 method_name = ""
+            try:
+                _min_interval = 0.22 if method_name in ["onFragmentCreate", "createView"] else 0.72
+                if p._should_skip_profile_fastpatch_phase(pa, method_name, "after", min_interval=_min_interval):
+                    return
+            except:
+                pass
             try:
                 p._mark_profile_activity_open(pa)
             except:
@@ -27418,7 +27524,7 @@ class ProfileActivityFastPatchHook(MethodHook):
                         cached_catalog = None
                     try:
                         if cached_catalog is not None and int(cached_catalog.size() or 0) > 0:
-                            p._schedule_profile_gifts_refresh([180, 520], min_interval=0.65, force=False)
+                            p._schedule_profile_gifts_refresh([280, 720], min_interval=0.85, force=False)
                         else:
                             p._load_catalog_silent()
                     except:
@@ -27429,12 +27535,18 @@ class ProfileActivityFastPatchHook(MethodHook):
             if not p._has_profile_fastpatch_overrides():
                 return
             try:
-                p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False)
             except:
                 pass
             try:
-                if p._has_local_profile_gifts_presence():
+                cold_open = bool(p._is_profile_activity_cold_open(pa, window_sec=0.68))
+            except:
+                cold_open = False
+            try:
+                if p._has_local_profile_gifts_presence() and not cold_open:
                     p._patch_profile_shared_media_layout(pa, animated=False)
+                elif p._has_local_profile_gifts_presence():
+                    p._schedule_profile_ui_repatch(pa, [360, 820])
             except:
                 pass
             allow_heavy = bool(method_name in ["createView", "onResume"])
@@ -27622,7 +27734,7 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             # Patch pa.user/userFull fields in-place, then also update the
             # MessagesController cache so all subsequent getUser calls are consistent.
             try:
-                p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False)
             except:
                 pass
             try:
