@@ -1,7 +1,7 @@
 {
-  "version": "1.5.17",
+  "version": "1.5.18",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.17 - server badges patched at cache-write, not just cache-read.\n\nFix: residual flicker still happened on the very first bind of a freshly-cached chat (read happened before our per-read hook re-patched). PutChatBadgeHook now intercepts putChat / putChats / putChatFull and applies the server badge BEFORE the chat lands in MessagesController, so the icon is present at the first read. All cache paths now use allow_fetch=False so the hook never blocks on network.",
+  "notes": "Beta 1.5.18 - minimal M3 Expressive update sheet + SFX.\n\nUpdate popup redesigned: dropped the version pill row, animated arrow and shimmer. Hero now uses a larger M3 Expressive title with a single quiet subtitle showing the version transition inline (vOLD → vNEW). Change-note bullets collapsed to one accent colour for a cleaner read. Padding and type hierarchy tuned for breathing room.\n\nSFX: short non-intrusive tones now play on key plugin actions (popup open, action click, success, error, restart). Uses ToneGenerator so no audio assets are shipped; silently no-ops on any failure.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
