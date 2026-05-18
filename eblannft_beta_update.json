@@ -1,13 +1,12 @@
 {
-  "version": "1.5.19",
+  "version": "1.5.7",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.19 - richer SFX across plugin actions.\n\nNew _sfx runtime module: synthesises proper WAV resources on first run (sine + harmonic blends, ADSR envelopes) and pre-loads them into SoundPool. No audio assets are shipped — the WAVs are generated on the device. Covers click / open / close / success / complete / error / badge / copy / toggle.\n\nWired into more plugin actions: open rating dialog, open stars-balance dialog, save rating, save stars balance, toggle official-gifts visibility, open Copy-NFT dialog. The update popup keeps a ToneGenerator fallback for the very first install (before the runtime files are downloaded).",
+  "notes": "Beta 1.5.7 - fixed update changelog encoding.\n\nWhat changed:\n- Fixed broken release notes in eblannft_beta_update.json.\n- The update popup no longer shows question marks instead of readable changelog text.\n- v1.5.6 changes are preserved: cachetools caches for profile NFT gifts, wear status data, NFT username, and NFT number.\n\nVerified: py_compile, git diff --check.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
     "eblannft_beta_runtime/plugin.py",
     "eblannft_beta_runtime/sync_client.py",
-    "eblannft_beta_runtime/legacy_gifts.py",
-    "eblannft_beta_runtime/_sfx.py"
+    "eblannft_beta_runtime/legacy_gifts.py"
   ]
 }

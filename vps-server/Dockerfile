@@ -2,7 +2,6 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY server.py /app/server.py
-COPY badge_bot.py /app/badge_bot.py
 
 ENV EBLANNFT_HOST=0.0.0.0 \
     EBLANNFT_PORT=8787 \

@@ -159,9 +159,6 @@ GIFT_KIND_LEGACY = "legacy_normal"
 GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
 GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
 LOCAL_VISUAL_UPGRADE_STARS = 0
-PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
-PUBLIC_MAJOR_VERIFICATION_ICON = 5222202915040555254
-PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a eblannft"
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -1369,10 +1366,6 @@ class NftClonerPlugin(BasePlugin):
                 self._patch_my_cached_user_full()
             except:
                 pass
-            try:
-                self._patch_public_major_cached_users(notify=False)
-            except:
-                pass
         base_key = "cached_user_patch_uc" if patch_userconfig else "cached_user_patch_fast"
         try:
             suffix = str(key or "default")
@@ -2390,11 +2383,9 @@ class NftClonerPlugin(BasePlugin):
                 )
             )
             self._hook_network()
-            self._init_sfx()
             self._hook_native_catalog_ui()
             self._ensure_user_context(force=True)
             self._hook_wear_user_cache()
-            self._hook_chat_badge_cache()
             self._hook_updates_wear()
             self._hook_userconfig_wear()
             self._hook_profile_activity_fastpatch()
@@ -2408,9 +2399,8 @@ class NftClonerPlugin(BasePlugin):
             self._setup_settings_header_hook()
             self._prewarm_self_user_info_cache(force=True)
 
-            if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active() or self._has_public_major_verification_targets():
+            if (self.wear_active and self.wear_collectible_id > 0) or self._is_nft_username_active() or self._is_nft_number_active() or self._is_local_rating_active():
                 self._patch_my_cached_user()
-                self._patch_public_major_cached_users(notify=True)
                 # Explicit key prevents this startup primer from sharing the
                 # default "cached_user_patch" token with later delegate-driven
                 # schedules — they used to cancel each other out.
@@ -3523,13 +3513,9 @@ class NftClonerPlugin(BasePlugin):
                 )
         except Exception:
             remote_rating = None
-        try:
-            remote_badge = self._get_server_badge_record("user", tuid)
-        except Exception:
-            remote_badge = None
 
         if wear_status is None and not remote_unames and not remote_numbers \
-                and remote_gifts_count <= 0 and remote_rating is None and not isinstance(remote_badge, dict):
+                and remote_gifts_count <= 0 and remote_rating is None:
             return 0
 
         patched = [0]
@@ -3565,12 +3551,6 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 obj_uid = 0
             if obj_uid == tuid:
-                if isinstance(remote_badge, dict):
-                    try:
-                        if self._apply_server_badge_to_obj(obj, "user", tuid):
-                            patched[0] += 1
-                    except Exception:
-                        pass
                 if wear_status is not None:
                     try:
                         if self._set_field(obj, "emoji_status", wear_status):
@@ -4466,49 +4446,6 @@ class NftClonerPlugin(BasePlugin):
                 threading.Thread(target=_initial_push, daemon=True).start()
             except Exception:
                 pass
-            try:
-                def _badge_poll_loop():
-                    last_sig = ""
-                    while getattr(self, "_eblannft_sync_client", None) is client:
-                        try:
-                            badges = client.fetch_badges_blocking(max_age_sec=0, max_timeout=2.0)
-                            if isinstance(badges, dict):
-                                sig = "|".join(
-                                    sorted([
-                                        f"{k}:{int((v or {}).get('updated_at', 0) or 0)}:{1 if (v or {}).get('enabled', True) else 0}"
-                                        for k, v in badges.items()
-                                        if isinstance(v, dict)
-                                    ])
-                                )
-                                sig_changed = bool(sig and sig != last_sig)
-                                if sig_changed:
-                                    last_sig = sig
-                                def _apply_visible_badges(_notify=sig_changed):
-                                    if _notify:
-                                        try:
-                                            pa = self._get_visible_profile_activity()
-                                            if pa is not None:
-                                                self._patch_profile_activity_in_place(pa, notify=True, include_major_views=True, include_gifts_layout=False)
-                                        except:
-                                            pass
-                                    try:
-                                        self._patch_public_major_cached_users(notify=_notify)
-                                    except:
-                                        pass
-                                    try:
-                                        self._patch_server_badges_in_cached_objects(notify=True)
-                                    except:
-                                        pass
-                                try:
-                                    run_on_ui_thread(_apply_visible_badges)
-                                except:
-                                    _apply_visible_badges()
-                        except Exception:
-                            pass
-                        time.sleep(2.0)
-                threading.Thread(target=_badge_poll_loop, daemon=True).start()
-            except Exception:
-                pass
         except Exception as e:
             _log(f"sync bootstrap failed: {e}")
 
@@ -4670,10 +4607,6 @@ class NftClonerPlugin(BasePlugin):
         if not notify:
             return
         try:
-            self._sfx_play("success")
-        except:
-            pass
-        try:
             if self.local_rating_enabled:
                 BulletinHelper.show_success(f"Локальный рейтинг сохранен: {self._get_local_rating_label()}")
             else:
@@ -4682,10 +4615,6 @@ class NftClonerPlugin(BasePlugin):
             pass
 
     def _open_local_rating_dialog(self):
-        try:
-            self._sfx_play("open")
-        except:
-            pass
         try:
             actions = [
                 (
@@ -4754,10 +4683,6 @@ class NftClonerPlugin(BasePlugin):
         if not notify:
             return
         try:
-            self._sfx_play("success")
-        except:
-            pass
-        try:
             if self._is_local_stars_balance_active():
                 BulletinHelper.show_success(f"Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´: {self._get_local_stars_balance_label()}")
             else:
@@ -4766,10 +4691,6 @@ class NftClonerPlugin(BasePlugin):
             pass
 
     def _open_local_stars_balance_dialog(self):
-        try:
-            self._sfx_play("open")
-        except:
-            pass
         self._show_text_input_dialog(
             "Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð°Ð»Ð°Ð½Ñ Ð·Ð²Ñ‘Ð·Ð´",
             str(self._get_local_stars_balance_value() or ""),
@@ -4879,10 +4800,6 @@ class NftClonerPlugin(BasePlugin):
                     daemon=True,
                 ).start()
         except Exception:
-            pass
-        try:
-            self._sfx_play("toggle")
-        except:
             pass
         try:
             BulletinHelper.show_info("Official gifts hidden locally" if enabled else "Official gifts are visible again")
@@ -5328,27 +5245,9 @@ class NftClonerPlugin(BasePlugin):
         if obj is None:
             return False
         try:
-            public_major_uid = int(self._extract_user_id_from_obj(obj) or 0)
-        except:
-            public_major_uid = 0
-        if public_major_uid <= 0:
-            try:
-                nested_public_major_user = get_val(obj, "user", None)
-            except:
-                nested_public_major_user = None
-            if nested_public_major_user is not None:
-                try:
-                    public_major_uid = int(self._extract_user_id_from_obj(nested_public_major_user) or 0)
-                except:
-                    public_major_uid = 0
-        try:
             if not self._should_apply_self_profile_override(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                if self._is_public_major_verified_user_id(public_major_uid):
-                    return bool(self._apply_public_major_verification_to_obj(obj, public_major_uid))
                 return False
         except:
-            if self._is_public_major_verified_user_id(public_major_uid):
-                return bool(self._apply_public_major_verification_to_obj(obj, public_major_uid))
             return False
         changed = False
         try:
@@ -5383,11 +5282,6 @@ class NftClonerPlugin(BasePlugin):
             pass
         try:
             if self._apply_local_profile_gifts_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                changed = True
-        except:
-            pass
-        try:
-            if self._is_public_major_verified_user_id(public_major_uid) and self._apply_public_major_verification_to_obj(obj, public_major_uid):
                 changed = True
         except:
             pass
@@ -7142,226 +7036,6 @@ class NftClonerPlugin(BasePlugin):
         except:
             return False
 
-    def _is_public_major_verified_user_id(self, user_id):
-        try:
-            return bool(int(user_id or 0) in PUBLIC_MAJOR_VERIFIED_USER_IDS)
-        except:
-            return False
-
-    def _has_public_major_verification_targets(self):
-        try:
-            return bool(PUBLIC_MAJOR_VERIFIED_USER_IDS)
-        except:
-            return False
-
-    def _should_apply_public_major_verification_for_target(self, target_user_id=-1):
-        try:
-            uid = int(target_user_id or 0)
-        except:
-            uid = 0
-        if uid > 0:
-            return bool(self._is_public_major_verified_user_id(uid))
-        return bool(self._has_public_major_verification_targets())
-
-    def _get_public_major_verification_icon(self):
-        record = self._get_server_badge_record("user", 5406195402)
-        icon = self._badge_record_icon(record)
-        return int(icon or PUBLIC_MAJOR_VERIFICATION_ICON)
-
-    def _get_public_major_verification_description(self):
-        record = self._get_server_badge_record("user", 5406195402)
-        text = self._badge_record_text(record)
-        return str(text or PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
-
-    def _sync_get_badges_cached(self, max_age_sec=4):
-        client = getattr(self, "_eblannft_sync_client", None)
-        if client is None:
-            return {}
-        try:
-            badges = client.fetch_badges_blocking(max_age_sec=max_age_sec, max_timeout=1.5)
-            return badges if isinstance(badges, dict) else {}
-        except:
-            try:
-                badges = client.get_badges_cached()
-                return badges if isinstance(badges, dict) else {}
-            except:
-                return {}
-
-    def _badge_lookup_keys(self, entity_type, entity_id):
-        try:
-            eid = int(entity_id or 0)
-        except:
-            eid = 0
-        et = str(entity_type or "").strip().lower()
-        if et in ["user", "users", "tg"]:
-            return [f"user:{eid}"] if eid > 0 else []
-        if et not in ["chat", "channel", "channels"]:
-            return []
-        if eid == 0:
-            return []
-        keys = [f"chat:{eid}"]
-        if eid < 0:
-            keys.append(f"chat:{abs(eid)}")
-            s = str(abs(eid))
-            if s.startswith("100") and len(s) > 3:
-                keys.append(f"chat:{int(s[3:])}")
-        else:
-            keys.append(f"chat:-100{eid}")
-        out = []
-        for key in keys:
-            if key not in out:
-                out.append(key)
-        return out
-
-    def _get_server_badge_record(self, entity_type, entity_id, include_disabled=False, allow_fetch=True):
-        if allow_fetch:
-            badges = self._sync_get_badges_cached(max_age_sec=3)
-        else:
-            client = getattr(self, "_eblannft_sync_client", None)
-            try:
-                badges = client.get_badges_cached() if client is not None else {}
-            except:
-                badges = {}
-        if not isinstance(badges, dict):
-            return None
-        for key in self._badge_lookup_keys(entity_type, entity_id):
-            item = badges.get(key)
-            if isinstance(item, dict) and (include_disabled or item.get("enabled", True)):
-                try:
-                    icon = int(item.get("icon_emoji_id", 0) or 0)
-                except:
-                    icon = 0
-                text = str(item.get("text", "") or "").strip()
-                if icon > 0 and text:
-                    return item
-        return None
-
-    def _badge_record_icon(self, record):
-        try:
-            return int((record or {}).get("icon_emoji_id", 0) or 0)
-        except:
-            return 0
-
-    def _badge_record_text(self, record):
-        try:
-            return str((record or {}).get("text", "") or "").strip()
-        except:
-            return ""
-
-    def _apply_server_badge_to_obj(self, obj, entity_type="", entity_id=0, allow_fetch=True):
-        if obj is None:
-            return False
-        try:
-            eid = int(entity_id or 0)
-        except:
-            eid = 0
-        if eid == 0:
-            try:
-                eid = int(self._extract_user_id_from_obj(obj) or 0)
-                if eid > 0 and not entity_type:
-                    entity_type = "user"
-            except:
-                eid = 0
-        if eid == 0:
-            try:
-                eid = int(get_val(obj, "id", 0) or 0)
-            except:
-                eid = 0
-        et = str(entity_type or "").strip().lower()
-        if not et:
-            et = "user" if eid > 0 else "chat"
-        record = self._get_server_badge_record(et, eid, include_disabled=True, allow_fetch=allow_fetch)
-        if not isinstance(record, dict):
-            return False
-        icon = self._badge_record_icon(record)
-        text = self._badge_record_text(record)
-        if icon <= 0 or not text:
-            return False
-        if not record.get("enabled", True):
-            changed = False
-            for field_name, value in [("bot_verification_icon", 0), ("bot_verification", None)]:
-                try:
-                    if self._set_field(obj, field_name, value):
-                        changed = True
-                except:
-                    pass
-                try:
-                    if getattr(obj, field_name) != value:
-                        setattr(obj, field_name, value)
-                        changed = True
-                except:
-                    pass
-            return bool(changed)
-        bv = self._create_local_bot_verification(icon, text)
-        if bv is None:
-            return False
-        changed = False
-        try:
-            if self._set_field(obj, "bot_verification_icon", int(icon)):
-                changed = True
-        except:
-            pass
-        try:
-            if getattr(obj, "bot_verification_icon") != int(icon):
-                obj.bot_verification_icon = int(icon)
-                changed = True
-        except:
-            pass
-        try:
-            if self._set_field(obj, "bot_verification", bv):
-                changed = True
-        except:
-            pass
-        try:
-            cur = get_val(obj, "bot_verification", None)
-            cur_icon = int(get_val(cur, "icon", 0) or 0) if cur is not None else 0
-            cur_text = str(get_val(cur, "description", "") or "") if cur is not None else ""
-            if cur is None or cur_icon != int(icon) or cur_text != text:
-                obj.bot_verification = bv
-                changed = True
-        except:
-            pass
-        try:
-            if self._set_field(obj, "verified", False):
-                changed = True
-        except:
-            pass
-        return bool(changed)
-
-    def _is_public_major_profile_activity(self, profile_activity=None):
-        try:
-            uid = int(self._get_profile_activity_user_id(profile_activity) or 0)
-        except:
-            uid = 0
-        return bool(self._is_public_major_verified_user_id(uid))
-
-    def _is_major_badge_profile_activity(self, profile_activity=None):
-        try:
-            if self._is_public_major_profile_activity(profile_activity):
-                return True
-        except:
-            pass
-        try:
-            return bool(self._is_local_major_verification_active() and self._is_my_profile_activity(profile_activity))
-        except:
-            return False
-
-    def _get_major_verification_description_for_profile(self, profile_activity=None):
-        try:
-            if self._is_public_major_profile_activity(profile_activity):
-                return self._get_public_major_verification_description()
-        except:
-            pass
-        return self._get_local_verification_description()
-
-    def _get_major_verification_icon_for_profile(self, profile_activity=None):
-        try:
-            if self._is_public_major_profile_activity(profile_activity):
-                return self._get_public_major_verification_icon()
-        except:
-            pass
-        return self._get_local_verification_icon()
-
     def _get_local_fake_identity_kind(self):
         return ""
 
@@ -7506,10 +7180,10 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Major badge bitmap render error: {e}")
             return None
 
-    def _get_local_major_badge_drawable(self, size_dp=17.0, force=False):
-        if (not force) and (not self._is_local_major_verification_active()):
+    def _get_local_major_badge_drawable(self, size_dp=17.0):
+        if not self._is_local_major_verification_active():
             return None
-        if (not force) and self._should_use_native_major_verification_emoji():
+        if self._should_use_native_major_verification_emoji():
             return None
         try:
             ctx = ApplicationLoader.applicationContext
@@ -7533,10 +7207,10 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Major badge drawable error: {e}")
             return None
 
-    def _build_local_major_badge_text(self, text, size_dp=15.5, force=False):
+    def _build_local_major_badge_text(self, text, size_dp=15.5):
         if text is None:
             return None
-        if (not force) and self._should_use_native_major_verification_emoji():
+        if self._should_use_native_major_verification_emoji():
             return text
         try:
             plain = str(text or "")
@@ -7546,7 +7220,7 @@ class NftClonerPlugin(BasePlugin):
             return text
         if plain.startswith("x ") or plain.startswith("\uFFFC "):
             return text
-        drawable = self._get_local_major_badge_drawable(size_dp=size_dp, force=force)
+        drawable = self._get_local_major_badge_drawable(size_dp=size_dp)
         if drawable is None:
             return text
         try:
@@ -7570,13 +7244,13 @@ class NftClonerPlugin(BasePlugin):
             return ""
 
     def _is_visible_profile_name_text_view(self, view):
-        if view is None:
+        if view is None or not self._is_local_major_verification_active():
             return False
         try:
             pa = self._get_visible_profile_activity()
         except:
             pa = None
-        if pa is None or not self._is_major_badge_profile_activity(pa):
+        if pa is None or not self._is_my_profile_activity(pa):
             return False
         try:
             name_views = get_val(pa, "nameTextView", None)
@@ -7685,20 +7359,14 @@ class NftClonerPlugin(BasePlugin):
                 continue
 
     def _patch_local_major_profile_views(self, profile_activity):
-        if profile_activity is None:
+        if profile_activity is None or not self._is_local_major_verification_active():
             return 0
         try:
-            is_public_major = bool(self._is_public_major_profile_activity(profile_activity))
+            if not self._is_my_profile_activity(profile_activity):
+                return 0
         except:
-            is_public_major = False
-        try:
-            is_local_major_self = bool(self._is_local_major_verification_active() and self._is_my_profile_activity(profile_activity))
-        except:
-            is_local_major_self = False
-        if (not is_public_major) and (not is_local_major_self):
             return 0
-        force_custom_badge = False
-        if (not force_custom_badge) and self._should_use_native_major_verification_emoji():
+        if self._should_use_native_major_verification_emoji():
             return 0
         patched = 0
         try:
@@ -7710,7 +7378,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             heavy_pass = not cold_open
         try:
-            drawable = self._get_local_major_badge_drawable(17.0, force=force_custom_badge)
+            drawable = self._get_local_major_badge_drawable(17.0)
         except:
             drawable = None
 
@@ -7782,9 +7450,9 @@ class NftClonerPlugin(BasePlugin):
                 if v_changed:
                     _deferred_invalidate_views.append(view)
 
-        target = self._get_major_verification_description_for_profile(profile_activity)
+        target = self._get_local_verification_description()
         if heavy_pass and target:
-            replacement = self._build_local_major_badge_text(target, size_dp=15.0, force=force_custom_badge)
+            replacement = self._build_local_major_badge_text(target, size_dp=15.0)
             roots = []
             for holder_name in ["listView", "recyclerListView", "fragmentView"]:
                 try:
@@ -7989,243 +7657,6 @@ class NftClonerPlugin(BasePlugin):
             return bool(self._is_my_profile_activity())
         except:
             return False
-
-    def _apply_public_major_verification_to_obj(self, obj, target_user_id=-1):
-        if obj is None or not self._has_public_major_verification_targets():
-            return False
-        try:
-            obj_uid = int(self._extract_user_id_from_obj(obj) or 0)
-        except:
-            obj_uid = 0
-        try:
-            known_uid = int(target_user_id or 0)
-        except:
-            known_uid = 0
-        try:
-            cls_name = str(obj.getClass().getName() or "").lower()
-        except:
-            cls_name = ""
-        is_full_obj = bool(("userfull" in cls_name) or ("chatfull" in cls_name))
-        if obj_uid <= 0 and not is_full_obj:
-            return False
-        target_uid = obj_uid if obj_uid > 0 else known_uid
-        if not self._is_public_major_verified_user_id(target_uid):
-            return False
-
-        try:
-            if self._apply_server_badge_to_obj(obj, "user", target_uid):
-                return True
-        except:
-            pass
-
-        icon = self._get_public_major_verification_icon()
-        description = self._get_public_major_verification_description()
-        bot_verification = self._create_local_bot_verification(icon, description)
-        if bot_verification is None:
-            return False
-
-        changed = False
-
-        if not is_full_obj:
-            for field_name, value in [
-                ("verified", False),
-                ("fake", False),
-                ("scam", False),
-                ("bot_verification_icon", int(icon)),
-            ]:
-                try:
-                    if self._set_field(obj, field_name, value):
-                        changed = True
-                except:
-                    pass
-                try:
-                    if getattr(obj, field_name) != value:
-                        setattr(obj, field_name, value)
-                        changed = True
-                except:
-                    pass
-
-        try:
-            current = get_val(obj, "bot_verification", None)
-        except:
-            current = None
-        try:
-            current_icon = int(get_val(current, "icon", 0) or 0) if current is not None else 0
-        except:
-            current_icon = 0
-        try:
-            current_desc = str(get_val(current, "description", "") or "") if current is not None else ""
-        except:
-            current_desc = ""
-        try:
-            if self._set_field(obj, "bot_verification", bot_verification):
-                changed = True
-        except:
-            pass
-        try:
-            if current is None or current_icon != int(icon) or current_desc != str(description):
-                obj.bot_verification = bot_verification
-                changed = True
-        except:
-            pass
-        return bool(changed)
-
-    def _patch_public_major_cached_users(self, notify=False):
-        if not self._has_public_major_verification_targets():
-            return 0
-        patched = 0
-        try:
-            account = get_user_config().selectedAccount
-            MC = jclass("org.telegram.messenger.MessagesController")
-            ctrl = MC.getInstance(to_java_int(account))
-        except:
-            return 0
-        for uid in list(PUBLIC_MAJOR_VERIFIED_USER_IDS):
-            try:
-                user_obj = ctrl.getUser(int(uid))
-            except:
-                user_obj = None
-            if user_obj is not None:
-                try:
-                    if self._apply_public_major_verification_to_obj(user_obj, int(uid)):
-                        patched += 1
-                        try:
-                            ctrl.putUser(user_obj, False, True)
-                        except Exception:
-                            try:
-                                ctrl.putUser(user_obj, False)
-                            except:
-                                pass
-                except:
-                    pass
-            try:
-                full_obj = ctrl.getUserFull(int(uid))
-            except:
-                full_obj = None
-            if full_obj is not None:
-                try:
-                    if self._apply_public_major_verification_to_obj(full_obj, int(uid)):
-                        patched += 1
-                        try:
-                            ctrl.putUserFull(full_obj)
-                        except:
-                            pass
-                except:
-                    pass
-        if patched and notify:
-            try:
-                self._post_local_profile_notifications(reason="public_major_cached_user_patch", cooldown=0.35)
-            except:
-                pass
-        return int(patched or 0)
-
-    def _patch_server_badges_in_cached_objects(self, notify=False):
-        """Apply server-issued badges to the MessagesController cache so the
-        verification icon appears in the dialog list, channel header and
-        profile dialogs without waiting for a fresh network response."""
-        try:
-            badges = self._sync_get_badges_cached(max_age_sec=3) or {}
-        except:
-            badges = {}
-        if not isinstance(badges, dict) or not badges:
-            return 0
-        try:
-            account = get_user_config().selectedAccount
-            MC = jclass("org.telegram.messenger.MessagesController")
-            ctrl = MC.getInstance(to_java_int(account))
-        except:
-            return 0
-        patched = 0
-        seen_users = set()
-        seen_chats = set()
-        for key, item in list(badges.items()):
-            if not isinstance(item, dict):
-                continue
-            if not item.get("enabled", True):
-                continue
-            try:
-                parts = str(key).split(":", 1)
-                if len(parts) != 2:
-                    continue
-                et = parts[0].strip().lower()
-                raw = int(parts[1])
-            except:
-                continue
-            if et in ("user", "users", "tg"):
-                if raw <= 0 or raw in seen_users:
-                    continue
-                seen_users.add(raw)
-                try:
-                    user_obj = ctrl.getUser(int(raw))
-                except:
-                    user_obj = None
-                if user_obj is not None:
-                    try:
-                        if self._apply_server_badge_to_obj(user_obj, "user", raw, allow_fetch=False):
-                            patched += 1
-                    except:
-                        pass
-                try:
-                    full_obj = ctrl.getUserFull(int(raw))
-                except:
-                    full_obj = None
-                if full_obj is not None:
-                    try:
-                        if self._apply_server_badge_to_obj(full_obj, "user", raw, allow_fetch=False):
-                            patched += 1
-                            try:
-                                ctrl.putUserFull(full_obj)
-                            except:
-                                pass
-                    except:
-                        pass
-            elif et in ("chat", "channel", "channels"):
-                if raw == 0:
-                    continue
-                chat_id = abs(raw)
-                s = str(chat_id)
-                if raw < 0 and s.startswith("100") and len(s) > 3:
-                    try:
-                        chat_id = int(s[3:])
-                    except:
-                        pass
-                if chat_id <= 0 or chat_id in seen_chats:
-                    continue
-                seen_chats.add(chat_id)
-                try:
-                    chat_obj = ctrl.getChat(int(chat_id))
-                except:
-                    chat_obj = None
-                if chat_obj is not None:
-                    try:
-                        if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id, allow_fetch=False):
-                            patched += 1
-                            try:
-                                ctrl.putChat(chat_obj, False)
-                            except:
-                                pass
-                    except:
-                        pass
-                try:
-                    full_obj = ctrl.getChatFull(int(chat_id))
-                except:
-                    full_obj = None
-                if full_obj is not None:
-                    try:
-                        if self._apply_server_badge_to_obj(full_obj, "chat", chat_id, allow_fetch=False):
-                            patched += 1
-                            try:
-                                ctrl.putChatFull(full_obj)
-                            except:
-                                pass
-                    except:
-                        pass
-        if patched and notify:
-            try:
-                self._post_local_profile_notifications(reason="server_badge_cached_patch", cooldown=0.35)
-            except:
-                pass
-        return int(patched or 0)
 
     def _apply_local_verification_to_obj(self, obj):
         if obj is None or not self._is_local_verification_active():
@@ -18917,12 +18348,11 @@ class NftClonerPlugin(BasePlugin):
             known_target_user_id = -1
 
         need_verification = bool(self._is_local_verification_active())
-        need_public_verification = bool(self._has_public_major_verification_targets())
         need_rating = bool(self._is_local_rating_active())
         need_username = bool(self._is_nft_username_active())
         need_number = bool(self._is_nft_number_active())
         need_wear = bool(self.wear_active and int(self.wear_collectible_id or 0) > 0)
-        if not (need_verification or need_public_verification or need_rating or need_username or need_number or need_wear):
+        if not (need_verification or need_rating or need_username or need_number or need_wear):
             return 0
 
         try:
@@ -18939,13 +18369,7 @@ class NftClonerPlugin(BasePlugin):
             )
         except:
             should_apply_rating = bool(need_rating and known_target_user_id <= 0)
-        try:
-            should_apply_public_verification = bool(
-                need_public_verification and self._should_apply_public_major_verification_for_target(known_target_user_id)
-            )
-        except:
-            should_apply_public_verification = bool(need_public_verification and known_target_user_id <= 0)
-        if (not should_manage_self) and (not should_apply_rating) and (not should_apply_public_verification):
+        if (not should_manage_self) and (not should_apply_rating):
             return 0
 
         patched = 0
@@ -18996,12 +18420,6 @@ class NftClonerPlugin(BasePlugin):
                         changed = True
                 except:
                     pass
-            if should_apply_public_verification:
-                try:
-                    if self._apply_public_major_verification_to_obj(obj, known_target_user_id):
-                        changed = True
-                except:
-                    pass
             if changed:
                 patched += 1
 
@@ -19047,95 +18465,6 @@ class NftClonerPlugin(BasePlugin):
                 _log(f"User response overrides patched ({req_name}): {patched}")
             except:
                 pass
-        return int(patched or 0)
-
-    def _patch_server_badges_in_response(self, response, target_user_id=-1, target_chat_id=0):
-        if response is None:
-            return 0
-        try:
-            self._sync_get_badges_cached(max_age_sec=2)
-        except:
-            pass
-        patched = 0
-        visited = set()
-
-        def walk(obj, depth):
-            nonlocal patched
-            if obj is None or depth > 4:
-                return
-            try:
-                oid = int(obj.hashCode())
-            except:
-                oid = id(obj)
-            if oid in visited:
-                return
-            visited.add(oid)
-            try:
-                uid = int(self._extract_user_id_from_obj(obj) or 0)
-            except:
-                uid = 0
-            if uid > 0:
-                try:
-                    if self._apply_server_badge_to_obj(obj, "user", uid):
-                        patched += 1
-                except:
-                    pass
-            try:
-                cid = int(get_val(obj, "id", 0) or 0)
-            except:
-                cid = 0
-            if cid != 0:
-                try:
-                    if self._apply_server_badge_to_obj(obj, "chat", cid):
-                        patched += 1
-                except:
-                    pass
-            if self._is_java_list_like(obj):
-                try:
-                    size = min(int(obj.size() or 0), 48)
-                except:
-                    size = 0
-                for i in range(size):
-                    try:
-                        walk(obj.get(i), depth + 1)
-                    except:
-                        continue
-                return
-            try:
-                for f in self._iter_object_fields(obj):
-                    try:
-                        val = f.get(obj)
-                    except:
-                        continue
-                    if val is None:
-                        continue
-                    try:
-                        fname = str(f.getName() or "").lower()
-                    except:
-                        fname = ""
-                    if fname and (
-                        "user" not in fname
-                        and "users" not in fname
-                        and "chat" not in fname
-                        and "full" not in fname
-                        and "peer" not in fname
-                        and "channel" not in fname
-                    ):
-                        continue
-                    try:
-                        typ = str(f.getType().getName() or "")
-                    except:
-                        typ = ""
-                    if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
-                        continue
-                    try:
-                        walk(val, depth + 1)
-                    except:
-                        continue
-            except:
-                pass
-
-        walk(response, 0)
         return int(patched or 0)
 
     def _build_my_peer_user(self):
@@ -20832,7 +20161,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _patch_my_cached_user(self, patch_userconfig=True):
         """Force-patch current cached User object so UI updates immediately."""
-        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_public_major_verification_targets()):
+        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()):
             return
         try:
             account = get_user_config().selectedAccount
@@ -20904,7 +20233,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _patch_my_cached_user_full(self):
         """Force-patch cached UserFull so profile info rows can reflect local verification/rating immediately."""
-        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_local_profile_gifts_presence()) and (not self._has_public_major_verification_targets()):
+        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_local_profile_gifts_presence()):
             return False
         try:
             account = get_user_config().selectedAccount
@@ -21272,109 +20601,11 @@ class NftClonerPlugin(BasePlugin):
 
         st = self._create_collectible_status(self.wear_collectible_id)
         if not st:
-            try:
-                self._sync_wear_status_data_from_library(self.wear_collectible_id)
-            except:
-                pass
-            try:
-                st = self._create_collectible_status(self.wear_collectible_id)
-            except:
-                st = None
-            if not st:
-                return False
+            return False
         if self._set_field(upd, "emoji_status", st):
             _log(f"updateUserEmojiStatus patched for self collectible_id={self.wear_collectible_id}")
             return True
         return False
-
-    def _patch_public_major_in_updates_container(self, obj, depth=0, _visited=None):
-        if obj is None or depth > 4:
-            return 0
-        if not self._has_public_major_verification_targets():
-            return 0
-        if _visited is None:
-            _visited = set()
-        try:
-            oid = int(obj.hashCode())
-        except:
-            oid = id(obj)
-        if oid in _visited:
-            return 0
-        _visited.add(oid)
-
-        patched = 0
-        try:
-            uid = int(self._extract_user_id_from_obj(obj) or 0)
-        except:
-            uid = 0
-        if self._is_public_major_verified_user_id(uid):
-            try:
-                if self._apply_public_major_verification_to_obj(obj, uid):
-                    patched += 1
-            except:
-                pass
-        try:
-            if self._apply_server_badge_to_obj(obj, "user" if uid > 0 else "", uid):
-                patched += 1
-        except:
-            pass
-        try:
-            cid = int(get_val(obj, "id", 0) or 0)
-        except:
-            cid = 0
-        if cid != 0:
-            try:
-                if self._apply_server_badge_to_obj(obj, "chat", cid):
-                    patched += 1
-            except:
-                pass
-
-        if self._is_java_list_like(obj):
-            try:
-                size = int(obj.size() or 0)
-            except:
-                size = 0
-            for i in range(size):
-                try:
-                    patched += self._patch_public_major_in_updates_container(obj.get(i), depth + 1, _visited)
-                except:
-                    continue
-            return patched
-
-        try:
-            for f in self._iter_object_fields(obj):
-                try:
-                    val = f.get(obj)
-                except:
-                    continue
-                if val is None:
-                    continue
-                try:
-                    fname = str(f.getName() or "").lower()
-                except:
-                    fname = ""
-                if fname and (
-                    "user" not in fname
-                    and "users" not in fname
-                    and "full" not in fname
-                    and "update" not in fname
-                    and "updates" not in fname
-                    and "peer" not in fname
-                    and "from" not in fname
-                    and "to" not in fname
-                    and "owner" not in fname
-                ):
-                    continue
-                try:
-                    typ = str(f.getType().getName() or "")
-                except:
-                    typ = ""
-                if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
-                    continue
-                patched += self._patch_public_major_in_updates_container(val, depth + 1, _visited)
-        except:
-            pass
-        return int(patched or 0)
 
     def _patch_wear_in_updates_container(self, obj, depth=0, _visited=None):
         """Patch Updates containers: updateUserEmojiStatus + nested users."""
@@ -21674,114 +20905,6 @@ class NftClonerPlugin(BasePlugin):
             _log(f"UserConfig wear hook scan failed: {e}")
         if hooked:
             _log(f"UserConfig wear hooks installed: {hooked}")
-
-    def _init_sfx(self):
-        """Pre-generate SFX WAVs and load them into SoundPool. Idempotent."""
-        try:
-            from . import _sfx as _sfx_module
-        except Exception:
-            try:
-                import eblannft_beta_runtime._sfx as _sfx_module  # type: ignore
-            except Exception as e:
-                _log(f"sfx module import failed: {e}")
-                self._sfx_module = None
-                return
-        self._sfx_module = _sfx_module
-        try:
-            ctx = ApplicationLoader.applicationContext
-        except Exception:
-            ctx = None
-        if ctx is None:
-            _log("sfx init: no app context yet")
-            return
-        try:
-            _sfx_module.init(ctx)
-        except Exception as e:
-            _log(f"sfx init failed: {e}")
-
-    def _sfx_play(self, kind="click"):
-        """Play a short feedback tone. Best-effort, never raises."""
-        try:
-            mod = getattr(self, "_sfx_module", None)
-            if mod is None:
-                return
-            mod.play(str(kind or "click"))
-        except Exception:
-            pass
-
-    def _hook_chat_badge_cache(self):
-        """Re-apply server badge on every MessagesController.getChat/getChatFull
-        read so the icon stays sticky in the chat list and channel header even
-        when incoming update batches replace the cached Chat / ChatFull."""
-        try:
-            MC = jclass("org.telegram.messenger.MessagesController")
-        except Exception as e:
-            _log(f"Chat badge hooks skipped (MessagesController missing): {e}")
-            return
-        hooked = 0
-        seen = set()
-
-        def _sig(m):
-            try:
-                params = m.getParameterTypes()
-                p_names = ",".join([p.getName() for p in params])
-                return f"{m.getDeclaringClass().getName()}::{m.getName()}({p_names})"
-            except:
-                return str(m)
-
-        try:
-            for m in MC.getDeclaredMethods():
-                try:
-                    name = m.getName()
-                except:
-                    continue
-                if name not in ["getChat", "getChatFull", "putChat", "putChats", "putChatFull"]:
-                    continue
-                sig = _sig(m)
-                if sig in seen:
-                    continue
-                seen.add(sig)
-                try:
-                    params = m.getParameterTypes()
-                    if len(params) < 1:
-                        continue
-                except:
-                    continue
-                hook_inst = None
-                if name in ("getChat", "getChatFull"):
-                    try:
-                        ret = m.getReturnType().getName()
-                        if ("TLRPC$Chat" not in ret) and ("TLRPC$ChatFull" not in ret):
-                            continue
-                    except:
-                        pass
-                    hook_inst = GetChatBadgeHook(self)
-                else:
-                    try:
-                        p0 = params[0].getName()
-                    except:
-                        p0 = ""
-                    if name == "putChat" and "TLRPC$Chat" not in p0:
-                        continue
-                    if name == "putChats" and "java.util" not in p0.lower():
-                        continue
-                    if name == "putChatFull" and "TLRPC$ChatFull" not in p0:
-                        continue
-                    hook_inst = PutChatBadgeHook(self)
-                try:
-                    m.setAccessible(True)
-                except:
-                    pass
-                try:
-                    self.hooks_refs.append(self.hook_method(m, hook_inst))
-                    hooked += 1
-                    _log(f"Chat badge hook installed: {sig}")
-                except Exception as e:
-                    _log(f"Chat badge hook install failed for {sig}: {e}")
-        except Exception as e:
-            _log(f"Chat badge hook scan failed: {e}")
-        if not hooked:
-            _log("Chat badge hooks: nothing installed")
 
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
@@ -22085,11 +21208,7 @@ class NftClonerPlugin(BasePlugin):
             is_my_profile = bool(self._is_my_profile_activity(profile_activity))
         except:
             is_my_profile = False
-        try:
-            is_public_major_profile = bool(self._is_public_major_profile_activity(profile_activity))
-        except:
-            is_public_major_profile = False
-        if (not is_my_profile) and (not is_public_major_profile):
+        if not is_my_profile:
             return 0
         allow_profile_context_fallback = True
         patched = 0
@@ -22098,37 +21217,25 @@ class NftClonerPlugin(BasePlugin):
                 obj = get_val(profile_activity, name, None)
                 if obj is None:
                     continue
-                if is_my_profile:
-                    if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                        patched += 1
-                    if is_public_major_profile and self._apply_public_major_verification_to_obj(obj, self._get_profile_activity_user_id(profile_activity)):
-                        patched += 1
-                elif is_public_major_profile:
-                    if self._apply_public_major_verification_to_obj(obj, self._get_profile_activity_user_id(profile_activity)):
-                        patched += 1
+                if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
+                    patched += 1
                 try:
                     nested = get_val(obj, "user", None)
-                    if nested is not None:
-                        if is_my_profile and self._apply_profile_overrides_to_obj(nested, allow_profile_context_fallback=allow_profile_context_fallback):
-                            patched += 1
-                        if is_my_profile and is_public_major_profile and self._apply_public_major_verification_to_obj(nested, self._get_profile_activity_user_id(profile_activity)):
-                            patched += 1
-                        elif is_public_major_profile and self._apply_public_major_verification_to_obj(nested, self._get_profile_activity_user_id(profile_activity)):
-                            patched += 1
+                    if nested is not None and self._apply_profile_overrides_to_obj(nested, allow_profile_context_fallback=allow_profile_context_fallback):
+                        patched += 1
                 except:
                     pass
             except:
                 pass
-        if is_my_profile:
+        try:
+            patched += int(self._patch_profile_activity_boosts(profile_activity) or 0)
+        except:
+            pass
+        if include_gifts_layout:
             try:
-                patched += int(self._patch_profile_activity_boosts(profile_activity) or 0)
+                patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
             except:
                 pass
-            if include_gifts_layout:
-                try:
-                    patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
-                except:
-                    pass
         try:
             if include_major_views:
                 patched += int(self._patch_local_major_profile_views(profile_activity) or 0)
@@ -26058,6 +25165,8 @@ class NftClonerPlugin(BasePlugin):
         if chat_id <= 0:
             return False
         cd = self._get_channel_data(str(chat_id))
+        if not cd:
+            return False
         changed = False
 
         # ── Subscriber count ─────────────────────────────────────────────
@@ -26074,11 +25183,6 @@ class NftClonerPlugin(BasePlugin):
                     changed = True
                 except:
                     pass
-        except:
-            pass
-        try:
-            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id, allow_fetch=False):
-                changed = True
         except:
             pass
 
@@ -26119,11 +25223,6 @@ class NftClonerPlugin(BasePlugin):
                     changed = True
                 except:
                     pass
-        except:
-            pass
-        try:
-            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id, allow_fetch=False):
-                changed = True
         except:
             pass
         return changed
@@ -27472,122 +26571,6 @@ class GetChatChannelHook(MethodHook):
             pass
 
 
-class GetChatBadgeHook(MethodHook):
-    """After MessagesController.getChat() / getChatFull() — re-apply the server
-    badge on every read so the icon survives incoming update batches that
-    replace the cached Chat / ChatFull object. Fast-path: skip immediately
-    when the badge cache is empty so chat list scrolls stay smooth."""
-
-    def __init__(self, plugin):
-        super().__init__()
-        self.plugin = plugin
-
-    def after_hooked_method(self, param):
-        try:
-            try:
-                client = getattr(self.plugin, "_eblannft_sync_client", None)
-                if client is None:
-                    return
-                badges = client.get_badges_cached()
-                if not isinstance(badges, dict) or not badges:
-                    return
-            except:
-                return
-            result = param.getResult()
-            if result is None:
-                return
-            try:
-                cid = int(get_val(result, "id", 0) or 0)
-            except:
-                cid = 0
-            if cid <= 0:
-                return
-            try:
-                if self.plugin._apply_server_badge_to_obj(result, "chat", cid, allow_fetch=False):
-                    try:
-                        param.setResult(result)
-                    except:
-                        pass
-            except:
-                pass
-        except:
-            pass
-
-
-class PutChatBadgeHook(MethodHook):
-    """Before MessagesController.putChat / putChats / putChatFull — apply the
-    server badge to chat objects before they land in the cache so the badge
-    is present on the very first read. Fast-path: skip when the badge cache
-    is empty."""
-
-    def __init__(self, plugin):
-        super().__init__()
-        self.plugin = plugin
-
-    def before_hooked_method(self, param):
-        try:
-            try:
-                client = getattr(self.plugin, "_eblannft_sync_client", None)
-                if client is None:
-                    return
-                badges = client.get_badges_cached()
-                if not isinstance(badges, dict) or not badges:
-                    return
-            except:
-                return
-            if not param.args:
-                return
-            arg0 = param.args[0]
-            if arg0 is None:
-                return
-            is_list = False
-            try:
-                is_list = bool(self.plugin._is_java_list_like(arg0))
-            except:
-                is_list = False
-            if is_list:
-                try:
-                    size = min(int(arg0.size() or 0), 64)
-                except:
-                    size = 0
-                for i in range(size):
-                    try:
-                        chat = arg0.get(i)
-                    except:
-                        continue
-                    if chat is None:
-                        continue
-                    try:
-                        cid = int(get_val(chat, "id", 0) or 0)
-                    except:
-                        cid = 0
-                    if cid > 0:
-                        try:
-                            self.plugin._apply_server_badge_to_obj(chat, "chat", cid, allow_fetch=False)
-                        except:
-                            pass
-            else:
-                try:
-                    cid = int(get_val(arg0, "id", 0) or 0)
-                except:
-                    cid = 0
-                if cid <= 0:
-                    for fname in ("channel_id", "channelId", "chat_id", "chatId"):
-                        try:
-                            cid = int(get_val(arg0, fname, 0) or 0)
-                            if cid > 0:
-                                break
-                        except:
-                            pass
-                if cid > 0:
-                    try:
-                        self.plugin._apply_server_badge_to_obj(arg0, "chat", cid, allow_fetch=False)
-                    except:
-                        pass
-        except:
-            pass
-
-
 class PutChatsChannelHook(MethodHook):
     """Before MessagesController.putChats() – patch chats before caching."""
     def __init__(self, plugin):
@@ -27660,10 +26643,6 @@ class ChannelFullWrapperDelegate(dynamic_proxy(RequestDelegate)):
                                 self.plugin._apply_channel_overrides_to_full(sub)
                         except:
                             pass
-                try:
-                    self.plugin._patch_server_badges_in_response(response, target_chat_id=self.channel_key)
-                except:
-                    pass
             except Exception as e:
                 _log(f"ChannelFullWrapper error: {e}")
         try:
@@ -27728,7 +26707,7 @@ class NetworkHook(MethodHook):
                         ch_key = str(int(req_entity_id))
                     if ch_key:
                         cd = self.plugin._get_channel_data(ch_key)
-                        if cd.get("subscribers") or self.plugin._has_public_major_verification_targets() or bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None):
+                        if cd.get("subscribers"):
                             _log(f">>> Hooking CHANNEL FULL: {req_name}, key={ch_key}")
                             param.args[1] = ChannelFullWrapperDelegate(
                                 self.plugin, param.args[1], ch_key, req_name
@@ -27818,12 +26797,10 @@ class NetworkHook(MethodHook):
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
             sync_active = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or self.plugin._has_public_major_verification_targets() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
-                    should_hook_user = True
-                elif self.plugin._should_apply_public_major_verification_for_target(req_user_id):
                     should_hook_user = True
                 elif self.plugin._should_apply_local_rating_for_target(req_user_id):
                     should_hook_user = True
@@ -28141,12 +27118,6 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                     _log(f"USER response patched ({self.req_name}): {patched}")
             except Exception as e:
                 _log(f"UserWrapperDelegate patch error: {e}")
-            try:
-                bpatched = int(self.plugin._patch_server_badges_in_response(response, target_user_id=self.target_user_id) or 0)
-                if bpatched:
-                    _log(f"USER server badges patched ({self.req_name}): {bpatched}")
-            except Exception as e:
-                _log(f"UserWrapperDelegate badge patch error: {e}")
             try:
                 tuid = int(self.target_user_id or 0)
             except Exception:
@@ -28620,11 +27591,7 @@ class ProfileActivityFastPatchHook(MethodHook):
                 except:
                     pass
                 return
-            try:
-                is_public_major_profile = bool(p._is_public_major_profile_activity(pa))
-            except:
-                is_public_major_profile = False
-            if (not is_public_major_profile) and (not p._has_profile_fastpatch_overrides()):
+            if not p._has_profile_fastpatch_overrides():
                 return
             try:
                 _min_interval = 0.18 if method_name in ["onFragmentCreate", "createView"] else 0.62
@@ -28677,29 +27644,24 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            try:
-                is_my_profile = bool(p._is_my_profile_activity(pa))
-            except:
-                is_my_profile = False
-            if (not is_my_profile) and (not is_public_major_profile):
+            if not p._is_my_profile_activity(pa):
                 return
-            if is_my_profile:
+            try:
+                if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
+                    if method_name not in ["onFragmentCreate", "createView", "onResume"]:
+                        return
+            except:
+                pass
+            if p.wear_active and p.wear_collectible_id > 0:
                 try:
-                    if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
-                        if method_name not in ["onFragmentCreate", "createView", "onResume"]:
-                            return
+                    p._ensure_current_wear_status_data(p.wear_collectible_id, force=False)
                 except:
                     pass
-                if p.wear_active and p.wear_collectible_id > 0:
-                    try:
-                        p._ensure_current_wear_status_data(p.wear_collectible_id, force=False)
-                    except:
-                        pass
             try:
-                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=bool(is_public_major_profile), include_gifts_layout=False) or 0)
+                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False) or 0)
             except:
                 patched_local = 0
-            if is_my_profile and patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
+            if patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
                 try:
                     p._patch_my_cached_user(patch_userconfig=False)
                 except:
@@ -28725,28 +27687,10 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            try:
-                is_public_major_profile = bool(p._is_public_major_profile_activity(pa))
-            except:
-                is_public_major_profile = False
-            try:
-                is_my_profile = bool(p._is_my_profile_activity(pa))
-            except:
-                is_my_profile = False
-            if (not is_my_profile) and (not is_public_major_profile):
+            if not p._is_my_profile_activity(pa):
                 return
 
             # Refresh own gifts UI (fix "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0") without any manual actions.
-            if is_public_major_profile and (not is_my_profile):
-                try:
-                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=True, include_gifts_layout=False)
-                except:
-                    pass
-                try:
-                    p._schedule_profile_ui_repatch(pa, [180, 420])
-                except:
-                    pass
-                return
             try:
                 if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
                     if method_name not in ["onFragmentCreate", "createView", "onResume"]:
@@ -29013,8 +27957,7 @@ class LoadFullUserWearHook(MethodHook):
                 uid = int(plugin_ref._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            is_public_major_uid = bool(plugin_ref._is_public_major_verified_user_id(uid))
-            if (not is_public_major_uid) and (not plugin_ref._should_use_early_profile_data_mode(uid)):
+            if not plugin_ref._should_use_early_profile_data_mode(uid):
                 return
             ctrl = getattr(param, "thisObject", None)
             if ctrl is None:
@@ -29036,14 +27979,10 @@ class LoadFullUserWearHook(MethodHook):
             if full_obj is None:
                 return
             try:
-                if is_public_major_uid:
-                    plugin_ref._apply_public_major_verification_to_obj(user_obj, uid)
                 plugin_ref._apply_profile_overrides_to_obj(user_obj)
             except:
                 pass
             try:
-                if is_public_major_uid:
-                    plugin_ref._apply_public_major_verification_to_obj(full_obj, uid)
                 plugin_ref._apply_profile_overrides_to_obj(full_obj)
             except:
                 pass
@@ -29054,11 +27993,6 @@ class LoadFullUserWearHook(MethodHook):
             if nested_user is None and user_obj is not None:
                 try:
                     plugin_ref._set_field(full_obj, "user", user_obj)
-                except:
-                    pass
-            elif nested_user is not None and is_public_major_uid:
-                try:
-                    plugin_ref._apply_public_major_verification_to_obj(nested_user, uid)
                 except:
                     pass
             try:
@@ -29129,7 +28063,7 @@ class LoadFullUserWearHook(MethodHook):
                     except:
                         pass
                     return
-            if not (plugin_ref._has_profile_overrides() or plugin_ref._is_local_rating_active() or plugin_ref._has_public_major_verification_targets()):
+            if not (plugin_ref._has_profile_overrides() or plugin_ref._is_local_rating_active()):
                 return
             def _restore():
                 try:
@@ -29142,10 +28076,6 @@ class LoadFullUserWearHook(MethodHook):
                     pass
                 try:
                     plugin_ref._patch_userconfig_current_user(force=True)
-                except:
-                    pass
-                try:
-                    plugin_ref._patch_public_major_cached_users(notify=False)
                 except:
                     pass
             AndroidUtilities.runOnUIThread(JRunnable(_restore), 300)
@@ -29163,16 +28093,16 @@ class GetAnyWearHook(MethodHook):
             # (per cell bind, per notification) - this is the single
             # biggest CPU win in the plugin when all overrides are off.
             try:
-                has_public_major = bool(self.plugin._has_public_major_verification_targets())
-                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
+                if not self.plugin._has_profile_overrides():
                     return
             except:
-                has_public_major = False
+                pass
             try:
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            req_uid = 0
+            if my_id <= 0:
+                return
             try:
                 req_obj = param.args[0] if param.args and len(param.args) > 0 else None
             except:
@@ -29185,7 +28115,7 @@ class GetAnyWearHook(MethodHook):
                 # Fast reject: getUser/getUserFull/getUserOrChat for any entity
                 # except our own profile should never enter the heavy override
                 # pipeline.
-                if req_uid != 0 and req_uid != my_id and (not self.plugin._is_public_major_verified_user_id(req_uid)) and not isinstance(self.plugin._get_server_badge_record("user", req_uid, allow_fetch=False), dict):
+                if req_uid != 0 and req_uid != my_id:
                     return
             user_obj = param.getResult()
             if user_obj is None:
@@ -29194,20 +28124,6 @@ class GetAnyWearHook(MethodHook):
                 result_uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 result_uid = 0
-            if self.plugin._is_public_major_verified_user_id(result_uid or req_uid) or isinstance(self.plugin._get_server_badge_record("user", result_uid or req_uid, allow_fetch=False), dict):
-                try:
-                    changed_badge = False
-                    if self.plugin._apply_public_major_verification_to_obj(user_obj, result_uid or req_uid):
-                        changed_badge = True
-                    if self.plugin._apply_server_badge_to_obj(user_obj, "user", result_uid or req_uid, allow_fetch=False):
-                        changed_badge = True
-                    if changed_badge:
-                        param.setResult(user_obj)
-                except:
-                    pass
-                return
-            if my_id <= 0:
-                return
             if result_uid > 0 and result_uid != my_id:
                 return
             try:
@@ -29260,25 +28176,9 @@ class GetUserFullForeignSyncHook(MethodHook):
             except Exception:
                 my_id = 0
             if uid == my_id:
-                try:
-                    if self.plugin._apply_server_badge_to_obj(full_obj, "user", uid, allow_fetch=False):
-                        param.setResult(full_obj)
-                except Exception:
-                    pass
                 return
-            changed = False
-            try:
-                if self.plugin._apply_server_badge_to_obj(full_obj, "user", uid, allow_fetch=False):
-                    changed = True
-            except Exception:
-                pass
             client = getattr(self.plugin, "_eblannft_sync_client", None)
             if client is None:
-                if changed:
-                    try:
-                        param.setResult(full_obj)
-                    except Exception:
-                        pass
                 return
             record = None
             try:
@@ -29287,6 +28187,7 @@ class GetUserFullForeignSyncHook(MethodHook):
                 record = None
             if not isinstance(record, dict):
                 return
+            changed = False
             # stargifts_count bump for tab visibility
             try:
                 gifts_count = int(self.plugin._sync_get_remote_gifts_count(record) or 0)
@@ -29332,23 +28233,14 @@ class PutAnyWearHook(MethodHook):
             # putUser call from MessagesController. This is the hottest path
             # during chat/contact sync and accounts for most JNI traffic.
             try:
-                has_public_major = bool(self.plugin._has_public_major_verification_targets())
-                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
+                if not self.plugin._has_profile_overrides():
                     return
             except:
-                has_public_major = False
+                pass
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
             if user_obj is None:
-                return
-            try:
-                uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
-            except:
-                uid = 0
-            if self.plugin._is_public_major_verified_user_id(uid) or isinstance(self.plugin._get_server_badge_record("user", uid, allow_fetch=False), dict):
-                self.plugin._apply_public_major_verification_to_obj(user_obj, uid)
-                self.plugin._apply_server_badge_to_obj(user_obj, "user", uid, allow_fetch=False)
                 return
             try:
                 my_id = int(self.plugin._get_my_user_id() or 0)
@@ -29356,6 +28248,10 @@ class PutAnyWearHook(MethodHook):
                 my_id = 0
             if my_id <= 0:
                 return
+            try:
+                uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
+            except:
+                uid = 0
             if uid > 0 and uid != my_id:
                 return
             self.plugin._apply_profile_overrides_to_obj(user_obj)
@@ -29373,36 +28269,14 @@ class PutAnyWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                has_public_major = bool(p._has_public_major_verification_targets())
-                if (not p._has_profile_overrides()) and (not has_public_major):
+                if not p._has_profile_overrides():
                     return
             except:
-                has_public_major = False
+                pass
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
             if user_obj is None:
-                return
-            try:
-                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
-            except:
-                uid = 0
-            if p._is_public_major_verified_user_id(uid) or isinstance(p._get_server_badge_record("user", uid, allow_fetch=False), dict):
-                try:
-                    p._apply_public_major_verification_to_obj(user_obj, uid)
-                    p._apply_server_badge_to_obj(user_obj, "user", uid, allow_fetch=False)
-                except:
-                    pass
-                try:
-                    account = get_user_config().selectedAccount
-                    MC = jclass("org.telegram.messenger.MessagesController")
-                    ctrl = MC.getInstance(to_java_int(account))
-                    cached = ctrl.getUser(uid)
-                    if cached is not None:
-                        p._apply_public_major_verification_to_obj(cached, uid)
-                        p._apply_server_badge_to_obj(cached, "user", uid, allow_fetch=False)
-                except:
-                    pass
                 return
             try:
                 my_id = int(p._get_my_user_id() or 0)
@@ -29410,6 +28284,10 @@ class PutAnyWearHook(MethodHook):
                 my_id = 0
             if my_id <= 0:
                 return
+            try:
+                uid = int(p._extract_user_id_from_obj(user_obj) or 0)
+            except:
+                uid = 0
             if uid > 0 and uid != my_id:
                 return
             try:
@@ -29444,11 +28322,10 @@ class PutUsersWearHook(MethodHook):
             # the per-item override pipeline even when the user has all
             # local overrides disabled.
             try:
-                has_public_major = bool(self.plugin._has_public_major_verification_targets())
-                if (not self.plugin._has_profile_overrides()) and (not has_public_major):
+                if not self.plugin._has_profile_overrides():
                     return
             except:
-                has_public_major = False
+                pass
             if not param.args or len(param.args) < 1:
                 return
             lst = param.args[0]
@@ -29464,6 +28341,8 @@ class PutUsersWearHook(MethodHook):
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
+            if my_id <= 0:
+                return
             apply = self.plugin._apply_profile_overrides_to_obj
             for i in range(size):
                 try:
@@ -29476,15 +28355,6 @@ class PutUsersWearHook(MethodHook):
                     uid = int(self.plugin._extract_user_id_from_obj(item) or 0)
                 except:
                     uid = 0
-                if self.plugin._is_public_major_verified_user_id(uid) or isinstance(self.plugin._get_server_badge_record("user", uid, allow_fetch=False), dict):
-                    try:
-                        self.plugin._apply_public_major_verification_to_obj(item, uid)
-                        self.plugin._apply_server_badge_to_obj(item, "user", uid, allow_fetch=False)
-                    except:
-                        pass
-                    continue
-                if my_id <= 0:
-                    continue
                 if uid > 0 and uid != my_id:
                     continue
                 try:
@@ -29506,14 +28376,8 @@ class PutUsersWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                has_public_major = bool(p._has_public_major_verification_targets())
-                if (not p._has_profile_overrides()) and (not has_public_major):
+                if not p._has_profile_overrides():
                     return
-            except:
-                has_public_major = False
-            try:
-                if has_public_major:
-                    p._patch_public_major_cached_users(notify=False)
             except:
                 pass
             try:
@@ -29553,13 +28417,10 @@ class ProcessUserInfoCacheHook(MethodHook):
                 uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            is_public_major_uid = bool(self.plugin._is_public_major_verified_user_id(uid))
-            if (not is_public_major_uid) and (not self.plugin._should_use_early_profile_data_mode(uid)):
+            if not self.plugin._should_use_early_profile_data_mode(uid):
                 return
             try:
                 if user_obj is not None:
-                    if is_public_major_uid:
-                        self.plugin._apply_public_major_verification_to_obj(user_obj, uid)
                     self.plugin._apply_profile_overrides_to_obj(user_obj)
                     if ctrl is not None:
                         try:
@@ -29583,8 +28444,6 @@ class ProcessUserInfoCacheHook(MethodHook):
                         pass
             if info_obj is not None:
                 try:
-                    if is_public_major_uid:
-                        self.plugin._apply_public_major_verification_to_obj(info_obj, uid)
                     self.plugin._apply_profile_overrides_to_obj(info_obj)
                 except:
                     pass
@@ -29612,26 +28471,7 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            has_public_major = bool(self.plugin._has_public_major_verification_targets())
-            # Server badges should always be re-applied to incoming users/chats
-            # so Telegram caches them already patched (otherwise the badge
-            # flickers off whenever a fresh update batch lands).
-            try:
-                if param.args:
-                    for a in param.args:
-                        if a is None:
-                            continue
-                        try:
-                            _ = a.getClass()
-                        except:
-                            continue
-                        try:
-                            self.plugin._patch_server_badges_in_response(a)
-                        except:
-                            pass
-            except:
-                pass
-            if not has_wear and not has_identity and not has_public_major:
+            if not has_wear and not has_identity:
                 return
             if not param.args:
                 return
@@ -29647,8 +28487,6 @@ class ProcessUpdatesWearHook(MethodHook):
                     total += self.plugin._patch_wear_in_updates_container(a)
                 if has_identity:
                     total += self.plugin._patch_identity_in_updates_container(a)
-                if has_public_major:
-                    total += self.plugin._patch_public_major_in_updates_container(a)
             if total:
                 _log(f"Updates patched before apply: {total}")
         except Exception as e:
@@ -29658,32 +28496,13 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            has_public_major = bool(self.plugin._has_public_major_verification_targets())
-            # Server badges may have been overwritten by an incoming update batch
-            # (Telegram replaces cached Chat/User objects during update apply), so
-            # always re-apply the cached-object patch here.
-            try:
-                self.plugin._patch_server_badges_in_cached_objects(notify=True)
-            except:
-                pass
-            if not has_wear and not has_identity and not has_public_major:
+            if not has_wear and not has_identity:
                 return
             # Re-patch our cached user right after Telegram applies the update batch.
             # This catches any cases where wear/identity state was overwritten by the
             # incoming update (e.g. server pushed TL_updateUserEmojiStatus with empty status).
             try:
-                self.plugin._schedule_cached_user_patch([0, 60, 180, 420, 900], patch_userconfig=True, key="post_updates_wear_patch")
-            except:
-                pass
-            try:
-                self.plugin._post_local_profile_notifications(reason="post_updates_wear_public_major", cooldown=0.08)
-            except:
-                pass
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-                if pa is not None:
-                    self.plugin._patch_profile_activity_in_place(pa, notify=False, include_major_views=True, include_gifts_layout=False)
-                    self.plugin._schedule_profile_ui_repatch(pa, [0, 120, 360])
+                self.plugin._schedule_cached_user_patch([80], patch_userconfig=False, key="post_updates_wear_patch")
             except:
                 pass
         except Exception as e:
@@ -29759,15 +28578,7 @@ class UpdateEmojiStatusHardLockHook(MethodHook):
             except:
                 pass
             try:
-                p._patch_my_cached_user_full()
-            except:
-                pass
-            try:
                 p._patch_userconfig_current_user(force=True)
-            except:
-                pass
-            try:
-                p._patch_public_major_cached_users(notify=False)
             except:
                 pass
             try:
@@ -29792,18 +28603,11 @@ class MajorBotVerificationDrawableHook(MethodHook):
 
     def after_hooked_method(self, param):
         try:
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-            except:
-                pa = None
-            if self.plugin._is_public_major_profile_activity(pa):
+            if not self.plugin._is_local_major_verification_active():
                 return
-            force_badge = False
-            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
+            if self.plugin._should_use_native_major_verification_emoji():
                 return
-            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
-                return
-            drawable = self.plugin._get_local_major_badge_drawable(17.0, force=force_badge)
+            drawable = self.plugin._get_local_major_badge_drawable(17.0)
             if drawable is not None:
                 param.setResult(drawable)
         except Exception as e:
@@ -29815,49 +28619,35 @@ class MajorVerificationInfoTextHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-            except:
-                pa = None
-            if self.plugin._is_public_major_profile_activity(pa):
+            if not self.plugin._is_local_major_verification_active():
                 return
-            force_badge = False
-            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
-                return
-            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
+            if self.plugin._should_use_native_major_verification_emoji():
                 return
             if not param.args or len(param.args) < 1:
                 return
             text = param.args[0]
             if text is None:
                 return
-            target = self.plugin._get_major_verification_description_for_profile(pa)
+            target = self.plugin._get_local_verification_description()
             if not target:
                 return
             plain = self.plugin._charsequence_to_plain_text(text)
             if target not in plain:
                 return
-            param.args[0] = self.plugin._build_local_major_badge_text(target, size_dp=15.0, force=force_badge)
+            param.args[0] = self.plugin._build_local_major_badge_text(target, size_dp=15.0)
         except Exception as e:
             _log(f"MajorVerificationInfoTextHook error: {e}")
 
     def after_hooked_method(self, param):
         try:
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-            except:
-                pa = None
-            if self.plugin._is_public_major_profile_activity(pa):
+            if not self.plugin._is_local_major_verification_active():
                 return
-            force_badge = False
-            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
-                return
-            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
+            if self.plugin._should_use_native_major_verification_emoji():
                 return
             cell = getattr(param, "thisObject", None)
             if cell is None:
                 return
-            target = self.plugin._get_major_verification_description_for_profile(pa)
+            target = self.plugin._get_local_verification_description()
             if not target:
                 return
             try:
@@ -29867,7 +28657,7 @@ class MajorVerificationInfoTextHook(MethodHook):
             plain = self.plugin._charsequence_to_plain_text(current_text)
             if target not in plain:
                 return
-            replacement = self.plugin._build_local_major_badge_text(target, size_dp=15.0, force=force_badge)
+            replacement = self.plugin._build_local_major_badge_text(target, size_dp=15.0)
             try:
                 self.plugin._set_field(cell, "text", replacement)
             except:
@@ -29882,7 +28672,7 @@ class MajorVerificationInfoTextHook(MethodHook):
                 except:
                     pass
                 try:
-                    drawable = self.plugin._get_local_major_badge_drawable(15.0, force=force_badge)
+                    drawable = self.plugin._get_local_major_badge_drawable(15.0)
                 except:
                     drawable = None
                 if drawable is not None:
@@ -29911,16 +28701,9 @@ class MajorProfileNameDrawableHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-            except:
-                pa = None
-            if self.plugin._is_public_major_profile_activity(pa):
+            if not self.plugin._is_local_major_verification_active():
                 return
-            force_badge = False
-            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
-                return
-            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
+            if self.plugin._should_use_native_major_verification_emoji():
                 return
             view = getattr(param, "thisObject", None)
             if not self.plugin._is_visible_profile_name_text_view(view):
@@ -29929,7 +28712,7 @@ class MajorProfileNameDrawableHook(MethodHook):
                 if param.args and len(param.args) >= 1:
                     param.args[0] = True
                 return
-            drawable = self.plugin._get_local_major_badge_drawable(17.0, force=force_badge)
+            drawable = self.plugin._get_local_major_badge_drawable(17.0)
             if drawable is None:
                 return
             if param.args and len(param.args) >= 1:
@@ -29941,14 +28724,7 @@ class MajorProfileNameDrawableHook(MethodHook):
         try:
             if self.mode != "drawable":
                 return
-            try:
-                pa = self.plugin._get_visible_profile_activity()
-            except:
-                pa = None
-            if self.plugin._is_public_major_profile_activity(pa):
-                return
-            force_badge = False
-            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
+            if self.plugin._should_use_native_major_verification_emoji():
                 return
             view = getattr(param, "thisObject", None)
             if not self.plugin._is_visible_profile_name_text_view(view):
