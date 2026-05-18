@@ -1,7 +1,7 @@
 {
-  "version": "1.5.16",
+  "version": "1.5.17",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.16 - bulletproof server badges via per-read getChat hook.\n\nFix: badges now survive every code path. DialogCell + ProfileActivity call MessagesController.getChat(Long) / getChatFull(long) on each bind; a new GetChatBadgeHook re-applies the server badge on every read (fast-path: skip when the badge cache is empty). Combined with the existing getUser hook coverage and the proactive update-batch patcher, the badge stays put in the chat list, channel header, own profile, and other people's profiles.",
+  "notes": "Beta 1.5.17 - server badges patched at cache-write, not just cache-read.\n\nFix: residual flicker still happened on the very first bind of a freshly-cached chat (read happened before our per-read hook re-patched). PutChatBadgeHook now intercepts putChat / putChats / putChatFull and applies the server badge BEFORE the chat lands in MessagesController, so the icon is present at the first read. All cache paths now use allow_fetch=False so the hook never blocks on network.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",

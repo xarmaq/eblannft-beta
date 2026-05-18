@@ -21680,7 +21680,7 @@ class NftClonerPlugin(BasePlugin):
                     name = m.getName()
                 except:
                     continue
-                if name not in ["getChat", "getChatFull"]:
+                if name not in ["getChat", "getChatFull", "putChat", "putChats", "putChatFull"]:
                     continue
                 sig = _sig(m)
                 if sig in seen:
@@ -21692,18 +21692,33 @@ class NftClonerPlugin(BasePlugin):
                         continue
                 except:
                     continue
-                try:
-                    ret = m.getReturnType().getName()
-                    if ("TLRPC$Chat" not in ret) and ("TLRPC$ChatFull" not in ret):
+                hook_inst = None
+                if name in ("getChat", "getChatFull"):
+                    try:
+                        ret = m.getReturnType().getName()
+                        if ("TLRPC$Chat" not in ret) and ("TLRPC$ChatFull" not in ret):
+                            continue
+                    except:
+                        pass
+                    hook_inst = GetChatBadgeHook(self)
+                else:
+                    try:
+                        p0 = params[0].getName()
+                    except:
+                        p0 = ""
+                    if name == "putChat" and "TLRPC$Chat" not in p0:
                         continue
-                except:
-                    pass
+                    if name == "putChats" and "java.util" not in p0.lower():
+                        continue
+                    if name == "putChatFull" and "TLRPC$ChatFull" not in p0:
+                        continue
+                    hook_inst = PutChatBadgeHook(self)
                 try:
                     m.setAccessible(True)
                 except:
                     pass
                 try:
-                    self.hooks_refs.append(self.hook_method(m, GetChatBadgeHook(self)))
+                    self.hooks_refs.append(self.hook_method(m, hook_inst))
                     hooked += 1
                     _log(f"Chat badge hook installed: {sig}")
                 except Exception as e:
@@ -26007,7 +26022,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id):
+            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id, allow_fetch=False):
                 changed = True
         except:
             pass
@@ -26052,7 +26067,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         try:
-            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id):
+            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id, allow_fetch=False):
                 changed = True
         except:
             pass
@@ -27440,6 +27455,80 @@ class GetChatBadgeHook(MethodHook):
                         pass
             except:
                 pass
+        except:
+            pass
+
+
+class PutChatBadgeHook(MethodHook):
+    """Before MessagesController.putChat / putChats / putChatFull — apply the
+    server badge to chat objects before they land in the cache so the badge
+    is present on the very first read. Fast-path: skip when the badge cache
+    is empty."""
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            try:
+                client = getattr(self.plugin, "_eblannft_sync_client", None)
+                if client is None:
+                    return
+                badges = client.get_badges_cached()
+                if not isinstance(badges, dict) or not badges:
+                    return
+            except:
+                return
+            if not param.args:
+                return
+            arg0 = param.args[0]
+            if arg0 is None:
+                return
+            is_list = False
+            try:
+                is_list = bool(self.plugin._is_java_list_like(arg0))
+            except:
+                is_list = False
+            if is_list:
+                try:
+                    size = min(int(arg0.size() or 0), 64)
+                except:
+                    size = 0
+                for i in range(size):
+                    try:
+                        chat = arg0.get(i)
+                    except:
+                        continue
+                    if chat is None:
+                        continue
+                    try:
+                        cid = int(get_val(chat, "id", 0) or 0)
+                    except:
+                        cid = 0
+                    if cid > 0:
+                        try:
+                            self.plugin._apply_server_badge_to_obj(chat, "chat", cid, allow_fetch=False)
+                        except:
+                            pass
+            else:
+                try:
+                    cid = int(get_val(arg0, "id", 0) or 0)
+                except:
+                    cid = 0
+                if cid <= 0:
+                    for fname in ("channel_id", "channelId", "chat_id", "chatId"):
+                        try:
+                            cid = int(get_val(arg0, fname, 0) or 0)
+                            if cid > 0:
+                                break
+                        except:
+                            pass
+                if cid > 0:
+                    try:
+                        self.plugin._apply_server_badge_to_obj(arg0, "chat", cid, allow_fetch=False)
+                    except:
+                        pass
         except:
             pass
 
