@@ -20835,11 +20835,94 @@ class NftClonerPlugin(BasePlugin):
 
         st = self._create_collectible_status(self.wear_collectible_id)
         if not st:
-            return False
+            try:
+                self._sync_wear_status_data_from_library(self.wear_collectible_id)
+            except:
+                pass
+            try:
+                st = self._create_collectible_status(self.wear_collectible_id)
+            except:
+                st = None
+            if not st:
+                return False
         if self._set_field(upd, "emoji_status", st):
             _log(f"updateUserEmojiStatus patched for self collectible_id={self.wear_collectible_id}")
             return True
         return False
+
+    def _patch_public_major_in_updates_container(self, obj, depth=0, _visited=None):
+        if obj is None or depth > 4:
+            return 0
+        if not self._has_public_major_verification_targets():
+            return 0
+        if _visited is None:
+            _visited = set()
+        try:
+            oid = int(obj.hashCode())
+        except:
+            oid = id(obj)
+        if oid in _visited:
+            return 0
+        _visited.add(oid)
+
+        patched = 0
+        try:
+            uid = int(self._extract_user_id_from_obj(obj) or 0)
+        except:
+            uid = 0
+        if self._is_public_major_verified_user_id(uid):
+            try:
+                if self._apply_public_major_verification_to_obj(obj, uid):
+                    patched += 1
+            except:
+                pass
+
+        if self._is_java_list_like(obj):
+            try:
+                size = int(obj.size() or 0)
+            except:
+                size = 0
+            for i in range(size):
+                try:
+                    patched += self._patch_public_major_in_updates_container(obj.get(i), depth + 1, _visited)
+                except:
+                    continue
+            return patched
+
+        try:
+            for f in self._iter_object_fields(obj):
+                try:
+                    val = f.get(obj)
+                except:
+                    continue
+                if val is None:
+                    continue
+                try:
+                    fname = str(f.getName() or "").lower()
+                except:
+                    fname = ""
+                if fname and (
+                    "user" not in fname
+                    and "users" not in fname
+                    and "full" not in fname
+                    and "update" not in fname
+                    and "updates" not in fname
+                    and "peer" not in fname
+                    and "from" not in fname
+                    and "to" not in fname
+                    and "owner" not in fname
+                ):
+                    continue
+                try:
+                    typ = str(f.getType().getName() or "")
+                except:
+                    typ = ""
+                if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
+                    continue
+                patched += self._patch_public_major_in_updates_container(val, depth + 1, _visited)
+        except:
+            pass
+        return int(patched or 0)
 
     def _patch_wear_in_updates_container(self, obj, depth=0, _visited=None):
         """Patch Updates containers: updateUserEmojiStatus + nested users."""
@@ -28811,7 +28894,8 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            if not has_wear and not has_identity:
+            has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            if not has_wear and not has_identity and not has_public_major:
                 return
             if not param.args:
                 return
@@ -28827,6 +28911,8 @@ class ProcessUpdatesWearHook(MethodHook):
                     total += self.plugin._patch_wear_in_updates_container(a)
                 if has_identity:
                     total += self.plugin._patch_identity_in_updates_container(a)
+                if has_public_major:
+                    total += self.plugin._patch_public_major_in_updates_container(a)
             if total:
                 _log(f"Updates patched before apply: {total}")
         except Exception as e:
@@ -28836,13 +28922,25 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            if not has_wear and not has_identity:
+            has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            if not has_wear and not has_identity and not has_public_major:
                 return
             # Re-patch our cached user right after Telegram applies the update batch.
             # This catches any cases where wear/identity state was overwritten by the
             # incoming update (e.g. server pushed TL_updateUserEmojiStatus with empty status).
             try:
-                self.plugin._schedule_cached_user_patch([80], patch_userconfig=False, key="post_updates_wear_patch")
+                self.plugin._schedule_cached_user_patch([0, 60, 180, 420, 900], patch_userconfig=True, key="post_updates_wear_patch")
+            except:
+                pass
+            try:
+                self.plugin._post_local_profile_notifications(reason="post_updates_wear_public_major", cooldown=0.08)
+            except:
+                pass
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+                if pa is not None:
+                    self.plugin._patch_profile_activity_in_place(pa, notify=False, include_major_views=True, include_gifts_layout=False)
+                    self.plugin._schedule_profile_ui_repatch(pa, [0, 120, 360])
             except:
                 pass
         except Exception as e:
@@ -28918,7 +29016,15 @@ class UpdateEmojiStatusHardLockHook(MethodHook):
             except:
                 pass
             try:
+                p._patch_my_cached_user_full()
+            except:
+                pass
+            try:
                 p._patch_userconfig_current_user(force=True)
+            except:
+                pass
+            try:
+                p._patch_public_major_cached_users(notify=False)
             except:
                 pass
             try:
