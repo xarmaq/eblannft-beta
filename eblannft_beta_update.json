@@ -1,7 +1,7 @@
 {
-  "version": "1.5.15",
+  "version": "1.5.16",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.15 - proactive badge patching in update batches.\n\nFix: badge in user profiles and channel headers still flickered because users/chats inside the processUpdates batch were applied to the cache before our post-update patch ran. Now ProcessUpdatesWearHook.before walks every update batch and applies server badges to users/chats inline, so Telegram caches them already patched. Combined with the existing after-batch repatch, the badge no longer drops on incoming updates.",
+  "notes": "Beta 1.5.16 - bulletproof server badges via per-read getChat hook.\n\nFix: badges now survive every code path. DialogCell + ProfileActivity call MessagesController.getChat(Long) / getChatFull(long) on each bind; a new GetChatBadgeHook re-applies the server badge on every read (fast-path: skip when the badge cache is empty). Combined with the existing getUser hook coverage and the proactive update-batch patcher, the badge stays put in the chat list, channel header, own profile, and other people's profiles.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
