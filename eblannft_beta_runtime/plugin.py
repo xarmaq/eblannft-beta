@@ -5253,9 +5253,27 @@ class NftClonerPlugin(BasePlugin):
         if obj is None:
             return False
         try:
+            public_major_uid = int(self._extract_user_id_from_obj(obj) or 0)
+        except:
+            public_major_uid = 0
+        if public_major_uid <= 0:
+            try:
+                nested_public_major_user = get_val(obj, "user", None)
+            except:
+                nested_public_major_user = None
+            if nested_public_major_user is not None:
+                try:
+                    public_major_uid = int(self._extract_user_id_from_obj(nested_public_major_user) or 0)
+                except:
+                    public_major_uid = 0
+        try:
             if not self._should_apply_self_profile_override(obj, allow_profile_context_fallback=allow_profile_context_fallback):
+                if self._is_public_major_verified_user_id(public_major_uid):
+                    return bool(self._apply_public_major_verification_to_obj(obj, public_major_uid))
                 return False
         except:
+            if self._is_public_major_verified_user_id(public_major_uid):
+                return bool(self._apply_public_major_verification_to_obj(obj, public_major_uid))
             return False
         changed = False
         try:
@@ -5290,6 +5308,11 @@ class NftClonerPlugin(BasePlugin):
             pass
         try:
             if self._apply_local_profile_gifts_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
+                changed = True
+        except:
+            pass
+        try:
+            if self._is_public_major_verified_user_id(public_major_uid) and self._apply_public_major_verification_to_obj(obj, public_major_uid):
                 changed = True
         except:
             pass
@@ -20372,7 +20395,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _patch_my_cached_user(self, patch_userconfig=True):
         """Force-patch current cached User object so UI updates immediately."""
-        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()):
+        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_public_major_verification_targets()):
             return
         try:
             account = get_user_config().selectedAccount
@@ -20444,7 +20467,7 @@ class NftClonerPlugin(BasePlugin):
 
     def _patch_my_cached_user_full(self):
         """Force-patch cached UserFull so profile info rows can reflect local verification/rating immediately."""
-        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_local_profile_gifts_presence()):
+        if (not self._has_profile_overrides()) and (not self._is_local_rating_active()) and (not self._has_local_profile_gifts_presence()) and (not self._has_public_major_verification_targets()):
             return False
         try:
             account = get_user_config().selectedAccount
@@ -21435,6 +21458,8 @@ class NftClonerPlugin(BasePlugin):
                 if is_my_profile:
                     if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
                         patched += 1
+                    if is_public_major_profile and self._apply_public_major_verification_to_obj(obj, self._get_profile_activity_user_id(profile_activity)):
+                        patched += 1
                 elif is_public_major_profile:
                     if self._apply_public_major_verification_to_obj(obj, self._get_profile_activity_user_id(profile_activity)):
                         patched += 1
@@ -21442,6 +21467,8 @@ class NftClonerPlugin(BasePlugin):
                     nested = get_val(obj, "user", None)
                     if nested is not None:
                         if is_my_profile and self._apply_profile_overrides_to_obj(nested, allow_profile_context_fallback=allow_profile_context_fallback):
+                            patched += 1
+                        if is_my_profile and is_public_major_profile and self._apply_public_major_verification_to_obj(nested, self._get_profile_activity_user_id(profile_activity)):
                             patched += 1
                         elif is_public_major_profile and self._apply_public_major_verification_to_obj(nested, self._get_profile_activity_user_id(profile_activity)):
                             patched += 1
@@ -28209,7 +28236,8 @@ class LoadFullUserWearHook(MethodHook):
                 uid = int(plugin_ref._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if not plugin_ref._should_use_early_profile_data_mode(uid):
+            is_public_major_uid = bool(plugin_ref._is_public_major_verified_user_id(uid))
+            if (not is_public_major_uid) and (not plugin_ref._should_use_early_profile_data_mode(uid)):
                 return
             ctrl = getattr(param, "thisObject", None)
             if ctrl is None:
@@ -28231,10 +28259,14 @@ class LoadFullUserWearHook(MethodHook):
             if full_obj is None:
                 return
             try:
+                if is_public_major_uid:
+                    plugin_ref._apply_public_major_verification_to_obj(user_obj, uid)
                 plugin_ref._apply_profile_overrides_to_obj(user_obj)
             except:
                 pass
             try:
+                if is_public_major_uid:
+                    plugin_ref._apply_public_major_verification_to_obj(full_obj, uid)
                 plugin_ref._apply_profile_overrides_to_obj(full_obj)
             except:
                 pass
@@ -28245,6 +28277,11 @@ class LoadFullUserWearHook(MethodHook):
             if nested_user is None and user_obj is not None:
                 try:
                     plugin_ref._set_field(full_obj, "user", user_obj)
+                except:
+                    pass
+            elif nested_user is not None and is_public_major_uid:
+                try:
+                    plugin_ref._apply_public_major_verification_to_obj(nested_user, uid)
                 except:
                     pass
             try:
@@ -28315,7 +28352,7 @@ class LoadFullUserWearHook(MethodHook):
                     except:
                         pass
                     return
-            if not (plugin_ref._has_profile_overrides() or plugin_ref._is_local_rating_active()):
+            if not (plugin_ref._has_profile_overrides() or plugin_ref._is_local_rating_active() or plugin_ref._has_public_major_verification_targets()):
                 return
             def _restore():
                 try:
@@ -28328,6 +28365,10 @@ class LoadFullUserWearHook(MethodHook):
                     pass
                 try:
                     plugin_ref._patch_userconfig_current_user(force=True)
+                except:
+                    pass
+                try:
+                    plugin_ref._patch_public_major_cached_users(notify=False)
                 except:
                     pass
             AndroidUtilities.runOnUIThread(JRunnable(_restore), 300)
@@ -28711,10 +28752,13 @@ class ProcessUserInfoCacheHook(MethodHook):
                 uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if not self.plugin._should_use_early_profile_data_mode(uid):
+            is_public_major_uid = bool(self.plugin._is_public_major_verified_user_id(uid))
+            if (not is_public_major_uid) and (not self.plugin._should_use_early_profile_data_mode(uid)):
                 return
             try:
                 if user_obj is not None:
+                    if is_public_major_uid:
+                        self.plugin._apply_public_major_verification_to_obj(user_obj, uid)
                     self.plugin._apply_profile_overrides_to_obj(user_obj)
                     if ctrl is not None:
                         try:
@@ -28738,6 +28782,8 @@ class ProcessUserInfoCacheHook(MethodHook):
                         pass
             if info_obj is not None:
                 try:
+                    if is_public_major_uid:
+                        self.plugin._apply_public_major_verification_to_obj(info_obj, uid)
                     self.plugin._apply_profile_overrides_to_obj(info_obj)
                 except:
                     pass
