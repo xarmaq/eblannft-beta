@@ -159,6 +159,9 @@ GIFT_KIND_LEGACY = "legacy_normal"
 GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
 GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
 LOCAL_VISUAL_UPGRADE_STARS = 0
+PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
+PUBLIC_MAJOR_VERIFICATION_ICON = 6016937066422604737
+PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u0432\u0435\u0440\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0435\u0439 \u00abMajor\u00bb."
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -7036,6 +7039,67 @@ class NftClonerPlugin(BasePlugin):
         except:
             return False
 
+    def _is_public_major_verified_user_id(self, user_id):
+        try:
+            return bool(int(user_id or 0) in PUBLIC_MAJOR_VERIFIED_USER_IDS)
+        except:
+            return False
+
+    def _has_public_major_verification_targets(self):
+        try:
+            return bool(PUBLIC_MAJOR_VERIFIED_USER_IDS)
+        except:
+            return False
+
+    def _should_apply_public_major_verification_for_target(self, target_user_id=-1):
+        try:
+            uid = int(target_user_id or 0)
+        except:
+            uid = 0
+        if uid > 0:
+            return bool(self._is_public_major_verified_user_id(uid))
+        return bool(self._has_public_major_verification_targets())
+
+    def _get_public_major_verification_icon(self):
+        return int(PUBLIC_MAJOR_VERIFICATION_ICON)
+
+    def _get_public_major_verification_description(self):
+        return str(PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
+
+    def _is_public_major_profile_activity(self, profile_activity=None):
+        try:
+            uid = int(self._get_profile_activity_user_id(profile_activity) or 0)
+        except:
+            uid = 0
+        return bool(self._is_public_major_verified_user_id(uid))
+
+    def _is_major_badge_profile_activity(self, profile_activity=None):
+        try:
+            if self._is_public_major_profile_activity(profile_activity):
+                return True
+        except:
+            pass
+        try:
+            return bool(self._is_local_major_verification_active() and self._is_my_profile_activity(profile_activity))
+        except:
+            return False
+
+    def _get_major_verification_description_for_profile(self, profile_activity=None):
+        try:
+            if self._is_public_major_profile_activity(profile_activity):
+                return self._get_public_major_verification_description()
+        except:
+            pass
+        return self._get_local_verification_description()
+
+    def _get_major_verification_icon_for_profile(self, profile_activity=None):
+        try:
+            if self._is_public_major_profile_activity(profile_activity):
+                return self._get_public_major_verification_icon()
+        except:
+            pass
+        return self._get_local_verification_icon()
+
     def _get_local_fake_identity_kind(self):
         return ""
 
@@ -7180,10 +7244,10 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Major badge bitmap render error: {e}")
             return None
 
-    def _get_local_major_badge_drawable(self, size_dp=17.0):
-        if not self._is_local_major_verification_active():
+    def _get_local_major_badge_drawable(self, size_dp=17.0, force=False):
+        if (not force) and (not self._is_local_major_verification_active()):
             return None
-        if self._should_use_native_major_verification_emoji():
+        if (not force) and self._should_use_native_major_verification_emoji():
             return None
         try:
             ctx = ApplicationLoader.applicationContext
@@ -7207,10 +7271,10 @@ class NftClonerPlugin(BasePlugin):
             _log(f"Major badge drawable error: {e}")
             return None
 
-    def _build_local_major_badge_text(self, text, size_dp=15.5):
+    def _build_local_major_badge_text(self, text, size_dp=15.5, force=False):
         if text is None:
             return None
-        if self._should_use_native_major_verification_emoji():
+        if (not force) and self._should_use_native_major_verification_emoji():
             return text
         try:
             plain = str(text or "")
@@ -7220,7 +7284,7 @@ class NftClonerPlugin(BasePlugin):
             return text
         if plain.startswith("x ") or plain.startswith("\uFFFC "):
             return text
-        drawable = self._get_local_major_badge_drawable(size_dp=size_dp)
+        drawable = self._get_local_major_badge_drawable(size_dp=size_dp, force=force)
         if drawable is None:
             return text
         try:
@@ -7244,13 +7308,13 @@ class NftClonerPlugin(BasePlugin):
             return ""
 
     def _is_visible_profile_name_text_view(self, view):
-        if view is None or not self._is_local_major_verification_active():
+        if view is None:
             return False
         try:
             pa = self._get_visible_profile_activity()
         except:
             pa = None
-        if pa is None or not self._is_my_profile_activity(pa):
+        if pa is None or not self._is_major_badge_profile_activity(pa):
             return False
         try:
             name_views = get_val(pa, "nameTextView", None)
@@ -7359,14 +7423,20 @@ class NftClonerPlugin(BasePlugin):
                 continue
 
     def _patch_local_major_profile_views(self, profile_activity):
-        if profile_activity is None or not self._is_local_major_verification_active():
+        if profile_activity is None:
             return 0
         try:
-            if not self._is_my_profile_activity(profile_activity):
-                return 0
+            is_public_major = bool(self._is_public_major_profile_activity(profile_activity))
         except:
+            is_public_major = False
+        try:
+            is_local_major_self = bool(self._is_local_major_verification_active() and self._is_my_profile_activity(profile_activity))
+        except:
+            is_local_major_self = False
+        if (not is_public_major) and (not is_local_major_self):
             return 0
-        if self._should_use_native_major_verification_emoji():
+        force_custom_badge = bool(is_public_major)
+        if (not force_custom_badge) and self._should_use_native_major_verification_emoji():
             return 0
         patched = 0
         try:
@@ -7378,7 +7448,7 @@ class NftClonerPlugin(BasePlugin):
         except:
             heavy_pass = not cold_open
         try:
-            drawable = self._get_local_major_badge_drawable(17.0)
+            drawable = self._get_local_major_badge_drawable(17.0, force=force_custom_badge)
         except:
             drawable = None
 
@@ -7450,9 +7520,9 @@ class NftClonerPlugin(BasePlugin):
                 if v_changed:
                     _deferred_invalidate_views.append(view)
 
-        target = self._get_local_verification_description()
+        target = self._get_major_verification_description_for_profile(profile_activity)
         if heavy_pass and target:
-            replacement = self._build_local_major_badge_text(target, size_dp=15.0)
+            replacement = self._build_local_major_badge_text(target, size_dp=15.0, force=force_custom_badge)
             roots = []
             for holder_name in ["listView", "recyclerListView", "fragmentView"]:
                 try:
@@ -7657,6 +7727,80 @@ class NftClonerPlugin(BasePlugin):
             return bool(self._is_my_profile_activity())
         except:
             return False
+
+    def _apply_public_major_verification_to_obj(self, obj, target_user_id=-1):
+        if obj is None or not self._has_public_major_verification_targets():
+            return False
+        try:
+            obj_uid = int(self._extract_user_id_from_obj(obj) or 0)
+        except:
+            obj_uid = 0
+        try:
+            known_uid = int(target_user_id or 0)
+        except:
+            known_uid = 0
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except:
+            cls_name = ""
+        is_full_obj = bool(("userfull" in cls_name) or ("chatfull" in cls_name))
+        if obj_uid <= 0 and not is_full_obj:
+            return False
+        target_uid = obj_uid if obj_uid > 0 else known_uid
+        if not self._is_public_major_verified_user_id(target_uid):
+            return False
+
+        icon = self._get_public_major_verification_icon()
+        description = self._get_public_major_verification_description()
+        bot_verification = self._create_local_bot_verification(icon, description)
+        if bot_verification is None:
+            return False
+
+        changed = False
+
+        if not is_full_obj:
+            for field_name, value in [
+                ("verified", False),
+                ("fake", False),
+                ("scam", False),
+                ("bot_verification_icon", int(icon)),
+            ]:
+                try:
+                    if self._set_field(obj, field_name, value):
+                        changed = True
+                except:
+                    pass
+                try:
+                    if getattr(obj, field_name) != value:
+                        setattr(obj, field_name, value)
+                        changed = True
+                except:
+                    pass
+
+        try:
+            current = get_val(obj, "bot_verification", None)
+        except:
+            current = None
+        try:
+            current_icon = int(get_val(current, "icon", 0) or 0) if current is not None else 0
+        except:
+            current_icon = 0
+        try:
+            current_desc = str(get_val(current, "description", "") or "") if current is not None else ""
+        except:
+            current_desc = ""
+        try:
+            if self._set_field(obj, "bot_verification", bot_verification):
+                changed = True
+        except:
+            pass
+        try:
+            if current is None or current_icon != int(icon) or current_desc != str(description):
+                obj.bot_verification = bot_verification
+                changed = True
+        except:
+            pass
+        return bool(changed)
 
     def _apply_local_verification_to_obj(self, obj):
         if obj is None or not self._is_local_verification_active():
@@ -18348,11 +18492,12 @@ class NftClonerPlugin(BasePlugin):
             known_target_user_id = -1
 
         need_verification = bool(self._is_local_verification_active())
+        need_public_verification = bool(self._has_public_major_verification_targets())
         need_rating = bool(self._is_local_rating_active())
         need_username = bool(self._is_nft_username_active())
         need_number = bool(self._is_nft_number_active())
         need_wear = bool(self.wear_active and int(self.wear_collectible_id or 0) > 0)
-        if not (need_verification or need_rating or need_username or need_number or need_wear):
+        if not (need_verification or need_public_verification or need_rating or need_username or need_number or need_wear):
             return 0
 
         try:
@@ -18369,7 +18514,13 @@ class NftClonerPlugin(BasePlugin):
             )
         except:
             should_apply_rating = bool(need_rating and known_target_user_id <= 0)
-        if (not should_manage_self) and (not should_apply_rating):
+        try:
+            should_apply_public_verification = bool(
+                need_public_verification and self._should_apply_public_major_verification_for_target(known_target_user_id)
+            )
+        except:
+            should_apply_public_verification = bool(need_public_verification and known_target_user_id <= 0)
+        if (not should_manage_self) and (not should_apply_rating) and (not should_apply_public_verification):
             return 0
 
         patched = 0
@@ -18417,6 +18568,12 @@ class NftClonerPlugin(BasePlugin):
             if should_apply_rating:
                 try:
                     if self._apply_local_rating_to_obj(obj, known_target_user_id):
+                        changed = True
+                except:
+                    pass
+            if should_apply_public_verification:
+                try:
+                    if self._apply_public_major_verification_to_obj(obj, known_target_user_id):
                         changed = True
                 except:
                     pass
@@ -21208,7 +21365,11 @@ class NftClonerPlugin(BasePlugin):
             is_my_profile = bool(self._is_my_profile_activity(profile_activity))
         except:
             is_my_profile = False
-        if not is_my_profile:
+        try:
+            is_public_major_profile = bool(self._is_public_major_profile_activity(profile_activity))
+        except:
+            is_public_major_profile = False
+        if (not is_my_profile) and (not is_public_major_profile):
             return 0
         allow_profile_context_fallback = True
         patched = 0
@@ -21217,25 +21378,33 @@ class NftClonerPlugin(BasePlugin):
                 obj = get_val(profile_activity, name, None)
                 if obj is None:
                     continue
-                if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                    patched += 1
+                if is_my_profile:
+                    if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
+                        patched += 1
+                elif is_public_major_profile:
+                    if self._apply_public_major_verification_to_obj(obj, self._get_profile_activity_user_id(profile_activity)):
+                        patched += 1
                 try:
                     nested = get_val(obj, "user", None)
-                    if nested is not None and self._apply_profile_overrides_to_obj(nested, allow_profile_context_fallback=allow_profile_context_fallback):
-                        patched += 1
+                    if nested is not None:
+                        if is_my_profile and self._apply_profile_overrides_to_obj(nested, allow_profile_context_fallback=allow_profile_context_fallback):
+                            patched += 1
+                        elif is_public_major_profile and self._apply_public_major_verification_to_obj(nested, self._get_profile_activity_user_id(profile_activity)):
+                            patched += 1
                 except:
                     pass
             except:
                 pass
-        try:
-            patched += int(self._patch_profile_activity_boosts(profile_activity) or 0)
-        except:
-            pass
-        if include_gifts_layout:
+        if is_my_profile:
             try:
-                patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
+                patched += int(self._patch_profile_activity_boosts(profile_activity) or 0)
             except:
                 pass
+            if include_gifts_layout:
+                try:
+                    patched += int(self._patch_profile_shared_media_layout(profile_activity, animated=False) or 0)
+                except:
+                    pass
         try:
             if include_major_views:
                 patched += int(self._patch_local_major_profile_views(profile_activity) or 0)
@@ -26797,10 +26966,12 @@ class NetworkHook(MethodHook):
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
             sync_active = bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None)
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or self.plugin._has_public_major_verification_targets() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
+                    should_hook_user = True
+                elif self.plugin._should_apply_public_major_verification_for_target(req_user_id):
                     should_hook_user = True
                 elif self.plugin._should_apply_local_rating_for_target(req_user_id):
                     should_hook_user = True
@@ -27591,7 +27762,11 @@ class ProfileActivityFastPatchHook(MethodHook):
                 except:
                     pass
                 return
-            if not p._has_profile_fastpatch_overrides():
+            try:
+                is_public_major_profile = bool(p._is_public_major_profile_activity(pa))
+            except:
+                is_public_major_profile = False
+            if (not is_public_major_profile) and (not p._has_profile_fastpatch_overrides()):
                 return
             try:
                 _min_interval = 0.18 if method_name in ["onFragmentCreate", "createView"] else 0.62
@@ -27644,24 +27819,29 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            if not p._is_my_profile_activity(pa):
-                return
             try:
-                if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
-                    if method_name not in ["onFragmentCreate", "createView", "onResume"]:
-                        return
+                is_my_profile = bool(p._is_my_profile_activity(pa))
             except:
-                pass
-            if p.wear_active and p.wear_collectible_id > 0:
+                is_my_profile = False
+            if (not is_my_profile) and (not is_public_major_profile):
+                return
+            if is_my_profile:
                 try:
-                    p._ensure_current_wear_status_data(p.wear_collectible_id, force=False)
+                    if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
+                        if method_name not in ["onFragmentCreate", "createView", "onResume"]:
+                            return
                 except:
                     pass
+                if p.wear_active and p.wear_collectible_id > 0:
+                    try:
+                        p._ensure_current_wear_status_data(p.wear_collectible_id, force=False)
+                    except:
+                        pass
             try:
-                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False, include_gifts_layout=False) or 0)
+                patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=bool(is_public_major_profile), include_gifts_layout=False) or 0)
             except:
                 patched_local = 0
-            if patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
+            if is_my_profile and patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
                 try:
                     p._patch_my_cached_user(patch_userconfig=False)
                 except:
@@ -27687,10 +27867,28 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            if not p._is_my_profile_activity(pa):
+            try:
+                is_public_major_profile = bool(p._is_public_major_profile_activity(pa))
+            except:
+                is_public_major_profile = False
+            try:
+                is_my_profile = bool(p._is_my_profile_activity(pa))
+            except:
+                is_my_profile = False
+            if (not is_my_profile) and (not is_public_major_profile):
                 return
 
             # Refresh own gifts UI (fix "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0") without any manual actions.
+            if is_public_major_profile and (not is_my_profile):
+                try:
+                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=True, include_gifts_layout=False)
+                except:
+                    pass
+                try:
+                    p._schedule_profile_ui_repatch(pa, [180, 420])
+                except:
+                    pass
+                return
             try:
                 if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
                     if method_name not in ["onFragmentCreate", "createView", "onResume"]:
@@ -28603,11 +28801,16 @@ class MajorBotVerificationDrawableHook(MethodHook):
 
     def after_hooked_method(self, param):
         try:
-            if not self.plugin._is_local_major_verification_active():
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+            except:
+                pa = None
+            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
-            if self.plugin._should_use_native_major_verification_emoji():
+            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
-            drawable = self.plugin._get_local_major_badge_drawable(17.0)
+            drawable = self.plugin._get_local_major_badge_drawable(17.0, force=force_badge)
             if drawable is not None:
                 param.setResult(drawable)
         except Exception as e:
@@ -28619,35 +28822,45 @@ class MajorVerificationInfoTextHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
-            if not self.plugin._is_local_major_verification_active():
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+            except:
+                pa = None
+            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
-            if self.plugin._should_use_native_major_verification_emoji():
+            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
             if not param.args or len(param.args) < 1:
                 return
             text = param.args[0]
             if text is None:
                 return
-            target = self.plugin._get_local_verification_description()
+            target = self.plugin._get_major_verification_description_for_profile(pa)
             if not target:
                 return
             plain = self.plugin._charsequence_to_plain_text(text)
             if target not in plain:
                 return
-            param.args[0] = self.plugin._build_local_major_badge_text(target, size_dp=15.0)
+            param.args[0] = self.plugin._build_local_major_badge_text(target, size_dp=15.0, force=force_badge)
         except Exception as e:
             _log(f"MajorVerificationInfoTextHook error: {e}")
 
     def after_hooked_method(self, param):
         try:
-            if not self.plugin._is_local_major_verification_active():
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+            except:
+                pa = None
+            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
-            if self.plugin._should_use_native_major_verification_emoji():
+            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
             cell = getattr(param, "thisObject", None)
             if cell is None:
                 return
-            target = self.plugin._get_local_verification_description()
+            target = self.plugin._get_major_verification_description_for_profile(pa)
             if not target:
                 return
             try:
@@ -28657,7 +28870,7 @@ class MajorVerificationInfoTextHook(MethodHook):
             plain = self.plugin._charsequence_to_plain_text(current_text)
             if target not in plain:
                 return
-            replacement = self.plugin._build_local_major_badge_text(target, size_dp=15.0)
+            replacement = self.plugin._build_local_major_badge_text(target, size_dp=15.0, force=force_badge)
             try:
                 self.plugin._set_field(cell, "text", replacement)
             except:
@@ -28672,7 +28885,7 @@ class MajorVerificationInfoTextHook(MethodHook):
                 except:
                     pass
                 try:
-                    drawable = self.plugin._get_local_major_badge_drawable(15.0)
+                    drawable = self.plugin._get_local_major_badge_drawable(15.0, force=force_badge)
                 except:
                     drawable = None
                 if drawable is not None:
@@ -28701,9 +28914,14 @@ class MajorProfileNameDrawableHook(MethodHook):
 
     def before_hooked_method(self, param):
         try:
-            if not self.plugin._is_local_major_verification_active():
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+            except:
+                pa = None
+            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if (not force_badge) and (not self.plugin._is_local_major_verification_active()):
                 return
-            if self.plugin._should_use_native_major_verification_emoji():
+            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
             view = getattr(param, "thisObject", None)
             if not self.plugin._is_visible_profile_name_text_view(view):
@@ -28712,7 +28930,7 @@ class MajorProfileNameDrawableHook(MethodHook):
                 if param.args and len(param.args) >= 1:
                     param.args[0] = True
                 return
-            drawable = self.plugin._get_local_major_badge_drawable(17.0)
+            drawable = self.plugin._get_local_major_badge_drawable(17.0, force=force_badge)
             if drawable is None:
                 return
             if param.args and len(param.args) >= 1:
@@ -28724,7 +28942,12 @@ class MajorProfileNameDrawableHook(MethodHook):
         try:
             if self.mode != "drawable":
                 return
-            if self.plugin._should_use_native_major_verification_emoji():
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+            except:
+                pa = None
+            force_badge = bool(self.plugin._is_public_major_profile_activity(pa))
+            if (not force_badge) and self.plugin._should_use_native_major_verification_emoji():
                 return
             view = getattr(param, "thisObject", None)
             if not self.plugin._is_visible_profile_name_text_view(view):
