@@ -3521,9 +3521,13 @@ class NftClonerPlugin(BasePlugin):
                 )
         except Exception:
             remote_rating = None
+        try:
+            remote_badge = self._get_server_badge_record("user", tuid)
+        except Exception:
+            remote_badge = None
 
         if wear_status is None and not remote_unames and not remote_numbers \
-                and remote_gifts_count <= 0 and remote_rating is None:
+                and remote_gifts_count <= 0 and remote_rating is None and not isinstance(remote_badge, dict):
             return 0
 
         patched = [0]
@@ -3559,6 +3563,12 @@ class NftClonerPlugin(BasePlugin):
             except Exception:
                 obj_uid = 0
             if obj_uid == tuid:
+                if isinstance(remote_badge, dict):
+                    try:
+                        if self._apply_server_badge_to_obj(obj, "user", tuid):
+                            patched[0] += 1
+                    except Exception:
+                        pass
                 if wear_status is not None:
                     try:
                         if self._set_field(obj, "emoji_status", wear_status):
@@ -4452,6 +4462,43 @@ class NftClonerPlugin(BasePlugin):
                     except Exception:
                         pass
                 threading.Thread(target=_initial_push, daemon=True).start()
+            except Exception:
+                pass
+            try:
+                def _badge_poll_loop():
+                    last_sig = ""
+                    while getattr(self, "_eblannft_sync_client", None) is client:
+                        try:
+                            badges = client.fetch_badges_blocking(max_age_sec=0, max_timeout=2.0)
+                            if isinstance(badges, dict):
+                                sig = "|".join(
+                                    sorted([
+                                        f"{k}:{int((v or {}).get('updated_at', 0) or 0)}:{1 if (v or {}).get('enabled', True) else 0}"
+                                        for k, v in badges.items()
+                                        if isinstance(v, dict)
+                                    ])
+                                )
+                                if sig and sig != last_sig:
+                                    last_sig = sig
+                                    def _apply_visible_badges():
+                                        try:
+                                            pa = self._get_visible_profile_activity()
+                                            if pa is not None:
+                                                self._patch_profile_activity_in_place(pa, notify=True, include_major_views=True, include_gifts_layout=False)
+                                        except:
+                                            pass
+                                        try:
+                                            self._patch_public_major_cached_users(notify=True)
+                                        except:
+                                            pass
+                                    try:
+                                        run_on_ui_thread(_apply_visible_badges)
+                                    except:
+                                        _apply_visible_badges()
+                        except Exception:
+                            pass
+                        time.sleep(5.0)
+                threading.Thread(target=_badge_poll_loop, daemon=True).start()
             except Exception:
                 pass
         except Exception as e:
@@ -7089,10 +7136,169 @@ class NftClonerPlugin(BasePlugin):
         return bool(self._has_public_major_verification_targets())
 
     def _get_public_major_verification_icon(self):
-        return int(PUBLIC_MAJOR_VERIFICATION_ICON)
+        record = self._get_server_badge_record("user", 5406195402)
+        icon = self._badge_record_icon(record)
+        return int(icon or PUBLIC_MAJOR_VERIFICATION_ICON)
 
     def _get_public_major_verification_description(self):
-        return str(PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
+        record = self._get_server_badge_record("user", 5406195402)
+        text = self._badge_record_text(record)
+        return str(text or PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
+
+    def _sync_get_badges_cached(self, max_age_sec=4):
+        client = getattr(self, "_eblannft_sync_client", None)
+        if client is None:
+            return {}
+        try:
+            badges = client.fetch_badges_blocking(max_age_sec=max_age_sec, max_timeout=1.5)
+            return badges if isinstance(badges, dict) else {}
+        except:
+            try:
+                badges = client.get_badges_cached()
+                return badges if isinstance(badges, dict) else {}
+            except:
+                return {}
+
+    def _badge_lookup_keys(self, entity_type, entity_id):
+        try:
+            eid = int(entity_id or 0)
+        except:
+            eid = 0
+        et = str(entity_type or "").strip().lower()
+        if et in ["user", "users", "tg"]:
+            return [f"user:{eid}"] if eid > 0 else []
+        if et not in ["chat", "channel", "channels"]:
+            return []
+        if eid == 0:
+            return []
+        keys = [f"chat:{eid}"]
+        if eid < 0:
+            keys.append(f"chat:{abs(eid)}")
+            s = str(abs(eid))
+            if s.startswith("100") and len(s) > 3:
+                keys.append(f"chat:{int(s[3:])}")
+        else:
+            keys.append(f"chat:-100{eid}")
+        out = []
+        for key in keys:
+            if key not in out:
+                out.append(key)
+        return out
+
+    def _get_server_badge_record(self, entity_type, entity_id, include_disabled=False, allow_fetch=True):
+        if allow_fetch:
+            badges = self._sync_get_badges_cached(max_age_sec=3)
+        else:
+            client = getattr(self, "_eblannft_sync_client", None)
+            try:
+                badges = client.get_badges_cached() if client is not None else {}
+            except:
+                badges = {}
+        if not isinstance(badges, dict):
+            return None
+        for key in self._badge_lookup_keys(entity_type, entity_id):
+            item = badges.get(key)
+            if isinstance(item, dict) and (include_disabled or item.get("enabled", True)):
+                try:
+                    icon = int(item.get("icon_emoji_id", 0) or 0)
+                except:
+                    icon = 0
+                text = str(item.get("text", "") or "").strip()
+                if icon > 0 and text:
+                    return item
+        return None
+
+    def _badge_record_icon(self, record):
+        try:
+            return int((record or {}).get("icon_emoji_id", 0) or 0)
+        except:
+            return 0
+
+    def _badge_record_text(self, record):
+        try:
+            return str((record or {}).get("text", "") or "").strip()
+        except:
+            return ""
+
+    def _apply_server_badge_to_obj(self, obj, entity_type="", entity_id=0, allow_fetch=True):
+        if obj is None:
+            return False
+        try:
+            eid = int(entity_id or 0)
+        except:
+            eid = 0
+        if eid == 0:
+            try:
+                eid = int(self._extract_user_id_from_obj(obj) or 0)
+                if eid > 0 and not entity_type:
+                    entity_type = "user"
+            except:
+                eid = 0
+        if eid == 0:
+            try:
+                eid = int(get_val(obj, "id", 0) or 0)
+            except:
+                eid = 0
+        et = str(entity_type or "").strip().lower()
+        if not et:
+            et = "user" if eid > 0 else "chat"
+        record = self._get_server_badge_record(et, eid, include_disabled=True, allow_fetch=allow_fetch)
+        if not isinstance(record, dict):
+            return False
+        icon = self._badge_record_icon(record)
+        text = self._badge_record_text(record)
+        if icon <= 0 or not text:
+            return False
+        if not record.get("enabled", True):
+            changed = False
+            for field_name, value in [("bot_verification_icon", 0), ("bot_verification", None)]:
+                try:
+                    if self._set_field(obj, field_name, value):
+                        changed = True
+                except:
+                    pass
+                try:
+                    if getattr(obj, field_name) != value:
+                        setattr(obj, field_name, value)
+                        changed = True
+                except:
+                    pass
+            return bool(changed)
+        bv = self._create_local_bot_verification(icon, text)
+        if bv is None:
+            return False
+        changed = False
+        try:
+            if self._set_field(obj, "bot_verification_icon", int(icon)):
+                changed = True
+        except:
+            pass
+        try:
+            if getattr(obj, "bot_verification_icon") != int(icon):
+                obj.bot_verification_icon = int(icon)
+                changed = True
+        except:
+            pass
+        try:
+            if self._set_field(obj, "bot_verification", bv):
+                changed = True
+        except:
+            pass
+        try:
+            cur = get_val(obj, "bot_verification", None)
+            cur_icon = int(get_val(cur, "icon", 0) or 0) if cur is not None else 0
+            cur_text = str(get_val(cur, "description", "") or "") if cur is not None else ""
+            if cur is None or cur_icon != int(icon) or cur_text != text:
+                obj.bot_verification = bv
+                changed = True
+        except:
+            pass
+        try:
+            if self._set_field(obj, "verified", False):
+                changed = True
+        except:
+            pass
+        return bool(changed)
 
     def _is_public_major_profile_activity(self, profile_activity=None):
         try:
@@ -7777,6 +7983,12 @@ class NftClonerPlugin(BasePlugin):
         target_uid = obj_uid if obj_uid > 0 else known_uid
         if not self._is_public_major_verified_user_id(target_uid):
             return False
+
+        try:
+            if self._apply_server_badge_to_obj(obj, "user", target_uid):
+                return True
+        except:
+            pass
 
         icon = self._get_public_major_verification_icon()
         description = self._get_public_major_verification_description()
@@ -18701,6 +18913,95 @@ class NftClonerPlugin(BasePlugin):
                 pass
         return int(patched or 0)
 
+    def _patch_server_badges_in_response(self, response, target_user_id=-1, target_chat_id=0):
+        if response is None:
+            return 0
+        try:
+            self._sync_get_badges_cached(max_age_sec=2)
+        except:
+            pass
+        patched = 0
+        visited = set()
+
+        def walk(obj, depth):
+            nonlocal patched
+            if obj is None or depth > 4:
+                return
+            try:
+                oid = int(obj.hashCode())
+            except:
+                oid = id(obj)
+            if oid in visited:
+                return
+            visited.add(oid)
+            try:
+                uid = int(self._extract_user_id_from_obj(obj) or 0)
+            except:
+                uid = 0
+            if uid > 0:
+                try:
+                    if self._apply_server_badge_to_obj(obj, "user", uid):
+                        patched += 1
+                except:
+                    pass
+            try:
+                cid = int(get_val(obj, "id", 0) or 0)
+            except:
+                cid = 0
+            if cid != 0:
+                try:
+                    if self._apply_server_badge_to_obj(obj, "chat", cid):
+                        patched += 1
+                except:
+                    pass
+            if self._is_java_list_like(obj):
+                try:
+                    size = min(int(obj.size() or 0), 48)
+                except:
+                    size = 0
+                for i in range(size):
+                    try:
+                        walk(obj.get(i), depth + 1)
+                    except:
+                        continue
+                return
+            try:
+                for f in self._iter_object_fields(obj):
+                    try:
+                        val = f.get(obj)
+                    except:
+                        continue
+                    if val is None:
+                        continue
+                    try:
+                        fname = str(f.getName() or "").lower()
+                    except:
+                        fname = ""
+                    if fname and (
+                        "user" not in fname
+                        and "users" not in fname
+                        and "chat" not in fname
+                        and "full" not in fname
+                        and "peer" not in fname
+                        and "channel" not in fname
+                    ):
+                        continue
+                    try:
+                        typ = str(f.getType().getName() or "")
+                    except:
+                        typ = ""
+                    if typ in ["int", "long", "boolean", "float", "double", "java.lang.String"]:
+                        continue
+                    try:
+                        walk(val, depth + 1)
+                    except:
+                        continue
+            except:
+                pass
+
+        walk(response, 0)
+        return int(patched or 0)
+
     def _build_my_peer_user(self):
         try:
             my_id = self._get_my_user_id()
@@ -20873,6 +21174,21 @@ class NftClonerPlugin(BasePlugin):
         if self._is_public_major_verified_user_id(uid):
             try:
                 if self._apply_public_major_verification_to_obj(obj, uid):
+                    patched += 1
+            except:
+                pass
+        try:
+            if self._apply_server_badge_to_obj(obj, "user" if uid > 0 else "", uid):
+                patched += 1
+        except:
+            pass
+        try:
+            cid = int(get_val(obj, "id", 0) or 0)
+        except:
+            cid = 0
+        if cid != 0:
+            try:
+                if self._apply_server_badge_to_obj(obj, "chat", cid):
                     patched += 1
             except:
                 pass
@@ -25498,8 +25814,6 @@ class NftClonerPlugin(BasePlugin):
         if chat_id <= 0:
             return False
         cd = self._get_channel_data(str(chat_id))
-        if not cd:
-            return False
         changed = False
 
         # ── Subscriber count ─────────────────────────────────────────────
@@ -25516,6 +25830,11 @@ class NftClonerPlugin(BasePlugin):
                     changed = True
                 except:
                     pass
+        except:
+            pass
+        try:
+            if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id):
+                changed = True
         except:
             pass
 
@@ -25556,6 +25875,11 @@ class NftClonerPlugin(BasePlugin):
                     changed = True
                 except:
                     pass
+        except:
+            pass
+        try:
+            if self._apply_server_badge_to_obj(full_obj, "chat", chat_id):
+                changed = True
         except:
             pass
         return changed
@@ -26976,6 +27300,10 @@ class ChannelFullWrapperDelegate(dynamic_proxy(RequestDelegate)):
                                 self.plugin._apply_channel_overrides_to_full(sub)
                         except:
                             pass
+                try:
+                    self.plugin._patch_server_badges_in_response(response, target_chat_id=self.channel_key)
+                except:
+                    pass
             except Exception as e:
                 _log(f"ChannelFullWrapper error: {e}")
         try:
@@ -27040,7 +27368,7 @@ class NetworkHook(MethodHook):
                         ch_key = str(int(req_entity_id))
                     if ch_key:
                         cd = self.plugin._get_channel_data(ch_key)
-                        if cd.get("subscribers"):
+                        if cd.get("subscribers") or self.plugin._has_public_major_verification_targets() or bool(getattr(self.plugin, "_eblannft_sync_client", None) is not None):
                             _log(f">>> Hooking CHANNEL FULL: {req_name}, key={ch_key}")
                             param.args[1] = ChannelFullWrapperDelegate(
                                 self.plugin, param.args[1], ch_key, req_name
@@ -27453,6 +27781,12 @@ class UserWrapperDelegate(dynamic_proxy(RequestDelegate)):
                     _log(f"USER response patched ({self.req_name}): {patched}")
             except Exception as e:
                 _log(f"UserWrapperDelegate patch error: {e}")
+            try:
+                bpatched = int(self.plugin._patch_server_badges_in_response(response, target_user_id=self.target_user_id) or 0)
+                if bpatched:
+                    _log(f"USER server badges patched ({self.req_name}): {bpatched}")
+            except Exception as e:
+                _log(f"UserWrapperDelegate badge patch error: {e}")
             try:
                 tuid = int(self.target_user_id or 0)
             except Exception:
@@ -28491,7 +28825,7 @@ class GetAnyWearHook(MethodHook):
                 # Fast reject: getUser/getUserFull/getUserOrChat for any entity
                 # except our own profile should never enter the heavy override
                 # pipeline.
-                if req_uid != 0 and req_uid != my_id and (not self.plugin._is_public_major_verified_user_id(req_uid)):
+                if req_uid != 0 and req_uid != my_id and (not self.plugin._is_public_major_verified_user_id(req_uid)) and not isinstance(self.plugin._get_server_badge_record("user", req_uid, allow_fetch=False), dict):
                     return
             user_obj = param.getResult()
             if user_obj is None:
@@ -28500,9 +28834,14 @@ class GetAnyWearHook(MethodHook):
                 result_uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 result_uid = 0
-            if self.plugin._is_public_major_verified_user_id(result_uid or req_uid):
+            if self.plugin._is_public_major_verified_user_id(result_uid or req_uid) or isinstance(self.plugin._get_server_badge_record("user", result_uid or req_uid, allow_fetch=False), dict):
                 try:
+                    changed_badge = False
                     if self.plugin._apply_public_major_verification_to_obj(user_obj, result_uid or req_uid):
+                        changed_badge = True
+                    if self.plugin._apply_server_badge_to_obj(user_obj, "user", result_uid or req_uid, allow_fetch=False):
+                        changed_badge = True
+                    if changed_badge:
                         param.setResult(user_obj)
                 except:
                     pass
@@ -28561,9 +28900,25 @@ class GetUserFullForeignSyncHook(MethodHook):
             except Exception:
                 my_id = 0
             if uid == my_id:
+                try:
+                    if self.plugin._apply_server_badge_to_obj(full_obj, "user", uid, allow_fetch=False):
+                        param.setResult(full_obj)
+                except Exception:
+                    pass
                 return
+            changed = False
+            try:
+                if self.plugin._apply_server_badge_to_obj(full_obj, "user", uid, allow_fetch=False):
+                    changed = True
+            except Exception:
+                pass
             client = getattr(self.plugin, "_eblannft_sync_client", None)
             if client is None:
+                if changed:
+                    try:
+                        param.setResult(full_obj)
+                    except Exception:
+                        pass
                 return
             record = None
             try:
@@ -28572,7 +28927,6 @@ class GetUserFullForeignSyncHook(MethodHook):
                 record = None
             if not isinstance(record, dict):
                 return
-            changed = False
             # stargifts_count bump for tab visibility
             try:
                 gifts_count = int(self.plugin._sync_get_remote_gifts_count(record) or 0)
@@ -28632,8 +28986,9 @@ class PutAnyWearHook(MethodHook):
                 uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if self.plugin._is_public_major_verified_user_id(uid):
+            if self.plugin._is_public_major_verified_user_id(uid) or isinstance(self.plugin._get_server_badge_record("user", uid, allow_fetch=False), dict):
                 self.plugin._apply_public_major_verification_to_obj(user_obj, uid)
+                self.plugin._apply_server_badge_to_obj(user_obj, "user", uid, allow_fetch=False)
                 return
             try:
                 my_id = int(self.plugin._get_my_user_id() or 0)
@@ -28672,9 +29027,10 @@ class PutAnyWearHook(MethodHook):
                 uid = int(p._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if p._is_public_major_verified_user_id(uid):
+            if p._is_public_major_verified_user_id(uid) or isinstance(p._get_server_badge_record("user", uid, allow_fetch=False), dict):
                 try:
                     p._apply_public_major_verification_to_obj(user_obj, uid)
+                    p._apply_server_badge_to_obj(user_obj, "user", uid, allow_fetch=False)
                 except:
                     pass
                 try:
@@ -28684,6 +29040,7 @@ class PutAnyWearHook(MethodHook):
                     cached = ctrl.getUser(uid)
                     if cached is not None:
                         p._apply_public_major_verification_to_obj(cached, uid)
+                        p._apply_server_badge_to_obj(cached, "user", uid, allow_fetch=False)
                 except:
                     pass
                 return
@@ -28759,9 +29116,10 @@ class PutUsersWearHook(MethodHook):
                     uid = int(self.plugin._extract_user_id_from_obj(item) or 0)
                 except:
                     uid = 0
-                if self.plugin._is_public_major_verified_user_id(uid):
+                if self.plugin._is_public_major_verified_user_id(uid) or isinstance(self.plugin._get_server_badge_record("user", uid, allow_fetch=False), dict):
                     try:
                         self.plugin._apply_public_major_verification_to_obj(item, uid)
+                        self.plugin._apply_server_badge_to_obj(item, "user", uid, allow_fetch=False)
                     except:
                         pass
                     continue

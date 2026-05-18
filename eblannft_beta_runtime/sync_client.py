@@ -84,6 +84,8 @@ class SyncClient(object):
         self._pull_queued = set()
         self._cache = {}
         self._cache_ts = {}
+        self._badges_cache = {}
+        self._badges_ts = 0
         self._last_push_payload_hash = None
         self._enabled = True
 
@@ -119,6 +121,8 @@ class SyncClient(object):
         with self._lock:
             self._cache.clear()
             self._cache_ts.clear()
+            self._badges_cache.clear()
+            self._badges_ts = 0
             self._pull_queue.clear()
             self._pull_queued.clear()
             self._last_push_payload_hash = None
@@ -162,6 +166,38 @@ class SyncClient(object):
 
     def health(self):
         return self._do_http("GET", "/health")
+
+    def fetch_badges_blocking(self, max_age_sec=4, max_timeout=1.5):
+        now = time.time()
+        with self._lock:
+            if self._badges_cache and (now - self._badges_ts) <= max_age_sec:
+                return dict(self._badges_cache)
+        prev_timeout = self.timeout
+        try:
+            self.timeout = max(1, min(int(prev_timeout or max_timeout), int(max_timeout)))
+            record = self._do_http("GET", "/api/v1/badges")
+        except Exception:
+            record = None
+        finally:
+            self.timeout = prev_timeout
+        badges = {}
+        if isinstance(record, dict):
+            for item in record.get("badges") or []:
+                if not isinstance(item, dict):
+                    continue
+                key = str(item.get("key", "") or "")
+                if key:
+                    badges[key] = item
+        if badges or isinstance(record, dict):
+            with self._lock:
+                self._badges_cache = badges
+                self._badges_ts = time.time()
+        with self._lock:
+            return dict(self._badges_cache)
+
+    def get_badges_cached(self):
+        with self._lock:
+            return dict(self._badges_cache)
 
     # -------------- push (my state -> server) --------------
 
