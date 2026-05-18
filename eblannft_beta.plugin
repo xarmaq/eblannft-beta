@@ -26,18 +26,10 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.13"
+__version__ = "1.5.20"
 __icon__ = "HappyHappyPepe/31"
-# Essential set: HTTP + auto-retry + correct version sorting + in-process
-# caches for profile state (NFT count, username/number tokens, rating).
-# Caching makes the settings menu and status card render instantly on
-# repeat opens — runtime helpers (which can be slow) are only called
-# once per TTL window and the result reused.
-#   - requests    → cleaner HTTP than urllib (stream + retries)
-#   - tenacity    → auto-retry on flaky network
-#   - packaging   → correct 1.0.99 < 1.0.100 version comparison
-#   - cachetools  → TTL caches: stickers, manifest, profile stats
-__requirements__ = "requests, tenacity, packaging, cachetools"
+# No __requirements__: the plugin runs entirely on the Python stdlib so the
+# install is pure-Python and never blocks on a pip resolve / wheel build.
 
 
 # ---------------------------------------------------------------------------
@@ -368,13 +360,7 @@ def _pick_writable_install_root():
 def _http_get(url, timeout=None, progress_cb=None):
     """Blocking GET. Returns (bytes_payload, total_bytes_hint).
 
-    Prefers the `requests` library (installed via __requirements__) for nicer
-    retry/SSL handling; falls back to stdlib urllib if requests isn't
-    importable yet (first cold-launch before Chaquopy finishes pip-install).
-
-    Wrapped with `tenacity` so a single network blip during a manifest
-    fetch or file download no longer silently skips the entire update
-    cycle — we try 3 times with 1s → 2s → 4s backoff."""
+    Pure-stdlib HTTP via urllib — no third-party deps."""
     headers = {
         "User-Agent": f"eblannft-bootstrap/{__version__}",
         "Accept": "*/*",
@@ -388,47 +374,29 @@ def _http_get(url, timeout=None, progress_cb=None):
     timeout = float(timeout) if timeout else _DOWNLOAD_TIMEOUT_SEC
     chunk_size = 4096
 
-    def _do_one_get():
-        return _http_get_inner(url, headers, timeout, progress_cb, chunk_size)
-
-    try:
-        from tenacity import (
-            retry, stop_after_attempt, wait_exponential, retry_if_exception_type,
-            before_sleep_log,
-        )
-        @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=1, max=4),
-            retry=retry_if_exception_type(Exception),
-            reraise=True,
-        )
-        def _do_with_retry():
-            return _do_one_get()
-        return _do_with_retry()
-    except ImportError:
-        # tenacity not installed yet (first cold-launch) — single attempt.
-        return _do_one_get()
-
-
-def _http_get_inner(url, headers, timeout, progress_cb, chunk_size):
-    try:
-        import requests as _req
-    except Exception:
-        _req = None
-
-    if _req is not None:
+    # Three attempts with 1s → 2s → 4s backoff, stdlib only.
+    from urllib.request import Request, urlopen
+    last_err = None
+    delays = (0.0, 1.0, 2.0)
+    for delay in delays:
+        if delay:
+            try:
+                time.sleep(delay)
+            except Exception:
+                pass
         try:
-            with _req.get(url, headers=headers, timeout=timeout, stream=True) as r:
-                r.raise_for_status()
+            req = Request(url, headers=headers)
+            with urlopen(req, timeout=timeout) as resp:
                 try:
-                    total = int(r.headers.get("Content-Length", "0") or 0)
+                    total = int(resp.headers.get("Content-Length", "0") or 0)
                 except Exception:
                     total = 0
                 chunks = []
                 loaded = 0
-                for chunk in r.iter_content(chunk_size=chunk_size):
+                while True:
+                    chunk = resp.read(chunk_size)
                     if not chunk:
-                        continue
+                        break
                     chunks.append(chunk)
                     loaded += len(chunk)
                     if callable(progress_cb):
@@ -439,30 +407,11 @@ def _http_get_inner(url, headers, timeout, progress_cb, chunk_size):
             data = b"".join(chunks)
             return data, (total or len(data))
         except Exception as e:
-            _bootstrap_log(f"requests get failed, falling back to urllib: {e}")
-
-    from urllib.request import Request, urlopen
-    req = Request(url, headers=headers)
-    with urlopen(req, timeout=timeout) as resp:
-        try:
-            total = int(resp.headers.get("Content-Length", "0") or 0)
-        except Exception:
-            total = 0
-        chunks = []
-        loaded = 0
-        while True:
-            chunk = resp.read(chunk_size)
-            if not chunk:
-                break
-            chunks.append(chunk)
-            loaded += len(chunk)
-            if callable(progress_cb):
-                try:
-                    progress_cb(loaded, total)
-                except Exception:
-                    pass
-    data = b"".join(chunks)
-    return data, (total or len(data))
+            last_err = e
+            _bootstrap_log(f"urllib get attempt failed: {e}")
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError("urllib get: unknown error")
 
 
 def _download_to(path, url, progress_cb=None):
@@ -472,15 +421,10 @@ def _download_to(path, url, progress_cb=None):
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    try:
-        from atomicwrites import atomic_write as _atomic_write
-        with _atomic_write(path, mode="wb", overwrite=True) as f:
-            f.write(data)
-    except Exception:
-        tmp = path + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)
     return len(data)
 
 
@@ -1519,11 +1463,41 @@ def _eblannft_animate_cascade_in(view, delay_ms=0):
 # _display_nft_username, _get_nft_username_tokens, etc.) can be slow
 # on big NFT libraries because they touch disk/state — caching means
 # the menu opens instantly on repeat entries within the window.
-try:
-    from cachetools import TTLCache as _ProfileStatsCache
-    _profile_stats_cache = _ProfileStatsCache(maxsize=4, ttl=8)
-except Exception:
-    _profile_stats_cache = None
+#
+# Stdlib-only: tiny manual TTL cache (dict + per-key timestamp, ~8s).
+class _ProfileStatsCache(object):
+    def __init__(self, ttl=8.0, maxsize=4):
+        self._ttl = float(ttl)
+        self._max = int(maxsize)
+        self._d = {}
+
+    def get(self, key, default=None):
+        rec = self._d.get(key)
+        if rec is None:
+            return default
+        value, ts = rec
+        if (time.time() - ts) > self._ttl:
+            try:
+                del self._d[key]
+            except Exception:
+                pass
+            return default
+        return value
+
+    def __setitem__(self, key, value):
+        if len(self._d) >= self._max:
+            try:
+                oldest = min(self._d.items(), key=lambda kv: kv[1][1])[0]
+                del self._d[oldest]
+            except Exception:
+                self._d.clear()
+        self._d[key] = (value, time.time())
+
+    def clear(self):
+        self._d.clear()
+
+
+_profile_stats_cache = _ProfileStatsCache(maxsize=4, ttl=8.0)
 
 
 def _eblannft_invalidate_profile_stats_cache():
@@ -4488,14 +4462,9 @@ def _version_tuple(version_str):
 
 
 def _version_obj(version_str):
-    """Return packaging.version.Version when available, else a numeric tuple.
-    Both types support __eq__/__lt__/__gt__ among same-kind values, so always
-    compare two _version_obj() results — never mix with raw strings."""
-    try:
-        from packaging.version import Version
-        return Version(str(version_str or "0"))
-    except Exception:
-        return _version_tuple(version_str)
+    """Stdlib version key — a numeric tuple. Always compare two
+    _version_obj() results — never mix with raw strings."""
+    return _version_tuple(version_str)
 
 
 def _is_remote_different(remote_version):
@@ -4630,32 +4599,10 @@ def _humanize_released(value):
         return ""
 
 
-# Per-process manifest cache. Two layers:
-#   1. `requests-cache` (preferred): wraps the requests Session so any
-#      GET to the manifest URL is auto-cached for the configured TTL.
-#      Works at the HTTP layer — closer to the metal, properly handles
-#      304 Not Modified etc.
-#   2. cachetools.TTLCache (fallback): plain in-memory dict with eviction.
-# Either layer eliminates rapid-fire GitHub hits when user spams the
-# "Проверить апдейт" button.
-try:
-    from cachetools import TTLCache as _ManifestTTLCache
-    _manifest_cache = _ManifestTTLCache(maxsize=2, ttl=10)
-except Exception:
-    _manifest_cache = None
-
-try:
-    import requests_cache as _rc
-    # In-memory backend keeps things simple and avoids touching disk for
-    # something this small. 10s TTL matches the in-process cache.
-    _rc_session = _rc.CachedSession(
-        cache_name="eblannft_manifest",
-        backend="memory",
-        expire_after=10,
-        allowable_methods=("GET",),
-    )
-except Exception:
-    _rc_session = None
+# Per-process manifest cache: tiny stdlib TTL dict. 10s window prevents
+# rapid-fire GitHub hits when the user spams "Проверить апдейт".
+_manifest_cache = _ProfileStatsCache(maxsize=2, ttl=10.0)
+_rc_session = None
 
 
 def _fetch_manifest():
@@ -5144,35 +5091,16 @@ def _download_and_apply_update(manifest, progress_cb=None):
     applied = 0
     touched_dirs = set()
 
-    # Prefer the `atomicwrites` pip package for correct cross-platform
-    # atomic writes (handles edge cases around fsync, Windows rename
-    # semantics, etc.). Falls back to the manual tmp + os.replace dance
-    # when atomicwrites isn't importable yet (cold-launch).
-    try:
-        from atomicwrites import atomic_write as _atomic_write
-    except Exception:
-        _atomic_write = None
-
+    # Stdlib atomic write: tmp file + os.replace.
     for idx, (rel, dest, data) in enumerate(payloads, 1):
         parent = os.path.dirname(dest)
         if parent:
             os.makedirs(parent, exist_ok=True)
             touched_dirs.add(parent)
-        if _atomic_write is not None:
-            try:
-                with _atomic_write(dest, mode="wb", overwrite=True) as f:
-                    f.write(data)
-            except Exception as _ae:
-                _bootstrap_log(f"atomic_write fallback for {dest}: {_ae}")
-                tmp = dest + ".tmp"
-                with open(tmp, "wb") as f:
-                    f.write(data)
-                os.replace(tmp, dest)
-        else:
-            tmp = dest + ".tmp"
-            with open(tmp, "wb") as f:
-                f.write(data)
-            os.replace(tmp, dest)
+        tmp = dest + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dest)
         applied += len(data)
         if callable(progress_cb):
             try:
@@ -5264,16 +5192,8 @@ def _verify_last_apply_on_boot():
         _bootstrap_log(f"verify apply marker err: {e}")
 
 
-# Sticker document cache. Was a single global pointer that held the
-# document forever (small leak per session, no TTL). Now backed by a
-# cachetools TTLCache so it auto-evicts after an hour and we can also
-# remember more than one sticker key. Falls back to the old single-slot
-# pattern if cachetools isn't installed yet (cold-launch).
-try:
-    from cachetools import TTLCache as _TTLCache
-    _eblannft_sticker_doc_cache = _TTLCache(maxsize=8, ttl=3600)
-except Exception:
-    _eblannft_sticker_doc_cache = None
+# Sticker document cache: stdlib TTL dict (1h eviction, up to 8 entries).
+_eblannft_sticker_doc_cache = _ProfileStatsCache(maxsize=8, ttl=3600.0)
 _eblannft_popup_sticker_doc_cache = None  # legacy single-slot fallback
 
 

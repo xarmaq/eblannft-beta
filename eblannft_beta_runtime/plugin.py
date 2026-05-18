@@ -98,11 +98,9 @@ import base64
 import re
 import math
 from urllib.request import Request, urlopen
-try:
-    from cachetools import TTLCache, LRUCache
-except Exception:
-    TTLCache = None
-    LRUCache = None
+# Stdlib-only cache primitives — keeps the plugin pure-Python.
+TTLCache = None
+LRUCache = None
 try:
     from .legacy_gifts import get_legacy_gift_meta
 except Exception:
