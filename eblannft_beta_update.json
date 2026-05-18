@@ -1,7 +1,7 @@
 {
-  "version": "1.5.8",
+  "version": "1.5.9",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.8 - public Major verification badge.\n\nWhat changed:\n- Added a public Major-style verification badge for user id 5406195402.\n- The badge is injected into Telegram user/full-user data, so everyone with this plugin can see it on that profile.\n- Profile UI hooks now patch only the target profile and skip heavy self-only gift/wear work for other users.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.9 - developer verification badge stability.\n\nWhat changed:\n- Replaced the public Major badge for user id 5406195402 with custom emoji id 5222202915040555254.\n- Changed the verification text to: developer eblannft.\n- The badge is now anchored in MessagesController getUser, putUser, and putUsers cache paths, so it survives Telegram cache merges and can appear before opening the profile.\n- Kept the public profile path lightweight: only the whitelisted user id is patched.\n\nVerified: py_compile, git diff --check.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
