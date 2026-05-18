@@ -2393,6 +2393,7 @@ class NftClonerPlugin(BasePlugin):
             self._hook_native_catalog_ui()
             self._ensure_user_context(force=True)
             self._hook_wear_user_cache()
+            self._hook_chat_badge_cache()
             self._hook_updates_wear()
             self._hook_userconfig_wear()
             self._hook_profile_activity_fastpatch()
@@ -21653,6 +21654,65 @@ class NftClonerPlugin(BasePlugin):
         if hooked:
             _log(f"UserConfig wear hooks installed: {hooked}")
 
+    def _hook_chat_badge_cache(self):
+        """Re-apply server badge on every MessagesController.getChat/getChatFull
+        read so the icon stays sticky in the chat list and channel header even
+        when incoming update batches replace the cached Chat / ChatFull."""
+        try:
+            MC = jclass("org.telegram.messenger.MessagesController")
+        except Exception as e:
+            _log(f"Chat badge hooks skipped (MessagesController missing): {e}")
+            return
+        hooked = 0
+        seen = set()
+
+        def _sig(m):
+            try:
+                params = m.getParameterTypes()
+                p_names = ",".join([p.getName() for p in params])
+                return f"{m.getDeclaringClass().getName()}::{m.getName()}({p_names})"
+            except:
+                return str(m)
+
+        try:
+            for m in MC.getDeclaredMethods():
+                try:
+                    name = m.getName()
+                except:
+                    continue
+                if name not in ["getChat", "getChatFull"]:
+                    continue
+                sig = _sig(m)
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                try:
+                    params = m.getParameterTypes()
+                    if len(params) < 1:
+                        continue
+                except:
+                    continue
+                try:
+                    ret = m.getReturnType().getName()
+                    if ("TLRPC$Chat" not in ret) and ("TLRPC$ChatFull" not in ret):
+                        continue
+                except:
+                    pass
+                try:
+                    m.setAccessible(True)
+                except:
+                    pass
+                try:
+                    self.hooks_refs.append(self.hook_method(m, GetChatBadgeHook(self)))
+                    hooked += 1
+                    _log(f"Chat badge hook installed: {sig}")
+                except Exception as e:
+                    _log(f"Chat badge hook install failed for {sig}: {e}")
+        except Exception as e:
+            _log(f"Chat badge hook scan failed: {e}")
+        if not hooked:
+            _log("Chat badge hooks: nothing installed")
+
     def _hook_wear_user_cache(self):
         """Patch MessagesController cache access so collectible status survives profile re-open."""
         try:
@@ -27338,6 +27398,48 @@ class GetChatChannelHook(MethodHook):
             if result is None:
                 return
             self.plugin._apply_channel_overrides_to_chat(result)
+        except:
+            pass
+
+
+class GetChatBadgeHook(MethodHook):
+    """After MessagesController.getChat() / getChatFull() — re-apply the server
+    badge on every read so the icon survives incoming update batches that
+    replace the cached Chat / ChatFull object. Fast-path: skip immediately
+    when the badge cache is empty so chat list scrolls stay smooth."""
+
+    def __init__(self, plugin):
+        super().__init__()
+        self.plugin = plugin
+
+    def after_hooked_method(self, param):
+        try:
+            try:
+                client = getattr(self.plugin, "_eblannft_sync_client", None)
+                if client is None:
+                    return
+                badges = client.get_badges_cached()
+                if not isinstance(badges, dict) or not badges:
+                    return
+            except:
+                return
+            result = param.getResult()
+            if result is None:
+                return
+            try:
+                cid = int(get_val(result, "id", 0) or 0)
+            except:
+                cid = 0
+            if cid <= 0:
+                return
+            try:
+                if self.plugin._apply_server_badge_to_obj(result, "chat", cid, allow_fetch=False):
+                    try:
+                        param.setResult(result)
+                    except:
+                        pass
+            except:
+                pass
         except:
             pass
 
