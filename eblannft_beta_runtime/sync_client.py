@@ -23,6 +23,7 @@ import json
 import threading
 import time
 import traceback
+from collections import deque
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -79,7 +80,8 @@ class SyncClient(object):
         self._push_thread = None
         self._pull_thread = None
         self._lock = threading.Lock()
-        self._pull_queue = []
+        self._pull_queue = deque()
+        self._pull_queued = set()
         self._cache = {}
         self._cache_ts = {}
         self._last_push_payload_hash = None
@@ -117,6 +119,8 @@ class SyncClient(object):
         with self._lock:
             self._cache.clear()
             self._cache_ts.clear()
+            self._pull_queue.clear()
+            self._pull_queued.clear()
             self._last_push_payload_hash = None
 
     # -------------- HTTP --------------
@@ -220,9 +224,10 @@ class SyncClient(object):
         with self._lock:
             cached = self._cache.get(user_key)
             cached_ts = self._cache_ts.get(user_key, 0)
-            if user_key not in self._pull_queue:
+            if user_key not in self._pull_queued:
                 if force or (time.time() - cached_ts) > self.pull_interval:
                     self._pull_queue.append(user_key)
+                    self._pull_queued.add(user_key)
         return cached
 
     def _pull_loop(self):
@@ -233,7 +238,8 @@ class SyncClient(object):
                 user_key = None
                 with self._lock:
                     if self._pull_queue:
-                        user_key = self._pull_queue.pop(0)
+                        user_key = self._pull_queue.popleft()
+                        self._pull_queued.discard(user_key)
                 if user_key:
                     self._fetch_one(user_key)
             except Exception:
