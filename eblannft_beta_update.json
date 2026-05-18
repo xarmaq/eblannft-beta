@@ -1,7 +1,7 @@
 {
-  "version": "1.5.20",
+  "version": "1.5.21",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.20 - pure-stdlib install (no __requirements__).\n\nRemoved every pip dependency and the __requirements__ declaration. The plugin now runs entirely on the Python stdlib, so install never blocks on a pip resolve or a wheel build (which was the root cause of recent freezes on cold launch).\n\nReplaced: requests + tenacity → urllib with manual 1s/2s/4s retry, packaging.version → numeric tuple compare, cachetools.TTLCache → small in-house dict-with-TTL, requests_cache → dropped (10s TTL already enforced in process), atomicwrites → tmp+os.replace.",
+  "notes": "Beta 1.5.21 - new verification badge for user 5406195402.\n\nPublic-major verification badge for user_id=5406195402 updated: emoji icon → 5456144754246966075 (🐈‍⬛), description → «Аккаунт верифицирован организацией «eblanNFT».»",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
