@@ -99,6 +99,11 @@ import re
 import math
 from urllib.request import Request, urlopen
 try:
+    from cachetools import TTLCache, LRUCache
+except Exception:
+    TTLCache = None
+    LRUCache = None
+try:
     from .legacy_gifts import get_legacy_gift_meta
 except Exception:
     try:
@@ -126,7 +131,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.5"
+__version__ = "1.5.6"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_cache")
 EBLANNFT_ABOUT_USERNAME = "xarmaq"
@@ -160,6 +165,16 @@ def _log(msg):
 
 # Shared reflection cache for hot profile/gift paths.
 _field_cache = {}
+
+def _make_cache(maxsize=64, ttl=None):
+    try:
+        if ttl is not None and TTLCache is not None:
+            return TTLCache(maxsize=int(maxsize or 64), ttl=float(ttl or 0))
+        if LRUCache is not None:
+            return LRUCache(maxsize=int(maxsize or 64))
+    except Exception:
+        pass
+    return {}
 
 def _dispatch_bg(callable_obj):
     """Best-effort dispatch of a heavy callable onto PLUGINS_QUEUE.
@@ -958,6 +973,10 @@ class NftClonerPlugin(BasePlugin):
         self._profile_fastpatch_phase_ts = {}
         self._profile_entity_id_cache = {}
         self._profile_user_id_cache = {}
+        self._profile_data_cache_gen = 0
+        self._profile_identity_cache = _make_cache(maxsize=32, ttl=300)
+        self._profile_gifts_count_cache = _make_cache(maxsize=128, ttl=30)
+        self._profile_wear_status_cache = _make_cache(maxsize=24, ttl=300)
         self._profile_patch_session = 0
         self._profile_runtime_gen = 0
         self._market_floor_cache = {}
@@ -1116,6 +1135,47 @@ class NftClonerPlugin(BasePlugin):
             return int(self._next_ui_batch_token(key) or 0)
         except:
             return 0
+
+    def _cachetools_get(self, cache, key, default=None):
+        try:
+            if cache is None:
+                return default
+            return cache.get(key, default)
+        except:
+            return default
+
+    def _cachetools_set(self, cache, key, value):
+        try:
+            if cache is not None:
+                cache[key] = value
+                return True
+        except:
+            pass
+        return False
+
+    def _clear_cachetools_cache(self, cache):
+        try:
+            if cache is not None and hasattr(cache, "clear"):
+                cache.clear()
+                return True
+        except:
+            pass
+        return False
+
+    def _invalidate_profile_data_caches(self, reason=""):
+        try:
+            self._profile_data_cache_gen = int(getattr(self, "_profile_data_cache_gen", 0) or 0) + 1
+        except:
+            self._profile_data_cache_gen = 1
+        for cache_name in [
+            "_profile_identity_cache",
+            "_profile_gifts_count_cache",
+            "_profile_wear_status_cache",
+        ]:
+            try:
+                self._clear_cachetools_cache(getattr(self, cache_name, None))
+            except:
+                pass
 
     def _schedule_ui_batch(self, key, fn, delays):
         if fn is None:
@@ -4852,6 +4912,18 @@ class NftClonerPlugin(BasePlugin):
                 uid = 0
         if uid <= 0:
             return 0
+        try:
+            cache_key = (
+                "gift_count",
+                int(getattr(self, "_profile_data_cache_gen", 0) or 0),
+                int(uid),
+                int(len(self.gift_library or [])),
+            )
+            cached = self._cachetools_get(getattr(self, "_profile_gifts_count_cache", None), cache_key)
+            if cached is not None:
+                return int(cached or 0)
+        except:
+            cache_key = None
         count = 0
         try:
             for entry in list(self.gift_library or []):
@@ -4869,9 +4941,19 @@ class NftClonerPlugin(BasePlugin):
         if count <= 0:
             try:
                 if self._has_local_profile_gifts_presence(uid):
+                    try:
+                        if cache_key is not None:
+                            self._cachetools_set(getattr(self, "_profile_gifts_count_cache", None), cache_key, 1)
+                    except:
+                        pass
                     return 1
             except:
                 pass
+        try:
+            if cache_key is not None:
+                self._cachetools_set(getattr(self, "_profile_gifts_count_cache", None), cache_key, int(count or 0))
+        except:
+            pass
         return int(count or 0)
 
     def _apply_local_profile_gifts_to_obj(self, obj, allow_profile_context_fallback=False):
@@ -9436,6 +9518,10 @@ class NftClonerPlugin(BasePlugin):
             self.identity_config = self._default_identity_config()
             self.value_config = self._default_value_config()
             self.gift_stars_config = self._default_gift_stars_config()
+            try:
+                self._invalidate_profile_data_caches("account_context_reset")
+            except:
+                pass
         self.gift_stars_config = self._default_gift_stars_config()
 
         self._load_cache(uid=uid)
@@ -10327,6 +10413,7 @@ class NftClonerPlugin(BasePlugin):
             self._wear_status_snapshot = wd
             self._wear_status_snapshot_collectible_id = cid
             self._wear_status_snapshot_last_ts = time.time()
+            self._cachetools_set(getattr(self, "_profile_wear_status_cache", None), ("wear_data", int(cid)), dict(wd))
         except:
             return False
         return True
@@ -10336,10 +10423,20 @@ class NftClonerPlugin(BasePlugin):
         if cid <= 0:
             return {}
         try:
+            cached = self._cachetools_get(getattr(self, "_profile_wear_status_cache", None), ("wear_data", int(cid)))
+            if isinstance(cached, dict) and self._is_wear_status_data_complete(cached, cid):
+                return dict(cached)
+        except:
+            pass
+        try:
             current = self.wear_status_data if isinstance(self.wear_status_data, dict) else {}
         except:
             current = {}
         if self._is_wear_status_data_complete(current, cid):
+            try:
+                self._cachetools_set(getattr(self, "_profile_wear_status_cache", None), ("wear_data", int(cid)), dict(current))
+            except:
+                pass
             return current
         try:
             snap = getattr(self, "_wear_status_snapshot", None)
@@ -10348,6 +10445,10 @@ class NftClonerPlugin(BasePlugin):
             snap = None
             snap_cid = 0
         if isinstance(snap, dict) and snap_cid == cid and self._is_wear_status_data_complete(snap, snap_cid):
+            try:
+                self._cachetools_set(getattr(self, "_profile_wear_status_cache", None), ("wear_data", int(cid)), dict(snap))
+            except:
+                pass
             return snap
         return current
 
@@ -10607,6 +10708,10 @@ class NftClonerPlugin(BasePlugin):
         self._wear_status_snapshot = {}
         self._wear_status_snapshot_collectible_id = 0
         self._wear_status_snapshot_last_ts = 0.0
+        try:
+            self._invalidate_profile_data_caches("wear_status_clear")
+        except:
+            pass
 
         if persist:
             try:
@@ -11142,6 +11247,10 @@ class NftClonerPlugin(BasePlugin):
             self._debug_state_snapshot("rebuild_payloads", f"rebuilt={len(payloads or [])}")
         except:
             pass
+        try:
+            self._invalidate_profile_data_caches("rebuild_payloads")
+        except:
+            pass
 
     def _library_upsert_wrapper(self, wrapper, base_gift_id=0, key=None, inject=True, make_active=True, wear_override=None, build_config=None, identity_config=None, value_config=None, gift_stars_config=None):
         if wrapper is None:
@@ -11250,6 +11359,10 @@ class NftClonerPlugin(BasePlugin):
             # Ensure saved_id exists for new entry and keep it on wrapper.
             self._ensure_saved_id_for_entry(e, wrapper)
             self.gift_library.append(e)
+            try:
+                self._invalidate_profile_data_caches("gift_library_append")
+            except:
+                pass
         else:
             e["b64"] = b64
             e["title"] = title
@@ -11286,6 +11399,10 @@ class NftClonerPlugin(BasePlugin):
                 pass
             # Preserve existing saved_id; if missing, generate one.
             self._ensure_saved_id_for_entry(e, wrapper)
+            try:
+                self._invalidate_profile_data_caches("gift_library_update")
+            except:
+                pass
 
         try:
             self._recompute_gift_objects_limit()
@@ -11398,6 +11515,10 @@ class NftClonerPlugin(BasePlugin):
             except:
                 pass
         self.gift_library = [e for e in (self.gift_library or []) if str(e.get("key", "")) != str(key)]
+        try:
+            self._invalidate_profile_data_caches("gift_library_remove")
+        except:
+            pass
         try:
             if key in self.gift_objects:
                 del self.gift_objects[key]
@@ -11595,9 +11716,8 @@ class NftClonerPlugin(BasePlugin):
             last = float(getattr(self, "_profile_gifts_ui_last_ts", 0.0) or 0.0)
             if (now - last) < 0.65:
                 return 0
-            self._profile_gifts_ui_last_ts = now
         except:
-            pass
+            now = time.time()
         try:
             if bool(getattr(self, "_profile_gifts_refresh_busy", False)):
                 return 0
@@ -11640,13 +11760,19 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         saved_lists = []
                 if (not saved_lists) and cold_open:
+                    # Cold-open often fires before Telegram attaches the saved-gifts
+                    # adapter. Do not mark this as a real miss or consume the UI
+                    # throttle; the next scheduled retry should be allowed to run
+                    # the deeper scan as soon as the list exists.
                     try:
-                        if frag_key > 0:
-                            self._profile_saved_lists_miss_frag_key = frag_key
-                            self._profile_saved_lists_miss_last_ts = time.time()
+                        self._schedule_ui_batch("profile_gifts_refresh_cold_retry", self._refresh_profile_gifts_ui, [260])
                     except:
                         pass
                     return 0
+                try:
+                    self._profile_gifts_ui_last_ts = now
+                except:
+                    pass
                 if (not saved_lists) and frag_key > 0 and (not recent_lists_miss):
                     try:
                         last_deep = int(getattr(self, "_profile_gifts_deep_scan_key", 0) or 0)
@@ -11678,6 +11804,10 @@ class NftClonerPlugin(BasePlugin):
                     except:
                         pass
             if saved_lists:
+                try:
+                    self._profile_gifts_ui_last_ts = now
+                except:
+                    pass
                 for gifts_list in list(saved_lists or []):
                     try:
                         removed_invalid += int(self._sanitize_saved_gifts_list(gifts_list) or 0)
@@ -13467,6 +13597,14 @@ class NftClonerPlugin(BasePlugin):
         return s[:32]
 
     def _get_nft_username_tokens(self):
+        try:
+            raw_tuple = tuple(list(self.nft_usernames or []) + ([self.nft_username] if self.nft_username else []))
+            cache_key = ("username_tokens", raw_tuple)
+            cached = self._cachetools_get(getattr(self, "_profile_identity_cache", None), cache_key)
+            if cached is not None:
+                return list(cached)
+        except:
+            cache_key = None
         unique = []
         seen = set()
         src = []
@@ -13487,6 +13625,11 @@ class NftClonerPlugin(BasePlugin):
                 continue
             seen.add(low)
             unique.append(token)
+        try:
+            if cache_key is not None:
+                self._cachetools_set(getattr(self, "_profile_identity_cache", None), cache_key, tuple(unique))
+        except:
+            pass
         return unique
 
     def _set_nft_username_tokens(self, tokens):
@@ -13503,6 +13646,10 @@ class NftClonerPlugin(BasePlugin):
             clean.append(token)
         self.nft_usernames = clean
         self.nft_username = clean[0] if clean else ""
+        try:
+            self._invalidate_profile_data_caches("nft_username_tokens")
+        except:
+            pass
 
     def _display_nft_username(self):
         tokens = self._get_nft_username_tokens()
@@ -13700,6 +13847,14 @@ class NftClonerPlugin(BasePlugin):
         return "+888" + ((" " + " ".join(groups)) if groups else "")
 
     def _get_nft_number_tokens(self):
+        try:
+            raw_tuple = tuple(list(self.nft_numbers or []) + ([self.nft_number] if self.nft_number else []))
+            cache_key = ("number_tokens", raw_tuple)
+            cached = self._cachetools_get(getattr(self, "_profile_identity_cache", None), cache_key)
+            if cached is not None:
+                return list(cached)
+        except:
+            cache_key = None
         unique = []
         seen = set()
         src = []
@@ -13719,6 +13874,11 @@ class NftClonerPlugin(BasePlugin):
                 continue
             seen.add(token)
             unique.append(token)
+        try:
+            if cache_key is not None:
+                self._cachetools_set(getattr(self, "_profile_identity_cache", None), cache_key, tuple(unique))
+        except:
+            pass
         return unique
 
     def _set_nft_number_tokens(self, tokens):
@@ -13734,6 +13894,10 @@ class NftClonerPlugin(BasePlugin):
             clean.append(token)
         self.nft_numbers = clean
         self.nft_number = clean[0] if clean else ""
+        try:
+            self._invalidate_profile_data_caches("nft_number_tokens")
+        except:
+            pass
 
     def _display_nft_number(self):
         tokens = self._get_nft_number_tokens()
@@ -15410,6 +15574,10 @@ class NftClonerPlugin(BasePlugin):
                     self.wear_active = bool(data.get("wear_active", False))
                     self.wear_collectible_id = self._to_int(data.get("wear_collectible_id", 0), 0)
                     self.wear_status_data = dict(data.get("wear_status_data", {}) or {})
+                    try:
+                        self._invalidate_profile_data_caches("profile_import_gifts")
+                    except:
+                        pass
                     self.cached_gift_id = self._to_int(data.get("cached_gift_id", 0), 0)
                     self.build_config = dict(data.get("build_config", {}) or {})
                     self.identity_config = self._sanitize_identity_config(data.get("identity_config", None))
@@ -17360,6 +17528,10 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     pass
                 self._rebuild_injection_payloads()
+                try:
+                    self._invalidate_profile_data_caches("cache_loaded")
+                except:
+                    pass
                 if self.wear_active and self.wear_collectible_id > 0:
                     try:
                         if self._sync_wear_status_data_from_library(self.wear_collectible_id):
@@ -17576,6 +17748,10 @@ class NftClonerPlugin(BasePlugin):
         self.identity_config = self._default_identity_config()
         self.value_config = self._default_value_config()
         self.gift_stars_config = self._default_gift_stars_config()
+        try:
+            self._invalidate_profile_data_caches("clear_cache")
+        except:
+            pass
         try:
             uid = self._get_cache_uid()
             base_paths = [_cache_path(uid), _injection_cache_path(uid)]
@@ -20269,6 +20445,11 @@ class NftClonerPlugin(BasePlugin):
             self.wear_collectible_id = cid
             self.wear_ignore_clear_once = True
             self.wear_last_collectible_ts = now
+            try:
+                if changed:
+                    self._invalidate_profile_data_caches("wear_status_set")
+            except:
+                pass
             try:
                 self._ensure_current_wear_status_data(cid, force=changed)
             except:
@@ -27519,13 +27700,15 @@ class ProfileActivityFastPatchHook(MethodHook):
             try:
                 if p._has_local_gifts_overrides():
                     try:
+                        p._schedule_profile_gifts_refresh([110, 360, 900], min_interval=0.45, force=False)
+                    except:
+                        pass
+                    try:
                         cached_catalog = p._get_catalog_gifts_from_memory()
                     except:
                         cached_catalog = None
                     try:
-                        if cached_catalog is not None and int(cached_catalog.size() or 0) > 0:
-                            p._schedule_profile_gifts_refresh([280, 720], min_interval=0.85, force=False)
-                        else:
+                        if cached_catalog is None or int(cached_catalog.size() or 0) <= 0:
                             p._load_catalog_silent()
                     except:
                         pass
