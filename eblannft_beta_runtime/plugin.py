@@ -4478,23 +4478,29 @@ class NftClonerPlugin(BasePlugin):
                                         if isinstance(v, dict)
                                     ])
                                 )
-                                if sig and sig != last_sig:
+                                sig_changed = bool(sig and sig != last_sig)
+                                if sig_changed:
                                     last_sig = sig
-                                    def _apply_visible_badges():
+                                def _apply_visible_badges(_notify=sig_changed):
+                                    if _notify:
                                         try:
                                             pa = self._get_visible_profile_activity()
                                             if pa is not None:
                                                 self._patch_profile_activity_in_place(pa, notify=True, include_major_views=True, include_gifts_layout=False)
                                         except:
                                             pass
-                                        try:
-                                            self._patch_public_major_cached_users(notify=True)
-                                        except:
-                                            pass
                                     try:
-                                        run_on_ui_thread(_apply_visible_badges)
+                                        self._patch_public_major_cached_users(notify=_notify)
                                     except:
-                                        _apply_visible_badges()
+                                        pass
+                                    try:
+                                        self._patch_server_badges_in_cached_objects(notify=True)
+                                    except:
+                                        pass
+                                try:
+                                    run_on_ui_thread(_apply_visible_badges)
+                                except:
+                                    _apply_visible_badges()
                         except Exception:
                             pass
                         time.sleep(5.0)
@@ -8087,6 +8093,114 @@ class NftClonerPlugin(BasePlugin):
         if patched and notify:
             try:
                 self._post_local_profile_notifications(reason="public_major_cached_user_patch", cooldown=0.35)
+            except:
+                pass
+        return int(patched or 0)
+
+    def _patch_server_badges_in_cached_objects(self, notify=False):
+        """Apply server-issued badges to the MessagesController cache so the
+        verification icon appears in the dialog list, channel header and
+        profile dialogs without waiting for a fresh network response."""
+        try:
+            badges = self._sync_get_badges_cached(max_age_sec=3) or {}
+        except:
+            badges = {}
+        if not isinstance(badges, dict) or not badges:
+            return 0
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+        except:
+            return 0
+        patched = 0
+        seen_users = set()
+        seen_chats = set()
+        for key, item in list(badges.items()):
+            if not isinstance(item, dict):
+                continue
+            if not item.get("enabled", True):
+                continue
+            try:
+                parts = str(key).split(":", 1)
+                if len(parts) != 2:
+                    continue
+                et = parts[0].strip().lower()
+                raw = int(parts[1])
+            except:
+                continue
+            if et in ("user", "users", "tg"):
+                if raw <= 0 or raw in seen_users:
+                    continue
+                seen_users.add(raw)
+                try:
+                    user_obj = ctrl.getUser(int(raw))
+                except:
+                    user_obj = None
+                if user_obj is not None:
+                    try:
+                        if self._apply_server_badge_to_obj(user_obj, "user", raw, allow_fetch=False):
+                            patched += 1
+                    except:
+                        pass
+                try:
+                    full_obj = ctrl.getUserFull(int(raw))
+                except:
+                    full_obj = None
+                if full_obj is not None:
+                    try:
+                        if self._apply_server_badge_to_obj(full_obj, "user", raw, allow_fetch=False):
+                            patched += 1
+                            try:
+                                ctrl.putUserFull(full_obj)
+                            except:
+                                pass
+                    except:
+                        pass
+            elif et in ("chat", "channel", "channels"):
+                if raw == 0:
+                    continue
+                chat_id = abs(raw)
+                s = str(chat_id)
+                if raw < 0 and s.startswith("100") and len(s) > 3:
+                    try:
+                        chat_id = int(s[3:])
+                    except:
+                        pass
+                if chat_id <= 0 or chat_id in seen_chats:
+                    continue
+                seen_chats.add(chat_id)
+                try:
+                    chat_obj = ctrl.getChat(int(chat_id))
+                except:
+                    chat_obj = None
+                if chat_obj is not None:
+                    try:
+                        if self._apply_server_badge_to_obj(chat_obj, "chat", chat_id, allow_fetch=False):
+                            patched += 1
+                            try:
+                                ctrl.putChat(chat_obj, False)
+                            except:
+                                pass
+                    except:
+                        pass
+                try:
+                    full_obj = ctrl.getChatFull(int(chat_id))
+                except:
+                    full_obj = None
+                if full_obj is not None:
+                    try:
+                        if self._apply_server_badge_to_obj(full_obj, "chat", chat_id, allow_fetch=False):
+                            patched += 1
+                            try:
+                                ctrl.putChatFull(full_obj)
+                            except:
+                                pass
+                    except:
+                        pass
+        if patched and notify:
+            try:
+                self._post_local_profile_notifications(reason="server_badge_cached_patch", cooldown=0.35)
             except:
                 pass
         return int(patched or 0)
