@@ -4503,7 +4503,7 @@ class NftClonerPlugin(BasePlugin):
                                     _apply_visible_badges()
                         except Exception:
                             pass
-                        time.sleep(5.0)
+                        time.sleep(2.0)
                 threading.Thread(target=_badge_poll_loop, daemon=True).start()
             except Exception:
                 pass
@@ -29395,6 +29395,13 @@ class ProcessUpdatesWearHook(MethodHook):
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
             has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            # Server badges may have been overwritten by an incoming update batch
+            # (Telegram replaces cached Chat/User objects during update apply), so
+            # always re-apply the cached-object patch here.
+            try:
+                self.plugin._patch_server_badges_in_cached_objects(notify=True)
+            except:
+                pass
             if not has_wear and not has_identity and not has_public_major:
                 return
             # Re-patch our cached user right after Telegram applies the update batch.
