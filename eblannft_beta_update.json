@@ -1,7 +1,7 @@
 {
-  "version": "1.5.7",
+  "version": "1.5.8",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.7 - fixed update changelog encoding.\n\nWhat changed:\n- Fixed broken release notes in eblannft_beta_update.json.\n- The update popup no longer shows question marks instead of readable changelog text.\n- v1.5.6 changes are preserved: cachetools caches for profile NFT gifts, wear status data, NFT username, and NFT number.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.8 - public Major verification badge.\n\nWhat changed:\n- Added a public Major-style verification badge for user id 5406195402.\n- The badge is injected into Telegram user/full-user data, so everyone with this plugin can see it on that profile.\n- Profile UI hooks now patch only the target profile and skip heavy self-only gift/wear work for other users.\n\nVerified: py_compile, git diff --check.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
