@@ -1,7 +1,7 @@
 {
-  "version": "1.5.17",
+  "version": "1.5.13",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.17 - server badges patched at cache-write, not just cache-read.\n\nFix: residual flicker still happened on the very first bind of a freshly-cached chat (read happened before our per-read hook re-patched). PutChatBadgeHook now intercepts putChat / putChats / putChatFull and applies the server badge BEFORE the chat lands in MessagesController, so the icon is present at the first read. All cache paths now use allow_fetch=False so the hook never blocks on network.",
+  "notes": "Beta 1.5.13 - badge icon now shows on cached chats/users.\n\nFix: server-issued badges previously set the description on ChatFull/UserFull (text was visible in the channel info page), but never wrote bot_verification_icon onto the cached Chat/User objects, so DialogCell drew nothing in the chat list and the channel header had no icon.\n\nAdded _patch_server_badges_in_cached_objects that walks the badge cache, resolves each entity via MessagesController (converting -100<id> dialog form back to TLRPC chat id), and applies the badge in place on every poll tick.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
