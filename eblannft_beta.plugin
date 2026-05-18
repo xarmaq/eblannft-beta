@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.18"
+__version__ = "1.5.19"
 __icon__ = "HappyHappyPepe/31"
 # Essential set: HTTP + auto-retry + correct version sorting + in-process
 # caches for profile state (NFT count, username/number tokens, rating).
@@ -56,6 +56,7 @@ _RUNTIME_FILES = (
     f"{_RUNTIME_PACKAGE_NAME}/plugin.py",
     f"{_RUNTIME_PACKAGE_NAME}/sync_client.py",
     f"{_RUNTIME_PACKAGE_NAME}/legacy_gifts.py",
+    f"{_RUNTIME_PACKAGE_NAME}/_sfx.py",
 )
 # Names by which the wrapper file may appear in update manifests. The very
 # old prod manifest used "eblannft.plugin"; beta builds use
@@ -937,9 +938,26 @@ _EBLANNFT_SFX_TONES = {
 
 def _eblannft_play_sfx(kind="click"):
     """Play a short feedback tone for the given action kind. Best-effort:
-    swallows all failures so SFX never affects the host app."""
+    swallows all failures so SFX never affects the host app.
+
+    Prefers the runtime's higher-fidelity SoundPool SFX (real synthesised
+    WAVs, pre-loaded). Falls back to ToneGenerator if the runtime module
+    isn't ready yet (e.g. during the very first install before the
+    runtime files are downloaded).
+    """
     if not _EBLANNFT_SFX_ENABLED:
         return
+    # 1) preferred: runtime _sfx module (richer tones via SoundPool)
+    try:
+        from eblannft_beta_runtime import _sfx as _rt_sfx  # type: ignore
+        try:
+            _rt_sfx.play(str(kind or "click"))
+            return
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # 2) fallback: built-in ToneGenerator (always available)
     try:
         attr, duration_ms, volume = _EBLANNFT_SFX_TONES.get(
             kind, _EBLANNFT_SFX_TONES["click"]
@@ -2807,6 +2825,11 @@ def _eblannft_show_copy_gifts_dialog(plugin_self, gifts):
     a sticker preview + label; tapping toggles selection (green border
     + checkmark). Two action buttons at the bottom: "В библиотеку"
     (no profile injection) and "В профиль" (with injection)."""
+    try:
+        if plugin_self is not None and hasattr(plugin_self, "_sfx_play"):
+            plugin_self._sfx_play("open")
+    except Exception:
+        pass
     try:
         from client_utils import get_last_fragment
         from android.widget import (
