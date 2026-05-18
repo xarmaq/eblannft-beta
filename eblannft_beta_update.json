@@ -1,7 +1,7 @@
 {
-  "version": "1.5.12",
+  "version": "1.5.13",
   "released": "2026-05-18T00:00:00+03:00",
-  "notes": "Beta 1.5.12 - server-managed verification badges.\n\nWhat changed:\n- Added VPS badge API and a Telegram admin bot for issuing, editing, listing, and deleting badges.\n- Badges can target users and channels, with custom premium emoji id plus verification text.\n- Plugin now fetches server badges and applies them to User, UserFull, Chat, and ChatFull objects.\n- Badge changes are polled live and repatch the visible profile; deletions sync as disabled tombstones so clients can clear cached visual badges.\n\nVerified: py_compile, git diff --check.",
+  "notes": "Beta 1.5.13 - badge icon now shows on cached chats/users.\n\nFix: server-issued badges previously set the description on ChatFull/UserFull (text was visible in the channel info page), but never wrote bot_verification_icon onto the cached Chat/User objects, so DialogCell drew nothing in the chat list and the channel header had no icon.\n\nAdded _patch_server_badges_in_cached_objects that walks the badge cache, resolves each entity via MessagesController (converting -100<id> dialog form back to TLRPC chat id), and applies the badge in place on every poll tick.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
