@@ -16,14 +16,13 @@ GET  /api/v1/users/<user_key>/state    -> JSON record (см. server.py)
 PUT  /api/v1/users/<user_key>/state    -> сохранить запись
 GET  /health                           -> { ok, version, users }
 
-user_key = строка вида "tg:<user_id>" — публичный TG user id.
+user_key = строка вида "tg-beta:<user_id>" — публичный TG user id.
 """
 
 import json
 import threading
 import time
 import traceback
-from collections import deque
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -37,7 +36,7 @@ DEFAULT_PUSH_INTERVAL_SEC = 12
 DEFAULT_PULL_INTERVAL_SEC = 6
 DEFAULT_TIMEOUT_SEC = 6
 STALE_CACHE_SEC = 4
-USER_KEY_PREFIX = "tg:"
+USER_KEY_PREFIX = "tg-beta:"
 
 
 def _log(msg):
@@ -80,12 +79,9 @@ class SyncClient(object):
         self._push_thread = None
         self._pull_thread = None
         self._lock = threading.Lock()
-        self._pull_queue = deque()
-        self._pull_queued = set()
+        self._pull_queue = []
         self._cache = {}
         self._cache_ts = {}
-        self._badges_cache = {}
-        self._badges_ts = 0
         self._last_push_payload_hash = None
         self._enabled = True
 
@@ -121,10 +117,6 @@ class SyncClient(object):
         with self._lock:
             self._cache.clear()
             self._cache_ts.clear()
-            self._badges_cache.clear()
-            self._badges_ts = 0
-            self._pull_queue.clear()
-            self._pull_queued.clear()
             self._last_push_payload_hash = None
 
     # -------------- HTTP --------------
@@ -166,38 +158,6 @@ class SyncClient(object):
 
     def health(self):
         return self._do_http("GET", "/health")
-
-    def fetch_badges_blocking(self, max_age_sec=4, max_timeout=1.5):
-        now = time.time()
-        with self._lock:
-            if self._badges_cache and (now - self._badges_ts) <= max_age_sec:
-                return dict(self._badges_cache)
-        prev_timeout = self.timeout
-        try:
-            self.timeout = max(1, min(int(prev_timeout or max_timeout), int(max_timeout)))
-            record = self._do_http("GET", "/api/v1/badges")
-        except Exception:
-            record = None
-        finally:
-            self.timeout = prev_timeout
-        badges = {}
-        if isinstance(record, dict):
-            for item in record.get("badges") or []:
-                if not isinstance(item, dict):
-                    continue
-                key = str(item.get("key", "") or "")
-                if key:
-                    badges[key] = item
-        if badges or isinstance(record, dict):
-            with self._lock:
-                self._badges_cache = badges
-                self._badges_ts = time.time()
-        with self._lock:
-            return dict(self._badges_cache)
-
-    def get_badges_cached(self):
-        with self._lock:
-            return dict(self._badges_cache)
 
     # -------------- push (my state -> server) --------------
 
@@ -260,10 +220,9 @@ class SyncClient(object):
         with self._lock:
             cached = self._cache.get(user_key)
             cached_ts = self._cache_ts.get(user_key, 0)
-            if user_key not in self._pull_queued:
+            if user_key not in self._pull_queue:
                 if force or (time.time() - cached_ts) > self.pull_interval:
                     self._pull_queue.append(user_key)
-                    self._pull_queued.add(user_key)
         return cached
 
     def _pull_loop(self):
@@ -274,8 +233,7 @@ class SyncClient(object):
                 user_key = None
                 with self._lock:
                     if self._pull_queue:
-                        user_key = self._pull_queue.popleft()
-                        self._pull_queued.discard(user_key)
+                        user_key = self._pull_queue.pop(0)
                 if user_key:
                     self._fetch_one(user_key)
             except Exception:

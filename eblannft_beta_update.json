@@ -1,7 +1,6 @@
 {
-  "version": "1.5.24",
-  "released": "2026-05-19T00:00:00+03:00",
-  "notes": "Beta 1.5.24 — убран последний запуск загрузки runtime из потока импорта .plugin. Теперь при старте приложения bootstrap только отмечает, что runtime не найден, а скачивание начинается позже из on_plugin_load. Это повторяет безопасное поведение основного репозитория: PythonPluginsEngine.initSdk больше не стартует сетевую работу даже в фоне.",
+  "version": "1.0.8",
+  "notes": "v1.0.8 — фикс: добавление нескольких одинаковых обычных подарков. Раньше при добавлении второго и далее экземпляров одного regular gift (например, двух Heart'ов) в профиле появлялся только первый. _build_injection_wrappers_bundle дедуплицировал wrappers по gift.id, но для regular gifts gift.id — это id ТИПА подарка, общий для всех экземпляров. Дедуп теперь срабатывает только когда inner gift — TL_starGiftUnique (где id действительно уникальный per-instance).",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
