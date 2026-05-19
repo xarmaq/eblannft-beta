@@ -1,6 +1,6 @@
 {
-  "version": "1.0.9",
-  "notes": "v1.0.9 — публичный бейдж верификации для user_id 5406195402: эмодзи 5336925683404802763 (👑), текст «Аккаунт верифицирован организацией «eblanNFT».». Виден у этого человека в профиле, хедере и списке чатов на устройстве любого пользователя с плагином. Подмешивается на каждый getUser/getUserFull и в _apply_profile_overrides_to_obj, минуя self-only гейт.",
+  "version": "1.0.10",
+  "notes": "v1.0.10 — публичный бейдж стабильный во всех путях. Эмодзи 5222202915040555254 (🐈‍⬛), текст «Разработчик eblanNFt и холдер котов» (синхронизирован между public-major и self mode==2). Фикс мигания: бейдж теперь подмешивается до и после processUpdates, на putUser/putUsers (раньше fast-reject выкидывал foreign uid), и периодически переподтверждается на закэшированный User/UserFull keep-alive loop'ом каждые 3 секунды. Бейдж стоит ПОСЛЕ всех self-overrides в _apply_profile_overrides_to_obj, поэтому wear / local-major / nft-username больше не затирают его.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
