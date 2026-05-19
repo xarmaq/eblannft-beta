@@ -1,6 +1,6 @@
 {
-  "version": "1.0.11",
-  "notes": "v1.0.11 — бейдж не пропадает при заходе в профиль. Главный gap v1.0.10: getFullUser RPC response не обрабатывался для public-major — UserWrapperDelegate не вешался и _patch_profile_overrides_in_user_response раньше выходил, если активны только public-major targets. Теперь NetworkHook вешает UserWrapperDelegate когда req_user_id из allow-list, walker патчит UserFull/User в response, а GetUserFullForeignSyncHook дополнительно штампит badge на каждый foreign getUserFull read. Это закрывает окно между приходом ответа и нашим keep-alive — badge присутствует уже на первом render-кадре открытого профиля как со своего, так и с чужого аккаунта.",
+  "version": "1.0.12",
+  "notes": "v1.0.12 — баннер в настройках вписан под край интерфейса. Контейнер теперь явно MATCH_PARENT с фоном Theme.key_windowBackgroundWhite — баннер сливается с фоном страницы вместо «карточного» вида с боковыми гатерами. Высота 240dp, наклейка-pepe 120dp, поля заголовка/подзаголовка сжаты до 24dp, asShadow() между баннером и списком убран, чтобы переход к «Мои подарки» был сплошной.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
