@@ -7729,7 +7729,13 @@ class NftClonerPlugin(BasePlugin):
     def _apply_public_major_badge_to_obj(self, obj):
         """Stamp Telegram's bot_verification on a User / UserFull object
         when its id is in PUBLIC_MAJOR_VERIFIED_USER_IDS. No self-only
-        gate — that's the whole point."""
+        gate — that's the whole point.
+
+        Sets BOTH the value AND the TLRPC flag bits on flags2 so the field
+        survives serialize/deserialize cycles (MessagesStorage → SQLite
+        and back). Without the flag bit set, the persisted layer will
+        treat the field as absent on reload and Telegram's UI may skip
+        drawing the icon."""
         if obj is None:
             return False
         if not self._has_public_major_verification_targets():
@@ -7745,12 +7751,24 @@ class NftClonerPlugin(BasePlugin):
                 uid = 0
         if not self._is_public_major_verified_user_id(uid):
             return False
+        try:
+            cls_name = str(obj.getClass().getName() or "").lower()
+        except:
+            cls_name = ""
+        is_user = ("$tl_user" in cls_name) or (cls_name.endswith("$user"))
+        is_full = ("userfull" in cls_name) or ("chatfull" in cls_name)
         icon = self._get_public_major_verification_icon()
         text = self._get_public_major_verification_description()
         bv = self._create_local_bot_verification(icon, text)
         if bv is None:
+            try:
+                _log(f"public-major: bv create failed uid={uid}")
+            except:
+                pass
             return False
         changed = False
+        # User.bot_verification_icon (long) — gated by flags2 bit 14 in
+        # current TLRPC. Set value AND bit.
         try:
             if self._set_field(obj, "bot_verification_icon", int(icon)):
                 changed = True
@@ -7765,6 +7783,7 @@ class NftClonerPlugin(BasePlugin):
                     pass
         except:
             pass
+        # UserFull / ChannelFull.bot_verification — the rich object.
         try:
             cur = get_val(obj, "bot_verification", None)
             cur_icon = int(get_val(cur, "icon", 0) or 0) if cur is not None else 0
@@ -7780,11 +7799,28 @@ class NftClonerPlugin(BasePlugin):
                         pass
         except:
             pass
+        # Raise the flags2 bit so the field survives serialize/deserialize.
+        # Confirmed via APK disassembly: TL_user gates bot_verification_icon
+        # behind flags2.14 (1 << 14 = 16384). Without this bit, the field
+        # is dropped on the next persist / deserialize cycle.
+        if is_user:
+            try:
+                cur_flags2 = self._to_int(get_val(obj, "flags2", 0), 0)
+                new_flags2 = int(cur_flags2 | (1 << 14))
+                if new_flags2 != cur_flags2 and self._set_field(obj, "flags2", new_flags2):
+                    changed = True
+            except:
+                pass
         try:
             if self._set_field(obj, "verified", False):
                 changed = True
         except:
             pass
+        if changed:
+            try:
+                _log(f"public-major applied uid={uid} cls={cls_name}")
+            except:
+                pass
         return bool(changed)
 
     def _patch_public_major_cached_users(self, notify=False):
@@ -7839,10 +7875,32 @@ class NftClonerPlugin(BasePlugin):
                 NC = jclass("org.telegram.messenger.NotificationCenter")
                 nc = NC.getInstance(to_java_int(account))
                 if nc is not None:
+                    # updateInterfaces tells DialogCell / drawer / chat header
+                    # to rebind, so the badge icon appears next to the name.
                     try:
-                        nc.postNotificationName(to_java_int(int(NotificationCenter.updateInterfaces)), to_java_int(0))
+                        nc.postNotificationName(
+                            to_java_int(int(NotificationCenter.updateInterfaces)),
+                            to_java_int(0),
+                        )
                     except:
                         pass
+                    # userInfoDidLoad refreshes ProfileActivity's bot_verification
+                    # description line (the "Аккаунт верифицирован …" caption).
+                    for uid in list(PUBLIC_MAJOR_VERIFIED_USER_IDS):
+                        try:
+                            full_obj = ctrl.getUserFull(int(uid))
+                            if full_obj is None:
+                                continue
+                            try:
+                                nc.postNotificationName(
+                                    to_java_int(int(NotificationCenter.userInfoDidLoad)),
+                                    int(uid),
+                                    full_obj,
+                                )
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
             except:
                 pass
         return int(patched or 0)
@@ -7858,11 +7916,14 @@ class NftClonerPlugin(BasePlugin):
         def _loop():
             while True:
                 try:
-                    time.sleep(3.0)
+                    time.sleep(2.0)
                 except Exception:
                     return
                 try:
-                    self._patch_public_major_cached_users(notify=False)
+                    # notify=True only fires posts when something was
+                    # actually patched, so this stays cheap when the
+                    # cache is already in sync.
+                    self._patch_public_major_cached_users(notify=True)
                 except Exception:
                     pass
 
