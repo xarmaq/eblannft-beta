@@ -18630,7 +18630,8 @@ class NftClonerPlugin(BasePlugin):
         need_username = bool(self._is_nft_username_active())
         need_number = bool(self._is_nft_number_active())
         need_wear = bool(self.wear_active and int(self.wear_collectible_id or 0) > 0)
-        if not (need_verification or need_rating or need_username or need_number or need_wear):
+        need_public_major = bool(self._has_public_major_verification_targets())
+        if not (need_verification or need_rating or need_username or need_number or need_wear or need_public_major):
             return 0
 
         try:
@@ -18647,7 +18648,7 @@ class NftClonerPlugin(BasePlugin):
             )
         except:
             should_apply_rating = bool(need_rating and known_target_user_id <= 0)
-        if (not should_manage_self) and (not should_apply_rating):
+        if (not should_manage_self) and (not should_apply_rating) and (not need_public_major):
             return 0
 
         patched = 0
@@ -18695,6 +18696,14 @@ class NftClonerPlugin(BasePlugin):
             if should_apply_rating:
                 try:
                     if self._apply_local_rating_to_obj(obj, known_target_user_id):
+                        changed = True
+                except:
+                    pass
+            # Public-major badge LAST so it overrides anything wear /
+            # local-verification may have written for the same uid.
+            if need_public_major:
+                try:
+                    if self._apply_public_major_badge_to_obj(obj):
                         changed = True
                 except:
                     pass
@@ -26994,7 +27003,8 @@ class NetworkHook(MethodHook):
                 param.args[1] = StatusWrapperDelegate(self.plugin, param.args[1], cid, req_name)
 
             sync_active = bool(getattr(self.plugin, "_eblannft_beta_sync_client", None) is not None)
-            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
+            has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            if (self.plugin._has_profile_overrides() or self.plugin._is_local_rating_active() or sync_active or has_public_major) and (("getfulluser" in req_name_l) or ("getusers" in req_name_l) or ("getuser" in req_name_l and "gift" not in req_name_l)):
                 req_user_id = self.plugin._extract_request_user_id(req)
                 should_hook_user = False
                 if self.plugin._has_profile_overrides() and self.plugin._should_manage_self_saved_gifts(req_user_id=req_user_id):
@@ -27006,6 +27016,11 @@ class NetworkHook(MethodHook):
                 elif sync_active and int(req_user_id or 0) > 0:
                     # Foreign profile + sync: wrap so we can patch wear status
                     # using the remote record fetched from the VPS.
+                    should_hook_user = True
+                elif has_public_major and self.plugin._is_public_major_verified_user_id(req_user_id):
+                    # Foreign profile of an allow-listed user: wrap so the
+                    # public-major badge is stamped into the response BEFORE
+                    # Telegram puts the user into the cache.
                     should_hook_user = True
                 if should_hook_user:
                     _log(f">>> Hooking USER: {req_name}")
@@ -28356,6 +28371,18 @@ class GetUserFullForeignSyncHook(MethodHook):
                 my_id = 0
             if uid == my_id:
                 return
+            # Public-major badge: always stamp it on the returned UserFull
+            # when the uid is in the allow-list. Runs regardless of whether
+            # the sync client is alive.
+            try:
+                if self.plugin._is_public_major_verified_user_id(uid):
+                    if self.plugin._apply_public_major_badge_to_obj(full_obj):
+                        try:
+                            param.setResult(full_obj)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
             client = getattr(self.plugin, "_eblannft_beta_sync_client", None)
             if client is None:
                 return

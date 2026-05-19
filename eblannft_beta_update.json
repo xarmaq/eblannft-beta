@@ -1,6 +1,6 @@
 {
-  "version": "1.0.10",
-  "notes": "v1.0.10 — публичный бейдж стабильный во всех путях. Эмодзи 5222202915040555254 (🐈‍⬛), текст «Разработчик eblanNFt и холдер котов» (синхронизирован между public-major и self mode==2). Фикс мигания: бейдж теперь подмешивается до и после processUpdates, на putUser/putUsers (раньше fast-reject выкидывал foreign uid), и периодически переподтверждается на закэшированный User/UserFull keep-alive loop'ом каждые 3 секунды. Бейдж стоит ПОСЛЕ всех self-overrides в _apply_profile_overrides_to_obj, поэтому wear / local-major / nft-username больше не затирают его.",
+  "version": "1.0.11",
+  "notes": "v1.0.11 — бейдж не пропадает при заходе в профиль. Главный gap v1.0.10: getFullUser RPC response не обрабатывался для public-major — UserWrapperDelegate не вешался и _patch_profile_overrides_in_user_response раньше выходил, если активны только public-major targets. Теперь NetworkHook вешает UserWrapperDelegate когда req_user_id из allow-list, walker патчит UserFull/User в response, а GetUserFullForeignSyncHook дополнительно штампит badge на каждый foreign getUserFull read. Это закрывает окно между приходом ответа и нашим keep-alive — badge присутствует уже на первом render-кадре открытого профиля как со своего, так и с чужого аккаунта.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
