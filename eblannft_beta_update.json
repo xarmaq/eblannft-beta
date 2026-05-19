@@ -1,6 +1,6 @@
 {
-  "version": "1.0.15",
-  "notes": "v1.0.15 — фикс краша 'NPE в hasMediaSpoilers'. v1.0.13/1.0.14 слишком агрессивно постили updateInterfaces в keepalive и после processUpdates — это форсило ребайнд всех видимых ChatMessageCell, и хук hasMediaSpoilers (поставленный exteraGram'ом / соседним плагином) валился по NPE из-за устаревшей ссылки Method в LSPosed. Теперь keepalive тикает в 5 секунд без оповещений (next-read кэша подхватит бейдж сам), а notify-блок шлёт ТОЛЬКО userInfoDidLoad по конкретному uid — ProfileActivity обновится, ChatMessageCell больше не дёргается.",
+  "version": "1.0.16",
+  "notes": "v1.0.16 — наконец-то правильные TLRPC флаг-биты для bot_verification. Достал APK exteraGram, декомпилил TL_user / TL_userFull / TL_channelFull, подтвердил по их serialize/deserialize: TL_user.bot_verification_icon гейтится flags2 & 16384 (1<<14), TL_userFull.bot_verification и TL_channelFull.bot_verification — flags2 & 131072 (1<<17). Раньше я ставил только User-бит, поэтому ICON иногда показывался, а TEXT (он на UserFull) дропался при каждом persist в SQLite. Теперь оба бита поднимаются, и detection User vs UserFull больше не путается на cls_name overlap.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
