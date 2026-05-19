@@ -3469,6 +3469,13 @@ class NftClonerPlugin(BasePlugin):
                             patched[0] += 1
                     except Exception:
                         pass
+            # Public-major badge LAST (after wear / username / number) so
+            # remote sync paths never strip our cat badge off the target.
+            try:
+                if self._apply_public_major_badge_to_obj(obj):
+                    patched[0] += 1
+            except Exception:
+                pass
             try:
                 if self._is_java_list_like(obj):
                     try:
@@ -21496,14 +21503,41 @@ class NftClonerPlugin(BasePlugin):
             is_my_profile = bool(self._is_my_profile_activity(profile_activity))
         except:
             is_my_profile = False
-        if not is_my_profile:
+        # Public-major allow-list users: keep running this patcher even on
+        # foreign profiles so the badge is stamped into ProfileActivity's
+        # local user/userFull refs before the first render.
+        is_public_major_profile = False
+        try:
+            if not is_my_profile:
+                pa_uid = int(self._get_profile_activity_user_id(profile_activity) or 0)
+                if pa_uid > 0 and self._is_public_major_verified_user_id(pa_uid):
+                    is_public_major_profile = True
+        except:
+            pass
+        if (not is_my_profile) and (not is_public_major_profile):
             return 0
-        allow_profile_context_fallback = True
+        allow_profile_context_fallback = is_my_profile
         patched = 0
         for name in ["user", "currentUser", "userInfo", "userFull", "currentUserInfo", "currentUserFull", "chat", "currentChat", "chatInfo", "chatFull", "currentChatInfo", "currentChatFull"]:
             try:
                 obj = get_val(profile_activity, name, None)
                 if obj is None:
+                    continue
+                if is_public_major_profile and not is_my_profile:
+                    # Foreign view of an allow-listed user — only the public
+                    # major path should fire, never the self-overrides
+                    # (which read from MY identity).
+                    try:
+                        if self._apply_public_major_badge_to_obj(obj):
+                            patched += 1
+                    except:
+                        pass
+                    try:
+                        nested = get_val(obj, "user", None)
+                        if nested is not None and self._apply_public_major_badge_to_obj(nested):
+                            patched += 1
+                    except:
+                        pass
                     continue
                 if self._apply_profile_overrides_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
                     patched += 1
