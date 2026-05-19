@@ -1,6 +1,6 @@
 {
-  "version": "1.0.12",
-  "notes": "v1.0.12 — баннер в настройках вписан под край интерфейса. Контейнер теперь явно MATCH_PARENT с фоном Theme.key_windowBackgroundWhite — баннер сливается с фоном страницы вместо «карточного» вида с боковыми гатерами. Высота 240dp, наклейка-pepe 120dp, поля заголовка/подзаголовка сжаты до 24dp, asShadow() между баннером и списком убран, чтобы переход к «Мои подарки» был сплошной.",
+  "version": "1.0.13",
+  "notes": "v1.0.13 — фикс bot_verification на User: поднимаем флаг flags2.14 одновременно со значением. Без этого бита поле дропалось при serialize/deserialize (MessagesStorage → SQLite и обратно), поэтому badge пропадал. Дополнительно после patch'а постим userInfoDidLoad (рефреш описания в ProfileActivity) + updateInterfaces (рефреш иконки в хедере). Keep-alive теперь notify=True и тикает каждые 2 секунды. Добавлен лог public-major applied uid=… для диагностики.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
