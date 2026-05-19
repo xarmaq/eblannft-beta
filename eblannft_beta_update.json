@@ -1,6 +1,6 @@
 {
-  "version": "1.0.19",
-  "notes": "v1.0.19 - stable developer badge. The visible foreign ProfileActivity is now scanned for hidden User/UserFull fields and repatched after early profile notifications, so the badge and developer text survive profile rebinds instead of only existing in MessagesController cache.",
+  "version": "1.0.20",
+  "notes": "v1.0.20 - stable developer badge. The visible foreign ProfileActivity is now scanned for hidden User/UserFull fields and repatched after early profile notifications, so the badge and developer text survive profile rebinds instead of only existing in MessagesController cache.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
