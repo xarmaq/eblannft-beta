@@ -26,7 +26,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "Это бета eblanNFT.\n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.5.21"
+__version__ = "1.5.22"
 __icon__ = "HappyHappyPepe/31"
 # No __requirements__: the plugin runs entirely on the Python stdlib so the
 # install is pure-Python and never blocks on a pip resolve / wheel build.
@@ -649,16 +649,98 @@ def _load_eblannft_impl():
 
 _LOAD_ERROR = None
 _RUNTIME_INSTALL_ROOT = None
+_RUNTIME_DEFERRED = False
+_RUNTIME_DOWNLOAD_LOCK = threading.Lock()
+_RUNTIME_DOWNLOAD_THREAD = None
 # Captured at on_plugin_load so popup code can reach runtime instance helpers
 # (e.g. _bind_sticker_from_set) without having to thread `self` through every
 # call site.
 _plugin_instance = None
+
+
+def _load_eblannft_impl_local_only():
+    """Import the runtime ONLY from already-on-disk files. Never touches the
+    network. Used at module-import time so app startup never blocks on a
+    GitHub download — previously a fresh install would hang inside urlopen()
+    on the main thread during PythonPluginsEngine.initSdk and trigger an ANR
+    («приложение не отвечает»), which only went away after a full plugin
+    removal."""
+    try:
+        plugin_mod = importlib.import_module(f"{_RUNTIME_PACKAGE_NAME}.plugin")
+        for attr in _IMPL_ATTR_CANDIDATES:
+            impl = getattr(plugin_mod, attr, None)
+            if not isinstance(impl, type):
+                continue
+            strict_ok, looks_like = _impl_is_baseplugin_subclass(impl)
+            if strict_ok:
+                _bootstrap_log("loaded runtime via existing sys.path import (local-only)")
+                return impl, None
+            if looks_like:
+                _bootstrap_log("stale BasePlugin in sys.modules; evicting (local-only)")
+                _evict_runtime_from_sys_modules()
+                break
+    except Exception:
+        pass
+
+    existing = _existing_runtime_root()
+    if existing is None:
+        raise RuntimeError("__deferred__: runtime not present on disk")
+    impl = _import_runtime_from(existing)
+    strict_ok, _ = _impl_is_baseplugin_subclass(impl)
+    if not strict_ok:
+        raise ImportError(
+            f"Runtime impl {impl!r} present but not a BasePlugin subclass"
+        )
+    return impl, existing
+
+
+def _kick_background_runtime_download(reason="initial"):
+    """Idempotently spawn a daemon thread that performs the full network
+    bootstrap (download + import) without blocking the caller. Safe to call
+    from any thread; subsequent calls while a download is in flight are
+    no-ops."""
+    global _RUNTIME_DOWNLOAD_THREAD, _EblanNftImpl, _RUNTIME_INSTALL_ROOT
+    global _LOAD_ERROR, _RUNTIME_DEFERRED
+    with _RUNTIME_DOWNLOAD_LOCK:
+        if _RUNTIME_DOWNLOAD_THREAD is not None and _RUNTIME_DOWNLOAD_THREAD.is_alive():
+            _bootstrap_log(f"background download already running (reason={reason})")
+            return False
+
+        def _worker():
+            global _EblanNftImpl, _RUNTIME_INSTALL_ROOT, _LOAD_ERROR, _RUNTIME_DEFERRED
+            _bootstrap_log(f"background runtime download starting (reason={reason})")
+            try:
+                impl, root = _load_eblannft_impl()
+                _EblanNftImpl = impl
+                _RUNTIME_INSTALL_ROOT = root
+                _LOAD_ERROR = None
+                _RUNTIME_DEFERRED = False
+                _bootstrap_log("background runtime download succeeded; restart needed")
+            except Exception as e:
+                _LOAD_ERROR = e
+                _bootstrap_log(f"background runtime download failed: {e}")
+
+        t = threading.Thread(target=_worker, name="eblannft-runtime-dl", daemon=True)
+        _RUNTIME_DOWNLOAD_THREAD = t
+        t.start()
+        return True
+
+
 try:
-    _EblanNftImpl, _RUNTIME_INSTALL_ROOT = _load_eblannft_impl()
+    _EblanNftImpl, _RUNTIME_INSTALL_ROOT = _load_eblannft_impl_local_only()
 except Exception as _e:
     _EblanNftImpl = BasePlugin
     _LOAD_ERROR = _e
-    _bootstrap_log(f"FATAL bootstrap failure: {_e}")
+    msg = str(_e)
+    if "__deferred__" in msg:
+        _RUNTIME_DEFERRED = True
+        _bootstrap_log("runtime not on disk; deferring download to background (avoid startup ANR)")
+        try:
+            _kick_background_runtime_download("module-import")
+        except Exception as kick_err:
+            _bootstrap_log(f"background download kick failed: {kick_err}")
+    else:
+        _bootstrap_log(f"FATAL bootstrap failure: {_e}")
 
 
 def _patch_runtime_service_menu():
@@ -6900,6 +6982,28 @@ if isinstance(_EblanNftImpl, type) and issubclass(_EblanNftImpl, BasePlugin):
 else:
     class EblanNftPlugin(BasePlugin):
         def on_plugin_load(self):
+            # First-install path: runtime not on disk yet. We deferred the
+            # download out of the import thread to avoid an ANR during
+            # PythonPluginsEngine.initSdk. Kick off (or join) the background
+            # download here and tell the user to relaunch when it finishes.
+            if _RUNTIME_DEFERRED:
+                try:
+                    _kick_background_runtime_download("on_plugin_load")
+                except Exception as e:
+                    _bootstrap_log(f"on_plugin_load download kick failed: {e}")
+                try:
+                    from ui.bulletin import BulletinHelper
+                    BulletinHelper.show_info(
+                        "eblanNFT Beta: качаю runtime в фоне. Перезапусти "
+                        "приложение через 10–20 секунд — плагин включится сам."
+                    )
+                except Exception:
+                    pass
+                # Do NOT raise — raising on first enable would mark the
+                # plugin as broken and prevent the user from re-enabling
+                # cleanly after the background download finishes.
+                return None
+
             _maybe_show_storage_permission_alert(_LOAD_ERROR)
             if _maybe_show_network_error_alert(_LOAD_ERROR):
                 raise RuntimeError(
