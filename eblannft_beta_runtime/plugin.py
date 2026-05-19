@@ -106,6 +106,13 @@ GIFT_KIND_LEGACY_RARE = "legacy_rare_normal"
 GIFT_KIND_LOCAL_UPGRADED = "local_upgraded"
 LOCAL_VISUAL_UPGRADE_STARS = 0
 
+# Public verification badges — applied on every plugin user's device to the
+# listed foreign user_ids, so they appear "verified by eblanNFT" everywhere
+# (profile, chat list, header) without the target user having to do anything.
+PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
+PUBLIC_MAJOR_VERIFICATION_ICON = 5336925683404802763
+PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "Аккаунт верифицирован организацией «eblanNFT»."
+
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
 
@@ -4759,6 +4766,11 @@ class NftClonerPlugin(BasePlugin):
                 return True
         except:
             pass
+        try:
+            if self._has_public_major_verification_targets():
+                return True
+        except:
+            pass
         return False
 
     def _has_local_profile_gifts_presence(self, target_user_id=0):
@@ -5104,12 +5116,20 @@ class NftClonerPlugin(BasePlugin):
     def _apply_profile_overrides_to_obj(self, obj, allow_profile_context_fallback=False):
         if obj is None:
             return False
+        # Public-major badge: applies to a fixed allow-list of FOREIGN
+        # user_ids, so it must run BEFORE the self-only gate below.
+        public_major_changed = False
+        try:
+            if self._apply_public_major_badge_to_obj(obj):
+                public_major_changed = True
+        except:
+            pass
         try:
             if not self._should_apply_self_profile_override(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                return False
+                return public_major_changed
         except:
-            return False
-        changed = False
+            return public_major_changed
+        changed = public_major_changed
         try:
             if self._is_local_verification_active() and self._apply_local_verification_to_full_obj(obj):
                 changed = True
@@ -7639,6 +7659,90 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             _log(f"Local bot verification create error: {e}")
             return None
+
+    # ── Public-major verification ────────────────────────────────────────
+    # Applied to a fixed allow-list of foreign user_ids on every plugin
+    # user's device, so the badge appears in the chat list, channel header
+    # and profile dialog of the listed users without them having to opt in.
+
+    def _is_public_major_verified_user_id(self, user_id):
+        try:
+            return bool(int(user_id or 0) in PUBLIC_MAJOR_VERIFIED_USER_IDS)
+        except:
+            return False
+
+    def _has_public_major_verification_targets(self):
+        try:
+            return bool(PUBLIC_MAJOR_VERIFIED_USER_IDS)
+        except:
+            return False
+
+    def _get_public_major_verification_icon(self):
+        return int(PUBLIC_MAJOR_VERIFICATION_ICON)
+
+    def _get_public_major_verification_description(self):
+        return str(PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
+
+    def _apply_public_major_badge_to_obj(self, obj):
+        """Stamp Telegram's bot_verification on a User / UserFull object
+        when its id is in PUBLIC_MAJOR_VERIFIED_USER_IDS. No self-only
+        gate — that's the whole point."""
+        if obj is None:
+            return False
+        if not self._has_public_major_verification_targets():
+            return False
+        try:
+            uid = int(self._extract_user_id_from_obj(obj) or 0)
+        except:
+            uid = 0
+        if uid <= 0:
+            try:
+                uid = int(get_val(obj, "id", 0) or 0)
+            except:
+                uid = 0
+        if not self._is_public_major_verified_user_id(uid):
+            return False
+        icon = self._get_public_major_verification_icon()
+        text = self._get_public_major_verification_description()
+        bv = self._create_local_bot_verification(icon, text)
+        if bv is None:
+            return False
+        changed = False
+        try:
+            if self._set_field(obj, "bot_verification_icon", int(icon)):
+                changed = True
+        except:
+            pass
+        try:
+            if getattr(obj, "bot_verification_icon", None) != int(icon):
+                try:
+                    obj.bot_verification_icon = int(icon)
+                    changed = True
+                except:
+                    pass
+        except:
+            pass
+        try:
+            cur = get_val(obj, "bot_verification", None)
+            cur_icon = int(get_val(cur, "icon", 0) or 0) if cur is not None else 0
+            cur_text = str(get_val(cur, "description", "") or "") if cur is not None else ""
+            if cur is None or cur_icon != int(icon) or cur_text != text:
+                if self._set_field(obj, "bot_verification", bv):
+                    changed = True
+                else:
+                    try:
+                        obj.bot_verification = bv
+                        changed = True
+                    except:
+                        pass
+        except:
+            pass
+        try:
+            if self._set_field(obj, "verified", False):
+                changed = True
+        except:
+            pass
+        return bool(changed)
 
     def _apply_local_verification_to_full_obj(self, obj):
         if obj is None or not self._is_local_verification_active():
@@ -28024,9 +28128,10 @@ class GetAnyWearHook(MethodHook):
                 except:
                     req_uid = 0
                 # Fast reject: getUser/getUserFull/getUserOrChat for any entity
-                # except our own profile should never enter the heavy override
-                # pipeline.
-                if req_uid != 0 and req_uid != my_id:
+                # except our own profile (or a public-major target) should not
+                # enter the heavy override pipeline.
+                if (req_uid != 0 and req_uid != my_id
+                        and not self.plugin._is_public_major_verified_user_id(req_uid)):
                     return
             user_obj = param.getResult()
             if user_obj is None:
@@ -28035,7 +28140,8 @@ class GetAnyWearHook(MethodHook):
                 result_uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 result_uid = 0
-            if result_uid > 0 and result_uid != my_id:
+            if (result_uid > 0 and result_uid != my_id
+                    and not self.plugin._is_public_major_verified_user_id(result_uid)):
                 return
             try:
                 should_skip, state_sig = self.plugin._should_skip_hot_get_override(user_obj, ttl=0.55)
