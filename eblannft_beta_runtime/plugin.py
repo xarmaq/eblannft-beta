@@ -5448,7 +5448,28 @@ class NftClonerPlugin(BasePlugin):
 
     def _build_uitweaks_style_header(self, ctx):
         try:
+            # Banner is rendered edge-to-edge so it visually blends with the
+            # settings page instead of sitting inside a card. Use the page
+            # background colour and MATCH_PARENT width with a small negative
+            # bleed so the recycler row's residual horizontal padding doesn't
+            # leave gutters at the sides.
+            BANNER_HEIGHT_DP = 240
             container = FrameLayout(ctx)
+            try:
+                container.setLayoutParams(
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        AndroidUtilities.dp(BANNER_HEIGHT_DP),
+                    )
+                )
+            except:
+                pass
+            try:
+                container.setBackgroundColor(
+                    Theme.getColor(Theme.key_windowBackgroundWhite)
+                )
+            except:
+                pass
 
             try:
                 from org.telegram.ui.Components.Premium import StarParticlesView
@@ -5469,7 +5490,7 @@ class NftClonerPlugin(BasePlugin):
                     pass
                 container.addView(
                     particlesView,
-                    LayoutHelper.createFrame(-1, 220, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 0, 0, 0),
+                    LayoutHelper.createFrame(-1, BANNER_HEIGHT_DP, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 0, 0, 0),
                 )
                 try:
                     run_on_ui_thread(lambda: particlesView.flingParticles(360), 200)
@@ -5480,7 +5501,7 @@ class NftClonerPlugin(BasePlugin):
 
             imageView = BackupImageView(ctx)
             try:
-                imageView.setRoundRadius(AndroidUtilities.dp(54))
+                imageView.setRoundRadius(AndroidUtilities.dp(60))
             except:
                 pass
 
@@ -5540,7 +5561,7 @@ class NftClonerPlugin(BasePlugin):
 
             container.addView(
                 imageView,
-                LayoutHelper.createFrame(108, 108, Gravity.CENTER | Gravity.TOP, 0, 20, 0, 0),
+                LayoutHelper.createFrame(120, 120, Gravity.CENTER | Gravity.TOP, 0, 18, 0, 0),
             )
 
             title = TextView(ctx)
@@ -5570,7 +5591,7 @@ class NftClonerPlugin(BasePlugin):
                 pass
             container.addView(
                 title,
-                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 50, 145, 50, 0),
+                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 24, 152, 24, 0),
             )
 
             subtitle = TextView(ctx)
@@ -5592,7 +5613,7 @@ class NftClonerPlugin(BasePlugin):
                 pass
             container.addView(
                 subtitle,
-                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 40, 180, 40, 27),
+                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 24, 188, 24, 16),
             )
 
             try:
@@ -6256,7 +6277,6 @@ class NftClonerPlugin(BasePlugin):
                         pass
                     try:
                         items.add(0, hi)
-                        items.add(1, UItem.asShadow())
                     except:
                         items.add(hi)
 
