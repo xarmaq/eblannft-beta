@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.8"
+__version__ = "1.0.19"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_BETA_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_beta_cache")
 EBLANNFT_BETA_ABOUT_USERNAME = "xarmaq"
@@ -111,7 +111,7 @@ LOCAL_VISUAL_UPGRADE_STARS = 0
 # (profile, chat list, header) without the target user having to do anything.
 PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
 PUBLIC_MAJOR_VERIFICATION_ICON = 5222202915040555254
-PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "Разработчик eblanNFt и холдер котов"
+PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "разработчик eblannft"
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -7733,6 +7733,20 @@ class NftClonerPlugin(BasePlugin):
     def _get_public_major_verification_description(self):
         return str(PUBLIC_MAJOR_VERIFICATION_DESCRIPTION)
 
+    def _is_public_major_profile_activity(self, profile_activity):
+        if profile_activity is None:
+            return False
+        try:
+            uid = int(self._get_profile_activity_user_id(profile_activity) or 0)
+        except:
+            uid = 0
+        if uid <= 0:
+            return False
+        try:
+            return bool(self._is_public_major_verified_user_id(uid))
+        except:
+            return False
+
     def _apply_public_major_badge_to_obj(self, obj):
         """Stamp Telegram's bot_verification on a User / UserFull object
         when its id is in PUBLIC_MAJOR_VERIFIED_USER_IDS. No self-only
@@ -7849,6 +7863,72 @@ class NftClonerPlugin(BasePlugin):
                 pass
         return bool(changed)
 
+    def _patch_public_major_profile_fields(self, profile_activity, max_depth=3):
+        if profile_activity is None or not self._is_public_major_profile_activity(profile_activity):
+            return 0
+        patched = 0
+        visited = set()
+
+        def walk(obj, depth):
+            nonlocal patched
+            if obj is None or depth > max_depth:
+                return
+            try:
+                oid = int(obj.hashCode())
+            except:
+                oid = id(obj)
+            if oid in visited:
+                return
+            visited.add(oid)
+            try:
+                cls_name = str(obj.getClass().getName() or "")
+            except:
+                cls_name = ""
+            if cls_name.startswith("android.") or cls_name.startswith("androidx."):
+                return
+            try:
+                if self._apply_public_major_badge_to_obj(obj):
+                    patched += 1
+            except:
+                pass
+            try:
+                if self._is_java_list_like(obj):
+                    try:
+                        size = min(int(obj.size() or 0), 24)
+                    except:
+                        size = 0
+                    for i in range(size):
+                        try:
+                            walk(obj.get(i), depth + 1)
+                        except:
+                            continue
+                    return
+            except:
+                pass
+            try:
+                for f in self._iter_object_fields(obj):
+                    try:
+                        typ = str(f.getType().getName() or "")
+                    except:
+                        typ = ""
+                    if typ in ("int", "long", "boolean", "float", "double", "java.lang.String"):
+                        continue
+                    try:
+                        name = str(f.getName() or "").lower()
+                    except:
+                        name = ""
+                    if depth == 0 and name in ("fragmentview", "listview", "recyclerlistview", "avatarcontainer", "actionbar"):
+                        continue
+                    try:
+                        walk(f.get(obj), depth + 1)
+                    except:
+                        continue
+            except:
+                pass
+
+        walk(profile_activity, 0)
+        return int(patched or 0)
+
     def _patch_public_major_cached_users(self, notify=False):
         """Re-apply the public-major badge directly on the MessagesController
         cached User / UserFull for every allow-listed uid. Catches cases
@@ -7950,6 +8030,13 @@ class NftClonerPlugin(BasePlugin):
                     return
                 try:
                     self._patch_public_major_cached_users(notify=False)
+                except Exception:
+                    pass
+                try:
+                    pa = self._get_visible_profile_activity()
+                    if pa is not None and self._is_public_major_profile_activity(pa):
+                        if self._patch_profile_activity_in_place(pa, notify=True, include_major_views=False):
+                            self._refresh_profile_activity_views_light(pa, force=True)
                 except Exception:
                     pass
 
@@ -21528,9 +21615,7 @@ class NftClonerPlugin(BasePlugin):
         is_public_major_profile = False
         try:
             if not is_my_profile:
-                pa_uid = int(self._get_profile_activity_user_id(profile_activity) or 0)
-                if pa_uid > 0 and self._is_public_major_verified_user_id(pa_uid):
-                    is_public_major_profile = True
+                is_public_major_profile = bool(self._is_public_major_profile_activity(profile_activity))
         except:
             pass
         if (not is_my_profile) and (not is_public_major_profile):
@@ -21566,6 +21651,11 @@ class NftClonerPlugin(BasePlugin):
                         patched += 1
                 except:
                     pass
+            except:
+                pass
+        if is_public_major_profile and not is_my_profile:
+            try:
+                patched += int(self._patch_public_major_profile_fields(profile_activity, max_depth=3) or 0)
             except:
                 pass
         try:
@@ -27996,8 +28086,7 @@ class ProfileActivityFastPatchHook(MethodHook):
             is_pa_public_major = False
             if not is_pa_my:
                 try:
-                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
-                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                    is_pa_public_major = bool(p._is_public_major_profile_activity(pa))
                 except:
                     is_pa_public_major = False
             if not is_pa_my and not is_pa_public_major:
@@ -28017,6 +28106,11 @@ class ProfileActivityFastPatchHook(MethodHook):
                 patched_local = int(p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False) or 0)
             except:
                 patched_local = 0
+            if is_pa_public_major and not is_pa_my:
+                try:
+                    p._schedule_profile_ui_repatch(pa, [0, 120, 360])
+                except:
+                    pass
             if patched_local <= 0 and (p._has_profile_overrides() or p._is_local_rating_active() or p._has_local_profile_gifts_presence()):
                 try:
                     p._patch_my_cached_user(patch_userconfig=False)
@@ -28045,8 +28139,7 @@ class ProfileActivityFastPatchHook(MethodHook):
             is_pa_public_major = False
             if not is_pa_my:
                 try:
-                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
-                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                    is_pa_public_major = bool(p._is_public_major_profile_activity(pa))
                 except:
                     is_pa_public_major = False
             if not is_pa_my and not is_pa_public_major:
@@ -28054,7 +28147,12 @@ class ProfileActivityFastPatchHook(MethodHook):
             if is_pa_public_major and not is_pa_my:
                 # Foreign allow-listed profile: only re-stamp the badge.
                 try:
-                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                    if p._patch_profile_activity_in_place(pa, notify=True, include_major_views=False):
+                        p._refresh_profile_activity_views_light(pa, force=True)
+                except:
+                    pass
+                try:
+                    p._schedule_profile_ui_repatch(pa, [120, 360])
                 except:
                     pass
                 return
@@ -28209,8 +28307,7 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             is_pa_public_major = False
             if not is_pa_my:
                 try:
-                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
-                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                    is_pa_public_major = bool(p._is_public_major_profile_activity(pa))
                 except:
                     is_pa_public_major = False
             if not is_pa_my and not is_pa_public_major:
@@ -28271,8 +28368,7 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             is_pa_public_major = False
             if not is_pa_my:
                 try:
-                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
-                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                    is_pa_public_major = bool(p._is_public_major_profile_activity(pa))
                 except:
                     is_pa_public_major = False
             if not is_pa_my and not is_pa_public_major:
@@ -28290,7 +28386,12 @@ class ProfileActivityNotificationPatchHook(MethodHook):
                 # Foreign allow-listed profile: re-stamp the badge on
                 # pa.user / pa.userInfo so the next render frame keeps it.
                 try:
-                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                    if p._patch_profile_activity_in_place(pa, notify=True, include_major_views=False):
+                        p._refresh_profile_activity_views_light(pa, force=True)
+                except:
+                    pass
+                try:
+                    p._schedule_profile_ui_repatch(pa, [0, 120, 360])
                 except:
                     pass
                 return
@@ -28723,14 +28824,29 @@ class PutAnyWearHook(MethodHook):
                 my_id = int(p._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
             try:
                 uid = int(p._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if (uid > 0 and uid != my_id
-                    and not p._is_public_major_verified_user_id(uid)):
+            if uid > 0 and p._is_public_major_verified_user_id(uid):
+                try:
+                    p._apply_public_major_badge_to_obj(user_obj)
+                except:
+                    pass
+                try:
+                    account = get_user_config().selectedAccount
+                    MC = jclass("org.telegram.messenger.MessagesController")
+                    ctrl = MC.getInstance(to_java_int(account))
+                    cached = ctrl.getUser(int(uid))
+                    if cached is not None and cached is not user_obj:
+                        p._apply_public_major_badge_to_obj(cached)
+                except:
+                    pass
+                if not (my_id > 0 and uid == my_id):
+                    return
+            if my_id <= 0:
+                return
+            if uid > 0 and uid != my_id:
                 return
             try:
                 # Re-apply on the obj passed to putUser (typically the same
@@ -28784,8 +28900,6 @@ class PutUsersWearHook(MethodHook):
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
             apply = self.plugin._apply_profile_overrides_to_obj
             saw_self = False
             for i in range(size):
@@ -28799,8 +28913,16 @@ class PutUsersWearHook(MethodHook):
                     uid = int(self.plugin._extract_user_id_from_obj(item) or 0)
                 except:
                     uid = 0
-                if (uid > 0 and uid != my_id
-                        and not self.plugin._is_public_major_verified_user_id(uid)):
+                if uid > 0 and self.plugin._is_public_major_verified_user_id(uid):
+                    try:
+                        self.plugin._apply_public_major_badge_to_obj(item)
+                    except:
+                        pass
+                    if not (my_id > 0 and uid == my_id):
+                        continue
+                if my_id <= 0:
+                    continue
+                if uid > 0 and uid != my_id:
                     continue
                 try:
                     apply(item)
@@ -28829,6 +28951,12 @@ class PutUsersWearHook(MethodHook):
                 my_id = int(p._get_my_user_id() or 0)
             except:
                 my_id = 0
+            # Public-major must be re-applied even during cold launch before
+            # UserConfig exposes clientUserId.
+            try:
+                p._patch_public_major_cached_users(notify=False)
+            except:
+                pass
             if my_id <= 0:
                 return
             try:
@@ -28843,12 +28971,6 @@ class PutUsersWearHook(MethodHook):
                     p._apply_profile_overrides_to_obj(cached)
                 except:
                     pass
-            # Also re-apply public-major badge on the cached User for any
-            # allow-listed foreign uid that was in this batch.
-            try:
-                p._patch_public_major_cached_users(notify=False)
-            except:
-                pass
         except Exception as e:
             _log(f"PutUsersWearHook(after) error: {e}")
 
