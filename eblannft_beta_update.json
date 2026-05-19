@@ -1,6 +1,6 @@
 {
-  "version": "1.0.14",
-  "notes": "v1.0.14 — public-major теперь применяется и на foreign ProfileActivity. Главный gap: _patch_profile_activity_in_place ранее рано выходил, если профиль не свой — ProfileActivityFastPatchHook / ProfileActivityNotificationPatchHook не штамповали бейдж на чужой профиль allow-listed user'а. Теперь функция продолжает работу для public-major uid'ов и зовёт чистый _apply_public_major_badge_to_obj (без self-overrides) на user/userFull/currentUser/userInfo. Плюс sync remote walker (_sync_apply_remote_user_overrides) теперь накладывает бейдж ПОСЛЕ wear/username/number — как советует чек-лист.",
+  "version": "1.0.15",
+  "notes": "v1.0.15 — фикс краша 'NPE в hasMediaSpoilers'. v1.0.13/1.0.14 слишком агрессивно постили updateInterfaces в keepalive и после processUpdates — это форсило ребайнд всех видимых ChatMessageCell, и хук hasMediaSpoilers (поставленный exteraGram'ом / соседним плагином) валился по NPE из-за устаревшей ссылки Method в LSPosed. Теперь keepalive тикает в 5 секунд без оповещений (next-read кэша подхватит бейдж сам), а notify-блок шлёт ТОЛЬКО userInfoDidLoad по конкретному uid — ProfileActivity обновится, ChatMessageCell больше не дёргается.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
