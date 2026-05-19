@@ -17,7 +17,17 @@ ADMIN_IDS = {
 }
 
 API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+FILE_API = f"https://api.telegram.org/file/bot{BOT_TOKEN}"
 STATES = {}
+
+ALLOWED_UPDATE_FILES = {
+    "eblannft_beta.plugin": "eblannft_beta.plugin",
+    "__init__.py": "eblannft_beta_runtime/__init__.py",
+    "plugin.py": "eblannft_beta_runtime/plugin.py",
+    "sync_client.py": "eblannft_beta_runtime/sync_client.py",
+    "legacy_gifts.py": "eblannft_beta_runtime/legacy_gifts.py",
+}
+PUBLISH_MAX_FILE_BYTES = 16 * 1024 * 1024
 
 
 def now_ts():
@@ -47,6 +57,37 @@ def server(method, path, body=None):
     if PLUGIN_KEY:
         headers["X-Plugin-Key"] = PLUGIN_KEY
     return http_json(method, f"{SERVER_URL}{path}", body=body, headers=headers)
+
+
+def server_raw(method, path, raw_body, content_type="application/octet-stream"):
+    headers = {"Content-Type": content_type}
+    if PLUGIN_KEY:
+        headers["X-Plugin-Key"] = PLUGIN_KEY
+    req = Request(f"{SERVER_URL}{path}", data=raw_body or b"", method=method, headers=headers)
+    with urlopen(req, timeout=30) as resp:
+        return resp.read()
+
+
+def fetch_tg_file(file_id):
+    res = tg("getFile", {"file_id": file_id})
+    file_path = (((res or {}).get("result") or {}).get("file_path") or "").strip()
+    if not file_path:
+        raise RuntimeError("no file_path in getFile response")
+    req = Request(f"{FILE_API}/{file_path}")
+    with urlopen(req, timeout=60) as resp:
+        return resp.read()
+
+
+VERSION_RE = re.compile(r'^__version__\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+
+
+def extract_version_from_plugin_bytes(data):
+    try:
+        text = data.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+    m = VERSION_RE.search(text)
+    return m.group(1).strip() if m else ""
 
 
 def send(chat_id, text, reply_markup=None):
@@ -163,6 +204,105 @@ def start_flow(chat_id):
     send(chat_id, "Пришли <b>user id</b>, <b>@username</b> или ссылку <code>https://t.me/...</code> на канал/аккаунт.")
 
 
+def start_publish_flow(chat_id):
+    STATES[chat_id] = {
+        "mode": "publish",
+        "step": "collect",
+        "files": {},        # rel_path -> bytes
+        "version": "",
+        "notes": "",
+    }
+    send(
+        chat_id,
+        (
+            "Пришли новые файлы плагина <b>как документы</b> (не сжатые).\n"
+            "Принимаются:\n"
+            "• <code>eblannft_beta.plugin</code>\n"
+            "• <code>plugin.py</code>, <code>__init__.py</code>, <code>sync_client.py</code>, <code>legacy_gifts.py</code> (попадут в <code>eblannft_beta_runtime/</code>)\n\n"
+            "Когда всё пришлёшь — отправь <code>/done</code>. Отмена: <code>/cancel</code>."
+        ),
+    )
+
+
+def publish_handle_document(chat_id, state, msg):
+    doc = msg.get("document") or {}
+    raw_name = (doc.get("file_name") or "").strip()
+    file_id = doc.get("file_id") or ""
+    size = int(doc.get("file_size") or 0)
+    if not raw_name or not file_id:
+        send(chat_id, "Документ без имени — пропускаю. Пришли как файл, не как фото/архив.")
+        return
+    if size > PUBLISH_MAX_FILE_BYTES:
+        send(chat_id, f"Файл {raw_name} слишком большой ({size} байт).")
+        return
+    rel = ALLOWED_UPDATE_FILES.get(raw_name)
+    if not rel:
+        send(
+            chat_id,
+            f"Не понял <code>{raw_name}</code>. Допустимые имена: " + ", ".join(f"<code>{k}</code>" for k in ALLOWED_UPDATE_FILES),
+        )
+        return
+    try:
+        data = fetch_tg_file(file_id)
+    except Exception as e:
+        send(chat_id, f"Не смог скачать <code>{raw_name}</code>: <code>{str(e)[:200]}</code>")
+        return
+    state["files"][rel] = data
+    if rel == "eblannft_beta.plugin":
+        ver = extract_version_from_plugin_bytes(data)
+        if ver:
+            state["version"] = ver
+    have = "\n".join(f"• <code>{r}</code> ({len(b)}b)" for r, b in state["files"].items())
+    ver_line = f"\n\nверсия из .plugin: <b>{state['version']}</b>" if state.get("version") else ""
+    send(chat_id, f"Принял <code>{rel}</code>.\n\nСейчас в очереди:\n{have}{ver_line}\n\nЕщё файлы — пришли. Готово — <code>/done</code>.")
+
+
+def publish_finalize(chat_id, state):
+    files = state.get("files") or {}
+    if not files:
+        send(chat_id, "Ничего не прислал — нечего публиковать. /cancel чтобы выйти.")
+        return
+    version = (state.get("version") or "").strip()
+    if not version:
+        state["step"] = "version"
+        send(chat_id, "Пришли строку версии (например <code>1.0.9</code>):")
+        return
+    state["step"] = "notes"
+    send(chat_id, f"Версия: <b>{version}</b>. Пришли release notes одной репликой (или <code>-</code> чтобы оставить пустыми):")
+
+
+def publish_upload_all(chat_id, state):
+    files = state.get("files") or {}
+    version = (state.get("version") or "").strip()
+    notes = (state.get("notes") or "").strip()
+    if not files or not version:
+        send(chat_id, "Состояние сломалось, начни /publish заново.")
+        STATES.pop(chat_id, None)
+        return
+    uploaded = []
+    for rel, data in files.items():
+        try:
+            server_raw("PUT", f"/updates/files/{quote(rel, safe='/')}", data)
+            uploaded.append(rel)
+        except Exception as e:
+            send(chat_id, f"Не смог залить <code>{rel}</code>: <code>{str(e)[:200]}</code>")
+            return
+    manifest = {
+        "version": version,
+        "notes": notes,
+        "files": list(files.keys()),
+    }
+    try:
+        server("PUT", "/updates/manifest.json", manifest)
+    except Exception as e:
+        send(chat_id, f"Файлы залиты, но manifest упал: <code>{str(e)[:200]}</code>")
+        return
+    STATES.pop(chat_id, None)
+    files_block = "\n".join(f"• <code>{r}</code>" for r in uploaded)
+    notes_block = f"\n\nnotes:\n<code>{notes}</code>" if notes else ""
+    send(chat_id, f"✓ Опубликовано <b>v{version}</b>\n\n{files_block}{notes_block}")
+
+
 def handle_message(msg):
     chat_id = int(msg["chat"]["id"])
     user_id = int((msg.get("from") or {}).get("id") or 0)
@@ -171,12 +311,29 @@ def handle_message(msg):
         send(chat_id, "Нет доступа.")
         return
     if text.startswith("/start"):
-        send(chat_id, "Бот бейджей eblanNFT.", {
+        send(chat_id, "Бот eblanNFT.", {
             "inline_keyboard": [
                 [{"text": "Выдать / изменить бейдж", "callback_data": "new"}],
                 [{"text": "Список бейджей", "callback_data": "list"}],
+                [{"text": "Опубликовать апдейт", "callback_data": "publish"}],
             ]
         })
+        return
+    if text.startswith("/cancel"):
+        if STATES.pop(chat_id, None) is not None:
+            send(chat_id, "Отменено.")
+        else:
+            send(chat_id, "Активной операции нет.")
+        return
+    if text.startswith("/publish"):
+        start_publish_flow(chat_id)
+        return
+    if text.startswith("/done"):
+        st = STATES.get(chat_id)
+        if st and st.get("mode") == "publish":
+            publish_finalize(chat_id, st)
+        else:
+            send(chat_id, "Активной публикации нет.")
         return
     if text.startswith("/new"):
         start_flow(chat_id)
@@ -185,8 +342,31 @@ def handle_message(msg):
         show_list(chat_id)
         return
     state = STATES.get(chat_id)
+    if state and state.get("mode") == "publish":
+        step = state.get("step")
+        if msg.get("document"):
+            publish_handle_document(chat_id, state, msg)
+            return
+        if step == "version":
+            v = text.strip()
+            if not v:
+                send(chat_id, "Пустая версия. Пришли строку вида <code>1.0.9</code>.")
+                return
+            state["version"] = v
+            publish_finalize(chat_id, state)
+            return
+        if step == "notes":
+            notes = text.strip()
+            if notes == "-":
+                notes = ""
+            state["notes"] = notes
+            publish_upload_all(chat_id, state)
+            return
+        if step == "collect":
+            send(chat_id, "Жду документы. Когда всё пришлёшь — <code>/done</code>, отмена — <code>/cancel</code>.")
+            return
     if not state:
-        send(chat_id, "Команды: /new, /list")
+        send(chat_id, "Команды: /new, /list, /publish")
         return
     step = state.get("step")
     if step == "target":
@@ -264,6 +444,10 @@ def handle_callback(cb):
     if data == "list":
         answer_callback(cb["id"])
         show_list(chat_id)
+        return
+    if data == "publish":
+        answer_callback(cb["id"])
+        start_publish_flow(chat_id)
         return
     if data.startswith("del:"):
         key = data[4:]

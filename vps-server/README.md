@@ -63,8 +63,37 @@ run.bat
 - `GET  /health` — `{ ok, version, users }`
 - `GET  /api/v1/users/{user_key}/state` — публичное чтение
 - `PUT  /api/v1/users/{user_key}/state` — запись (нужен `X-Plugin-Key`)
+- `GET  /updates/manifest.json` — манифест последней версии плагина
+- `GET  /updates/files/<rel>` — байты файла плагина/рантайма
+- `PUT  /updates/files/<rel>` — заливка файла (нужен `X-Plugin-Key`)
+- `PUT  /updates/manifest.json` — заливка манифеста (нужен `X-Plugin-Key`)
 
 `user_key = "tg:" + telegram_user_id`.
+
+## Публикация апдейтов через бота
+
+GitHub в РФ блокируют, поэтому файлы плагина клиенты тянут с этого VPS.
+Заливать новые версии удобнее всего через бота — лезть в SSH не нужно.
+
+1. В DM с ботом (`badge_bot.py`) → `/publish`.
+2. Прислать как **документы** (не сжатые) свежие файлы:
+   - `eblannft_beta.plugin`
+   - `plugin.py`, `__init__.py`, `sync_client.py`, `legacy_gifts.py` (любые из изменённых)
+3. Бот сам:
+   - выдернет `__version__` из `.plugin`;
+   - попросит release notes (или `-` чтобы пропустить);
+   - сделает `PUT /updates/files/...` + `PUT /updates/manifest.json`.
+4. Клиенты при следующей проверке апдейтов увидят новую версию и подтянут файлы.
+
+Где это лежит на диске: `--updates-dir` (env `EBLANNFT_UPDATES_DIR`, дефолт `./updates`).
+В systemd-юните стоит зафиксировать его, например, на `/var/lib/eblannft-beta/updates`.
+
+## URL обновлений в плагине
+
+В `eblannft_beta.plugin` есть константа `_UPDATE_BASE_URL_DEFAULT` — поставь
+туда адрес своего VPS (`http://host:8787` или с nginx/HTTPS). Можно
+переопределять без пересборки `.plugin` через настройку плагина
+`eblannft_beta_update_base_url`.
 
 ## systemd unit
 

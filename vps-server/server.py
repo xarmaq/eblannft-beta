@@ -9,8 +9,16 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 MAX_BODY_BYTES = 12 * 1024 * 1024
+UPDATES_MAX_FILE_BYTES = 16 * 1024 * 1024
+UPDATES_ALLOWED_FILES = {
+    "eblannft_beta.plugin",
+    "eblannft_beta_runtime/__init__.py",
+    "eblannft_beta_runtime/plugin.py",
+    "eblannft_beta_runtime/sync_client.py",
+    "eblannft_beta_runtime/legacy_gifts.py",
+}
 ENTRY_ALLOWED_KEYS = {
     "key",
     "b64",
@@ -136,6 +144,111 @@ def normalize_number(token):
     if num:
         return "888" + num
     return ""
+
+
+class UpdatesStore:
+    """File-backed store for plugin self-update artifacts. The structure on
+    disk is:
+        <updates_dir>/manifest.json
+        <updates_dir>/files/eblannft_beta.plugin
+        <updates_dir>/files/eblannft_beta_runtime/plugin.py
+        ...
+    Manifest is read on every request so the bot can hot-swap it without
+    a server restart."""
+
+    def __init__(self, updates_dir):
+        self.root_dir = Path(updates_dir)
+        self.files_dir = self.root_dir / "files"
+        self.manifest_path = self.root_dir / "manifest.json"
+        self.files_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def _safe_rel(self, rel_path):
+        rel = clean_str(rel_path, 256).strip().replace("\\", "/").lstrip("/")
+        if not rel:
+            return ""
+        if rel not in UPDATES_ALLOWED_FILES:
+            return ""
+        return rel
+
+    def file_disk_path(self, rel_path):
+        rel = self._safe_rel(rel_path)
+        if not rel:
+            return None
+        target = (self.files_dir / rel).resolve()
+        try:
+            base = self.files_dir.resolve()
+        except Exception:
+            return None
+        try:
+            target.relative_to(base)
+        except Exception:
+            return None
+        return target
+
+    def read_file(self, rel_path):
+        path = self.file_disk_path(rel_path)
+        if path is None or not path.exists() or not path.is_file():
+            return None
+        try:
+            with path.open("rb") as fh:
+                return fh.read()
+        except Exception:
+            return None
+
+    def write_file(self, rel_path, data):
+        path = self.file_disk_path(rel_path)
+        if path is None:
+            return False
+        if not isinstance(data, (bytes, bytearray)):
+            return False
+        if len(data) > UPDATES_MAX_FILE_BYTES:
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        with self._lock:
+            with tmp.open("wb") as fh:
+                fh.write(bytes(data))
+            os.replace(tmp, path)
+        return True
+
+    def read_manifest(self):
+        if not self.manifest_path.exists():
+            return {}
+        try:
+            with self.manifest_path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if not isinstance(data, dict):
+                return {}
+            return data
+        except Exception:
+            return {}
+
+    def write_manifest(self, payload):
+        if not isinstance(payload, dict):
+            return False
+        version = clean_str(payload.get("version", ""), 64).strip()
+        if not version:
+            return False
+        files = []
+        for raw in clean_list(payload.get("files", []), max_items=32):
+            rel = self._safe_rel(raw)
+            if rel and rel not in files:
+                files.append(rel)
+        if not files:
+            return False
+        manifest = {
+            "version": version,
+            "notes": clean_str(payload.get("notes", ""), 4096).strip(),
+            "files": files,
+            "updated_at": now_ts(),
+        }
+        tmp = self.manifest_path.with_suffix(".json.tmp")
+        with self._lock:
+            with tmp.open("w", encoding="utf-8") as fh:
+                json.dump(manifest, fh, ensure_ascii=False, separators=(",", ":"))
+            os.replace(tmp, self.manifest_path)
+        return True
 
 
 class JsonStorage:
@@ -363,6 +476,37 @@ def sanitize_badge(payload):
 class ApiHandler(BaseHTTPRequestHandler):
     server_version = "eblannft-beta-server"
 
+    def _send_bytes(self, status, data, content_type):
+        body = data or b""
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+    def _extract_update_path(self):
+        """Returns ('manifest', '') / ('file', rel) / (None, None)."""
+        path = urlparse(self.path).path
+        parts = [p for p in path.split("/") if p]
+        if not parts or parts[0] != "updates":
+            return None, None
+        if len(parts) == 2 and parts[1] == "manifest.json":
+            return "manifest", ""
+        if len(parts) >= 3 and parts[1] == "files":
+            rel = "/".join(parts[2:])
+            return "file", unquote(rel)
+        return None, None
+
+    def _read_raw_body(self):
+        length = clean_int(self.headers.get("Content-Length", "0"), 0)
+        if length <= 0:
+            return b""
+        if length > MAX_BODY_BYTES:
+            raise ValueError("request body too large")
+        return self.rfile.read(length) or b""
+
     def _json(self, status, payload):
         raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
@@ -421,6 +565,18 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        upd_kind, upd_rel = self._extract_update_path()
+        if upd_kind == "manifest":
+            manifest = self.server.updates.read_manifest()
+            self._json(200 if manifest else 404, manifest or {"ok": False, "error": "no manifest"})
+            return
+        if upd_kind == "file":
+            data = self.server.updates.read_file(upd_rel)
+            if data is None:
+                self._error(404, "file not found")
+                return
+            self._send_bytes(200, data, "application/octet-stream")
+            return
         if path == "/health":
             self._json(200, {
                 "ok": True,
@@ -453,6 +609,38 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json(200, record)
 
     def do_PUT(self):
+        upd_kind, upd_rel = self._extract_update_path()
+        if upd_kind is not None:
+            if not self._check_auth():
+                self._error(401, "invalid plugin key")
+                return
+            try:
+                raw = self._read_raw_body()
+            except Exception as e:
+                self._error(400, str(e))
+                return
+            if upd_kind == "manifest":
+                try:
+                    payload = json.loads(raw.decode("utf-8") or "{}")
+                except Exception as e:
+                    self._error(400, f"bad json: {e}")
+                    return
+                if not isinstance(payload, dict):
+                    self._error(400, "manifest must be an object")
+                    return
+                if not self.server.updates.write_manifest(payload):
+                    self._error(400, "invalid manifest")
+                    return
+                self._json(200, {"ok": True, "manifest": self.server.updates.read_manifest()})
+                return
+            if not raw:
+                self._error(400, "empty body")
+                return
+            if not self.server.updates.write_file(upd_rel, raw):
+                self._error(400, "rejected (unknown path or too large)")
+                return
+            self._json(200, {"ok": True, "path": upd_rel, "size": len(raw)})
+            return
         badge_key = self._extract_badge_key()
         if badge_key is not None:
             if not self._check_auth():
@@ -516,6 +704,7 @@ def parse_args():
     parser.add_argument("--host", default=os.environ.get("EBLANNFT_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("EBLANNFT_PORT", "8787")))
     parser.add_argument("--data-dir", default=os.environ.get("EBLANNFT_DATA_DIR", "./data"))
+    parser.add_argument("--updates-dir", default=os.environ.get("EBLANNFT_UPDATES_DIR", "./updates"))
     parser.add_argument("--plugin-key", default=os.environ.get("EBLANNFT_PLUGIN_KEY", ""))
     return parser.parse_args()
 
@@ -523,11 +712,14 @@ def parse_args():
 def main():
     args = parse_args()
     storage = JsonStorage(args.data_dir)
+    updates = UpdatesStore(args.updates_dir)
     server = ThreadingHTTPServer((args.host, args.port), ApiHandler)
     server.storage = storage
+    server.updates = updates
     server.plugin_key = clean_str(args.plugin_key, 256)
     print(f"eblanNFT Beta server v{VERSION} listening on http://{args.host}:{args.port}")
     print(f"data dir: {Path(args.data_dir).resolve()}")
+    print(f"updates dir: {Path(args.updates_dir).resolve()}")
     if server.plugin_key:
         print("plugin key: enabled")
     else:

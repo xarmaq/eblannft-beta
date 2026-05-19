@@ -38,6 +38,11 @@ __icon__ = "HappyHappyPepe/31"
 _RUNTIME_REPO = "xarmaq/eblannft-beta"
 _RUNTIME_BRANCH = "main"
 _RUNTIME_DIR_NAME = "eblannft_beta"
+
+# VPS-based update source. GitHub is blocked in RU, so file downloads and the
+# update manifest go through our own server (see vps-server/server.py).
+# Override at runtime via plugin setting 'eblannft_beta_update_base_url'.
+_UPDATE_BASE_URL_DEFAULT = "http://35.242.218.223:8787"
 _RUNTIME_PACKAGE_NAME = "eblannft_beta_runtime"
 _RUNTIME_PACKAGE_ALIAS = "_eblannft_beta_runtime_pkg"
 _IMPL_ATTR_CANDIDATES = ("EblanNftPlugin", "NftClonerPlugin")
@@ -266,12 +271,32 @@ def _maybe_show_storage_permission_alert(err):
             pass
 
 
+def _update_base_url():
+    """Where to pull updates and the manifest from. Defaults to the constant
+    above; users (and the runtime, once loaded) can override via the
+    'eblannft_beta_update_base_url' setting so we can flip hosts without
+    re-shipping the .plugin file."""
+    url = _UPDATE_BASE_URL_DEFAULT
+    try:
+        # _plugin_instance is only assigned after the runtime loads, so guard
+        # via globals() — _raw_url is called during the very first bootstrap.
+        inst = globals().get("_plugin_instance")
+        if inst is not None:
+            override = inst.get_setting("eblannft_beta_update_base_url", "") or ""
+            override = str(override).strip()
+            if override:
+                url = override
+    except Exception:
+        pass
+    return url.rstrip("/")
+
+
 def _raw_url(rel_path):
     rel = str(rel_path or "").replace("\\", "/").lstrip("/")
-    # Append a timestamp query so raw.githubusercontent.com's CDN always
-    # serves the freshest commit instead of a 5-10 min stale copy.
+    # Cache-bust the VPS response in case nginx / a reverse-proxy is in front.
     bust = int(time.time())
-    return f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/{rel}?_={bust}"
+    from urllib.parse import quote as _q
+    return f"{_update_base_url()}/updates/files/{_q(rel, safe='/')}?_={bust}"
 
 
 def _detect_client_storage_dir_name():
@@ -1982,14 +2007,11 @@ def _resolve_dest_for_manifest_entry(rel_path):
 
 
 def _fetch_manifest():
-    # Bust raw.githubusercontent.com's CDN cache (~5-10 min TTL otherwise) by
-    # appending a unique query string. The CDN keys on the full URL, so each
-    # fetch returns whatever is currently committed instead of a stale copy.
+    # Pulls the freshest manifest from the VPS. Bust any proxy cache by
+    # appending a unique query string; the server itself sets no-cache, this
+    # is just defense-in-depth against an nginx in front of it.
     bust = int(time.time())
-    url = (
-        f"https://raw.githubusercontent.com/{_RUNTIME_REPO}/{_RUNTIME_BRANCH}/"
-        f"{_UPDATE_MANIFEST_PATH}?_={bust}"
-    )
+    url = f"{_update_base_url()}/updates/manifest.json?_={bust}"
     raw, _total = _http_get(url, timeout=12)
     text = raw.decode("utf-8", errors="replace")
     data = json.loads(text)

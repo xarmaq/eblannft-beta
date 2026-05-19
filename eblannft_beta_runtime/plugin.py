@@ -5407,6 +5407,187 @@ class NftClonerPlugin(BasePlugin):
             pass
         return tv
 
+    def _build_uitweaks_style_header(self, ctx):
+        try:
+            container = FrameLayout(ctx)
+
+            try:
+                from org.telegram.ui.Components.Premium import StarParticlesView
+                particlesView = StarParticlesView(ctx)
+                try:
+                    particlesView.setClipWithGradient()
+                except:
+                    pass
+                try:
+                    particlesView.drawable.colorKey = Theme.key_premiumStarGradient2
+                    particlesView.drawable.isCircle = True
+                    particlesView.drawable.centerOffsetY = AndroidUtilities.dp(0)
+                    particlesView.drawable.minLifeTime = 2000
+                    particlesView.drawable.randLifeTime = 3000
+                    particlesView.drawable.useRotate = False
+                    particlesView.drawable.updateColors()
+                except:
+                    pass
+                container.addView(
+                    particlesView,
+                    LayoutHelper.createFrame(-1, 220, Gravity.CENTER_HORIZONTAL | Gravity.TOP, 0, 0, 0, 0),
+                )
+                try:
+                    run_on_ui_thread(lambda: particlesView.flingParticles(360), 200)
+                except:
+                    pass
+            except:
+                pass
+
+            imageView = BackupImageView(ctx)
+            try:
+                imageView.setRoundRadius(AndroidUtilities.dp(54))
+            except:
+                pass
+
+            ICON_INDEX = 31
+
+            def _try_load_sticker():
+                try:
+                    account = int(UserConfig.selectedAccount)
+                except:
+                    account = 0
+                try:
+                    mc = MediaDataController.getInstance(account)
+                except:
+                    mc = None
+                if mc is None:
+                    return False
+                try:
+                    ss = mc.getStickerSetByName(EBLANNFT_BETA_WELCOME_STICKER_SET) or mc.getStickerSetByEmojiOrName(EBLANNFT_BETA_WELCOME_STICKER_SET)
+                except:
+                    ss = None
+                try:
+                    if ss and ss.documents and ss.documents.size() > 0:
+                        idx = min(ICON_INDEX, ss.documents.size() - 1)
+                        doc = ss.documents.get(idx)
+                        loc = ImageLocation.getForDocument(doc)
+                        if loc is not None:
+                            imageView.setImage(loc, "108_108", None, None, 0, 1)
+                            try:
+                                receiver = imageView.getImageReceiver()
+                                if receiver is not None:
+                                    if hasattr(receiver, "setAllowStartAnimation"):
+                                        receiver.setAllowStartAnimation(True)
+                                    if hasattr(receiver, "startAnimation"):
+                                        receiver.startAnimation()
+                            except:
+                                pass
+                            return True
+                except:
+                    pass
+                return False
+
+            if not _try_load_sticker():
+                try:
+                    account = int(UserConfig.selectedAccount)
+                except:
+                    account = 0
+                try:
+                    MediaDataController.getInstance(account).loadStickersByEmojiOrName(
+                        EBLANNFT_BETA_WELCOME_STICKER_SET, False, False
+                    )
+                except:
+                    pass
+                try:
+                    run_on_ui_thread(_try_load_sticker, 1500)
+                except:
+                    pass
+
+            container.addView(
+                imageView,
+                LayoutHelper.createFrame(108, 108, Gravity.CENTER | Gravity.TOP, 0, 20, 0, 0),
+            )
+
+            title = TextView(ctx)
+            try:
+                title.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText))
+            except:
+                pass
+            try:
+                title.setTypeface(AndroidUtilities.getTypeface(AndroidUtilities.TYPEFACE_ROBOTO_MEDIUM))
+            except:
+                try:
+                    title.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"))
+                except:
+                    pass
+            try:
+                title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22)
+            except:
+                pass
+            try:
+                title.setText(f"eblanNFT Beta {__version__}")
+            except:
+                title.setText("eblanNFT Beta")
+            try:
+                title.setSingleLine(True)
+                title.setGravity(Gravity.CENTER)
+            except:
+                pass
+            container.addView(
+                title,
+                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 50, 145, 50, 0),
+            )
+
+            subtitle = TextView(ctx)
+            try:
+                subtitle.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText))
+            except:
+                pass
+            try:
+                subtitle.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14)
+            except:
+                pass
+            try:
+                subtitle.setText("Бета-канал eblanNFT — NFT подарки, юзернеймы и номера.")
+            except:
+                pass
+            try:
+                subtitle.setGravity(Gravity.CENTER)
+            except:
+                pass
+            container.addView(
+                subtitle,
+                LayoutHelper.createFrame(-2, -2, Gravity.CENTER | Gravity.TOP, 40, 180, 40, 27),
+            )
+
+            try:
+                from android.view import MotionEvent
+
+                class _BounceTouchListener(dynamic_proxy(View.OnTouchListener)):
+                    def onTouch(self_obj, v, event):
+                        try:
+                            action = event.getAction()
+                            if action == MotionEvent.ACTION_DOWN:
+                                v.animate().scaleX(0.9).scaleY(0.9).setDuration(100).start()
+                            elif action == MotionEvent.ACTION_UP or action == MotionEvent.ACTION_CANCEL:
+                                v.animate().scaleX(1.0).scaleY(1.0).setDuration(100).start()
+                        except:
+                            pass
+                        return False
+
+                class _StickerReroll(dynamic_proxy(View.OnClickListener)):
+                    def onClick(self_obj, v):
+                        try:
+                            _try_load_sticker()
+                        except:
+                            pass
+
+                imageView.setOnTouchListener(_BounceTouchListener())
+                imageView.setOnClickListener(_StickerReroll())
+            except:
+                pass
+
+            return container
+        except Exception as e:
+            _log(f"build uitweaks-style header fail: {e}")
+            return None
+
     def _build_settings_header_view(self, ctx):
         try:
             outer = LinearLayout(ctx)
@@ -6015,6 +6196,30 @@ class NftClonerPlugin(BasePlugin):
             UItem = find_class("org.telegram.ui.Components.UItem")
             if not UItem:
                 return
+
+            if not has_header:
+                header_view = self._build_uitweaks_style_header(ctx)
+                if header_view is not None:
+                    hi = UItem.asCustom(header_view)
+                    try:
+                        hi.object2 = "__eblannft_beta_settings_header__"
+                    except:
+                        pass
+                    try:
+                        hi.setTransparent(True)
+                    except:
+                        pass
+                    try:
+                        HeaderSetting = find_class("com.exteragram.messenger.plugins.models.HeaderSetting")
+                        if HeaderSetting is not None:
+                            hi.settingItem = HeaderSetting("eblannft_header")
+                    except:
+                        pass
+                    try:
+                        items.add(0, hi)
+                        items.add(1, UItem.asShadow())
+                    except:
+                        items.add(hi)
 
             if not has_footer:
                 footer = self._build_settings_footer_view(ctx)
