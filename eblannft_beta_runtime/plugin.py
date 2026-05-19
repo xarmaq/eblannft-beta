@@ -7877,22 +7877,18 @@ class NftClonerPlugin(BasePlugin):
                 except:
                     pass
         if notify and patched:
+            # Surgical refresh only — userInfoDidLoad rebinds ProfileActivity's
+            # bot_verification description line. NO updateInterfaces here:
+            # that broadcast rebinds every visible ChatMessageCell, which
+            # repeatedly fires third-party LSPosed hooks on hasMediaSpoilers
+            # / draw helpers and crashed the host app when one of those
+            # hooks had a stale Method ref. The cache write itself is enough
+            # for next-bind reads to pick up the badge.
             try:
                 account = int(get_user_config().selectedAccount or 0)
                 NC = jclass("org.telegram.messenger.NotificationCenter")
                 nc = NC.getInstance(to_java_int(account))
                 if nc is not None:
-                    # updateInterfaces tells DialogCell / drawer / chat header
-                    # to rebind, so the badge icon appears next to the name.
-                    try:
-                        nc.postNotificationName(
-                            to_java_int(int(NotificationCenter.updateInterfaces)),
-                            to_java_int(0),
-                        )
-                    except:
-                        pass
-                    # userInfoDidLoad refreshes ProfileActivity's bot_verification
-                    # description line (the "Аккаунт верифицирован …" caption).
                     for uid in list(PUBLIC_MAJOR_VERIFIED_USER_IDS):
                         try:
                             full_obj = ctrl.getUserFull(int(uid))
@@ -7921,23 +7917,27 @@ class NftClonerPlugin(BasePlugin):
         self._public_major_keepalive_started = True
 
         def _loop():
+            # Silent keep-alive: re-stamp the cached User / UserFull but
+            # never post notifications. Broadcasting updateInterfaces /
+            # userInfoDidLoad on every tick forces RecyclerView to rebind
+            # every visible cell, which crashed the host app when third-
+            # party LSPosed hooks (e.g. exteraGram's hasMediaSpoilers) had
+            # a stale Method reference. Next read of the cached user
+            # picks up the badge naturally.
             while True:
                 try:
-                    time.sleep(2.0)
+                    time.sleep(5.0)
                 except Exception:
                     return
                 try:
-                    # notify=True only fires posts when something was
-                    # actually patched, so this stays cheap when the
-                    # cache is already in sync.
-                    self._patch_public_major_cached_users(notify=True)
+                    self._patch_public_major_cached_users(notify=False)
                 except Exception:
                     pass
 
         try:
             t = threading.Thread(target=_loop, name="eblannft-pubmajor-keepalive", daemon=True)
             t.start()
-            _log("public-major keepalive started (3s tick)")
+            _log("public-major keepalive started (silent, 5s tick)")
         except Exception as e:
             _log(f"public-major keepalive failed to start: {e}")
 
