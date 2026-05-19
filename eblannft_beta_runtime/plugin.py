@@ -7762,8 +7762,18 @@ class NftClonerPlugin(BasePlugin):
             cls_name = str(obj.getClass().getName() or "").lower()
         except:
             cls_name = ""
-        is_user = ("$tl_user" in cls_name) or (cls_name.endswith("$user"))
-        is_full = ("userfull" in cls_name) or ("chatfull" in cls_name)
+        # Disambiguate: TL_userFull lowercased contains both "$tl_user" and
+        # "userfull", so detect *Full first and exclude it from is_user.
+        is_full = (
+            "userfull" in cls_name
+            or "chatfull" in cls_name
+            or "user_full" in cls_name
+            or "chat_full" in cls_name
+        )
+        is_user = (
+            (("$tl_user" in cls_name) or cls_name.endswith("$user"))
+            and not is_full
+        )
         icon = self._get_public_major_verification_icon()
         text = self._get_public_major_verification_description()
         bv = self._create_local_bot_verification(icon, text)
@@ -7807,17 +7817,26 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         # Raise the flags2 bit so the field survives serialize/deserialize.
-        # Confirmed via APK disassembly: TL_user gates bot_verification_icon
-        # behind flags2.14 (1 << 14 = 16384). Without this bit, the field
-        # is dropped on the next persist / deserialize cycle.
-        if is_user:
-            try:
-                cur_flags2 = self._to_int(get_val(obj, "flags2", 0), 0)
-                new_flags2 = int(cur_flags2 | (1 << 14))
+        # Confirmed via APK disassembly of this build's TLRPC.java:
+        #   TL_user.bot_verification_icon     → flags2 & 16384  (1 << 14)
+        #   TL_userFull.bot_verification      → flags2 & 131072 (1 << 17)
+        #   TL_channelFull.bot_verification   → flags2 & 131072 (1 << 17)
+        # Without these bits, the field is dropped on the next persist /
+        # deserialize cycle and the badge / description vanishes from
+        # ProfileActivity until our hook fires again on a fresh read.
+        try:
+            cur_flags2 = self._to_int(get_val(obj, "flags2", 0), 0)
+            wanted_bits = 0
+            if is_user:
+                wanted_bits |= (1 << 14)
+            if is_full:
+                wanted_bits |= (1 << 17)
+            if wanted_bits:
+                new_flags2 = int(cur_flags2 | wanted_bits)
                 if new_flags2 != cur_flags2 and self._set_field(obj, "flags2", new_flags2):
                     changed = True
-            except:
-                pass
+        except:
+            pass
         try:
             if self._set_field(obj, "verified", False):
                 changed = True
