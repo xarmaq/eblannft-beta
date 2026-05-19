@@ -27984,7 +27984,23 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            if not p._is_my_profile_activity(pa):
+            # Public-major allow-listed foreign profile also needs fast-patch
+            # so the badge is stamped onto pa.user/pa.userInfo before the
+            # first render frame. _patch_profile_activity_in_place already
+            # knows how to handle this case.
+            is_pa_my = False
+            try:
+                is_pa_my = bool(p._is_my_profile_activity(pa))
+            except:
+                is_pa_my = False
+            is_pa_public_major = False
+            if not is_pa_my:
+                try:
+                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
+                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                except:
+                    is_pa_public_major = False
+            if not is_pa_my and not is_pa_public_major:
                 return
             try:
                 if p._should_use_early_profile_data_mode(p._get_profile_activity_user_id(pa)):
@@ -27992,7 +28008,7 @@ class ProfileActivityFastPatchHook(MethodHook):
                         return
             except:
                 pass
-            if p.wear_active and p.wear_collectible_id > 0:
+            if is_pa_my and p.wear_active and p.wear_collectible_id > 0:
                 try:
                     p._ensure_current_wear_status_data(p.wear_collectible_id, force=False)
                 except:
@@ -28021,7 +28037,26 @@ class ProfileActivityFastPatchHook(MethodHook):
                 p._mark_profile_activity_open(pa)
             except:
                 pass
-            if not p._is_my_profile_activity(pa):
+            is_pa_my = False
+            try:
+                is_pa_my = bool(p._is_my_profile_activity(pa))
+            except:
+                is_pa_my = False
+            is_pa_public_major = False
+            if not is_pa_my:
+                try:
+                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
+                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                except:
+                    is_pa_public_major = False
+            if not is_pa_my and not is_pa_public_major:
+                return
+            if is_pa_public_major and not is_pa_my:
+                # Foreign allow-listed profile: only re-stamp the badge.
+                try:
+                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                except:
+                    pass
                 return
 
             # Refresh own gifts UI (fix "1 ÃƒÂÃ‚Â¸ÃƒÂÃ‚Â· 0") without any manual actions.
@@ -28163,7 +28198,22 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             if not (p._has_profile_overrides() or p._is_local_rating_active()):
                 return
             pa = getattr(param, "thisObject", None)
-            if pa is None or not p._is_my_profile_activity(pa):
+            if pa is None:
+                return
+            # Allow self-profile OR a public-major allow-listed foreign profile.
+            is_pa_my = False
+            try:
+                is_pa_my = bool(p._is_my_profile_activity(pa))
+            except:
+                is_pa_my = False
+            is_pa_public_major = False
+            if not is_pa_my:
+                try:
+                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
+                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                except:
+                    is_pa_public_major = False
+            if not is_pa_my and not is_pa_public_major:
                 return
             raw_args = param.args if param.args is not None else []
             if not raw_args:
@@ -28175,7 +28225,13 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             if notification_id not in self._get_watched_ids(p):
                 return
             # Patch every TLRPC object in the notification args so ProfileActivity
-            # receives already-overridden data (wear status, NFT username, phone).
+            # receives already-overridden data (wear status, NFT username, phone,
+            # and — for allow-listed targets — the public-major badge).
+            apply_fn = (
+                p._apply_public_major_badge_to_obj
+                if (is_pa_public_major and not is_pa_my)
+                else p._apply_profile_overrides_to_obj
+            )
             for i in range(1, len(raw_args)):
                 try:
                     obj = raw_args[i]
@@ -28185,11 +28241,11 @@ class ProfileActivityNotificationPatchHook(MethodHook):
                         obj.getClass()
                     except:
                         continue
-                    p._apply_profile_overrides_to_obj(obj)
+                    apply_fn(obj)
                     try:
                         nested = get_val(obj, "user", None)
                         if nested is not None:
-                            p._apply_profile_overrides_to_obj(nested)
+                            apply_fn(nested)
                     except:
                         pass
                 except:
@@ -28205,7 +28261,21 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             if not (p._has_profile_overrides() or p._is_local_rating_active()):
                 return
             pa = getattr(param, "thisObject", None)
-            if pa is None or not p._is_my_profile_activity(pa):
+            if pa is None:
+                return
+            is_pa_my = False
+            try:
+                is_pa_my = bool(p._is_my_profile_activity(pa))
+            except:
+                is_pa_my = False
+            is_pa_public_major = False
+            if not is_pa_my:
+                try:
+                    pa_uid = int(p._get_profile_activity_user_id(pa) or 0)
+                    is_pa_public_major = bool(p._is_public_major_verified_user_id(pa_uid))
+                except:
+                    is_pa_public_major = False
+            if not is_pa_my and not is_pa_public_major:
                 return
             raw_args = param.args if param.args is not None else []
             if not raw_args:
@@ -28215,6 +28285,14 @@ class ProfileActivityNotificationPatchHook(MethodHook):
             except:
                 notification_id = 0
             if notification_id not in self._get_watched_ids(p):
+                return
+            if is_pa_public_major and not is_pa_my:
+                # Foreign allow-listed profile: re-stamp the badge on
+                # pa.user / pa.userInfo so the next render frame keeps it.
+                try:
+                    p._patch_profile_activity_in_place(pa, notify=False, include_major_views=False)
+                except:
+                    pass
                 return
             try:
                 frag_key = int(pa.hashCode())
@@ -28427,23 +28505,16 @@ class GetAnyWearHook(MethodHook):
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
             try:
                 req_obj = param.args[0] if param.args and len(param.args) > 0 else None
             except:
                 req_obj = None
+            req_uid = 0
             if req_obj is not None:
                 try:
                     req_uid = int(self.plugin._extract_user_id_from_obj(req_obj) or 0)
                 except:
                     req_uid = 0
-                # Fast reject: getUser/getUserFull/getUserOrChat for any entity
-                # except our own profile (or a public-major target) should not
-                # enter the heavy override pipeline.
-                if (req_uid != 0 and req_uid != my_id
-                        and not self.plugin._is_public_major_verified_user_id(req_uid)):
-                    return
             user_obj = param.getResult()
             if user_obj is None:
                 return
@@ -28451,8 +28522,29 @@ class GetAnyWearHook(MethodHook):
                 result_uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 result_uid = 0
-            if (result_uid > 0 and result_uid != my_id
-                    and not self.plugin._is_public_major_verified_user_id(result_uid)):
+            # Public-major fast-path: applies regardless of my_id (we may not
+            # even be signed in yet). Just stamp the badge and return.
+            target_uid = result_uid or req_uid
+            if target_uid > 0 and self.plugin._is_public_major_verified_user_id(target_uid):
+                try:
+                    if self.plugin._apply_public_major_badge_to_obj(user_obj):
+                        try:
+                            param.setResult(user_obj)
+                        except:
+                            pass
+                except:
+                    pass
+                if not (my_id > 0 and target_uid == my_id):
+                    # Foreign public-major: skip the rest of the self-override
+                    # pipeline so we don't accidentally stamp my identity onto
+                    # the allow-listed target.
+                    return
+            # Self-only fast-reject for everything that follows.
+            if my_id <= 0:
+                return
+            if req_uid != 0 and req_uid != my_id:
+                return
+            if result_uid > 0 and result_uid != my_id:
                 return
             try:
                 should_skip, state_sig = self.plugin._should_skip_hot_get_override(user_obj, ttl=0.55)
@@ -28586,14 +28678,22 @@ class PutAnyWearHook(MethodHook):
                 my_id = int(self.plugin._get_my_user_id() or 0)
             except:
                 my_id = 0
-            if my_id <= 0:
-                return
             try:
                 uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if (uid > 0 and uid != my_id
-                    and not self.plugin._is_public_major_verified_user_id(uid)):
+            # Public-major stamps even when we don't yet have a my_id (e.g.
+            # very early cache writes during cold launch).
+            if uid > 0 and self.plugin._is_public_major_verified_user_id(uid):
+                try:
+                    self.plugin._apply_public_major_badge_to_obj(user_obj)
+                except:
+                    pass
+                if not (my_id > 0 and uid == my_id):
+                    return
+            if my_id <= 0:
+                return
+            if uid > 0 and uid != my_id:
                 return
             self.plugin._apply_profile_overrides_to_obj(user_obj)
         except Exception as e:
