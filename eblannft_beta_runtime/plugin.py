@@ -77,7 +77,7 @@ __id__ = "eblannft_beta"
 __name__ = "eblanNFT Beta"
 __description__ = "eblanNFT. \n\nПозволяет визуально добавлять NFT подарки в профиль, менять свой номер телефона, ставить коллекционные юзернеймы.\nВ бете 1.0.2 добавлен сервер синхронизации — другие пользователи с этим же плагином видят твои NFT/номер/юзернейм в профиле.\n\n• Обновления выходят в [vc дополнения](https://t.me/vcvk1)"
 __author__ = "@xarmaq"
-__version__ = "1.0.91"
+__version__ = "1.0.92"
 __icon__ = "HappyHappyPepe/31"
 EBLANNFT_BETA_SUPPORT_CACHE_DIR = os.path.expanduser("~/.eblannft_beta_cache")
 EBLANNFT_BETA_ABOUT_USERNAME = "xarmaq"
@@ -2278,6 +2278,7 @@ class NftClonerPlugin(BasePlugin):
             self._hook_updates_wear()
             self._hook_userconfig_wear()
             self._hook_profile_activity_fastpatch()
+            self._hook_local_verification_drawables()
             self._hook_local_stars_balance()
             self._hook_profile_gifts_hash_guard()
             self._hook_app_resume_refresh()
@@ -7928,6 +7929,93 @@ class NftClonerPlugin(BasePlugin):
 
         walk(profile_activity, 0)
         return int(patched or 0)
+
+    def _patch_public_major_user_info_cell(self, cell, dialog_id=0):
+        if cell is None:
+            return False
+        try:
+            uid = int(dialog_id or 0)
+        except:
+            uid = 0
+        if uid <= 0:
+            try:
+                uid = int(get_val(cell, "dialogId", 0) or 0)
+            except:
+                uid = 0
+        if not self._is_public_major_verified_user_id(uid):
+            return False
+        try:
+            self._patch_public_major_cached_users(notify=False)
+        except:
+            pass
+        text = self._get_public_major_verification_description()
+        icon = self._get_public_major_verification_icon()
+        if not text or icon <= 0:
+            return False
+        try:
+            current_footer = get_val(cell, "footer", None)
+            current_plain = self._charsequence_to_plain_text(current_footer) if current_footer is not None else ""
+            if text in current_plain:
+                try:
+                    cell.invalidate()
+                except:
+                    pass
+                return False
+        except:
+            current_footer = None
+        try:
+            TextCls = jclass("org.telegram.ui.Components.Text")
+            AnimatedEmojiSpanCls = jclass("org.telegram.ui.Components.AnimatedEmojiSpan")
+            AlignmentCls = jclass("android.text.Layout$Alignment")
+            ssb = SpannableStringBuilder("x ")
+            seed = TextCls(ssb, 12.0)
+            try:
+                fm = seed.getFontMetricsInt()
+            except:
+                fm = None
+            if fm is not None:
+                span = AnimatedEmojiSpanCls(int(icon), fm)
+                ssb.setSpan(span, 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            ssb.append(str(text))
+            footer = TextCls(ssb, 12.0)
+            try:
+                footer = footer.align(AlignmentCls.ALIGN_CENTER)
+            except:
+                pass
+            try:
+                footer = footer.multiline(5)
+            except:
+                pass
+            try:
+                ds = AndroidUtilities.displaySize
+                max_w = int(min(int(ds.x), int(ds.y)) * 0.5)
+                footer = footer.setMaxWidth(float(max_w))
+            except:
+                pass
+            try:
+                footer = footer.supportAnimatedEmojis(cell)
+            except:
+                pass
+            self._set_field(cell, "footer", footer)
+            try:
+                cur_h = float(get_val(cell, "height", 0.0) or 0.0)
+                add_h = float(AndroidUtilities.dp(12.0)) + float(footer.getHeight()) + float(AndroidUtilities.dp(15.33))
+                if cur_h > 0 and current_footer is None:
+                    self._set_field(cell, "height", float(cur_h + add_h))
+            except:
+                pass
+            try:
+                cell.requestLayout()
+            except:
+                pass
+            try:
+                cell.invalidate()
+            except:
+                pass
+            return True
+        except Exception as e:
+            _log(f"public-major UserInfoCell patch error: {e}")
+            return False
 
     def _patch_public_major_cached_users(self, notify=False):
         """Re-apply the public-major badge directly on the MessagesController
@@ -21821,6 +21909,28 @@ class NftClonerPlugin(BasePlugin):
         except Exception as e:
             _log(f"Major name drawable hook skipped: {e}")
 
+        try:
+            UIC = jclass("org.telegram.ui.Cells.UserInfoCell")
+            for m in UIC.getDeclaredMethods():
+                try:
+                    if m.getName() != "set":
+                        continue
+                    params = m.getParameterTypes()
+                    if len(params) != 2:
+                        continue
+                    if params[0].getName() != "long":
+                        continue
+                except:
+                    continue
+                try:
+                    m.setAccessible(True)
+                except:
+                    pass
+                self.hooks_refs.append(self.hook_method(m, PublicMajorUserInfoCellHook(self)))
+                hooked += 1
+        except Exception as e:
+            _log(f"Public-major UserInfoCell hook skipped: {e}")
+
         if hooked:
             _log(f"Major drawable/info hooks installed: {hooked}")
 
@@ -28766,10 +28876,13 @@ class PutAnyWearHook(MethodHook):
             # putUser call from MessagesController. This is the hottest path
             # during chat/contact sync and accounts for most JNI traffic.
             try:
-                if not self.plugin._has_profile_overrides():
+                has_self_overrides = bool(self.plugin._has_profile_overrides())
+                has_public_major = bool(self.plugin._has_public_major_verification_targets())
+                if not has_self_overrides and not has_public_major:
                     return
             except:
-                pass
+                has_self_overrides = True
+                has_public_major = True
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
@@ -28792,6 +28905,8 @@ class PutAnyWearHook(MethodHook):
                     pass
                 if not (my_id > 0 and uid == my_id):
                     return
+            if not has_self_overrides:
+                return
             if my_id <= 0:
                 return
             if uid > 0 and uid != my_id:
@@ -28811,10 +28926,13 @@ class PutAnyWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                if not p._has_profile_overrides():
+                has_self_overrides = bool(p._has_profile_overrides())
+                has_public_major = bool(p._has_public_major_verification_targets())
+                if not has_self_overrides and not has_public_major:
                     return
             except:
-                pass
+                has_self_overrides = True
+                has_public_major = True
             if not param.args or len(param.args) < 1:
                 return
             user_obj = param.args[0]
@@ -28844,6 +28962,8 @@ class PutAnyWearHook(MethodHook):
                     pass
                 if not (my_id > 0 and uid == my_id):
                     return
+            if not has_self_overrides:
+                return
             if my_id <= 0:
                 return
             if uid > 0 and uid != my_id:
@@ -28881,10 +29001,13 @@ class PutUsersWearHook(MethodHook):
             # the per-item override pipeline even when the user has all
             # local overrides disabled.
             try:
-                if not self.plugin._has_profile_overrides():
+                has_self_overrides = bool(self.plugin._has_profile_overrides())
+                has_public_major = bool(self.plugin._has_public_major_verification_targets())
+                if not has_self_overrides and not has_public_major:
                     return
             except:
-                pass
+                has_self_overrides = True
+                has_public_major = True
             if not param.args or len(param.args) < 1:
                 return
             lst = param.args[0]
@@ -28920,6 +29043,8 @@ class PutUsersWearHook(MethodHook):
                         pass
                     if not (my_id > 0 and uid == my_id):
                         continue
+                if not has_self_overrides:
+                    continue
                 if my_id <= 0:
                     continue
                 if uid > 0 and uid != my_id:
@@ -28943,10 +29068,13 @@ class PutUsersWearHook(MethodHook):
         try:
             p = self.plugin
             try:
-                if not p._has_profile_overrides():
+                has_self_overrides = bool(p._has_profile_overrides())
+                has_public_major = bool(p._has_public_major_verification_targets())
+                if not has_self_overrides and not has_public_major:
                     return
             except:
-                pass
+                has_self_overrides = True
+                has_public_major = True
             try:
                 my_id = int(p._get_my_user_id() or 0)
             except:
@@ -28957,6 +29085,8 @@ class PutUsersWearHook(MethodHook):
                 p._patch_public_major_cached_users(notify=False)
             except:
                 pass
+            if not has_self_overrides:
+                return
             if my_id <= 0:
                 return
             try:
@@ -29276,6 +29406,44 @@ class MajorVerificationInfoTextHook(MethodHook):
                 pass
         except Exception as e:
             _log(f"MajorVerificationInfoTextHook(after) error: {e}")
+
+class PublicMajorUserInfoCellHook(MethodHook):
+    def __init__(self, plugin):
+        self.plugin = plugin
+
+    def before_hooked_method(self, param):
+        try:
+            if not param.args or len(param.args) < 1:
+                return
+            try:
+                uid = int(param.args[0] or 0)
+            except:
+                uid = 0
+            if not self.plugin._is_public_major_verified_user_id(uid):
+                return
+            self.plugin._patch_public_major_cached_users(notify=False)
+        except Exception as e:
+            _log(f"PublicMajorUserInfoCellHook(before) error: {e}")
+
+    def after_hooked_method(self, param):
+        try:
+            cell = getattr(param, "thisObject", None)
+            try:
+                uid = int(param.args[0] or 0) if param.args and len(param.args) >= 1 else 0
+            except:
+                uid = 0
+            if not self.plugin._is_public_major_verified_user_id(uid):
+                return
+            if not self.plugin._patch_public_major_user_info_cell(cell, uid):
+                return
+            try:
+                pa = self.plugin._get_visible_profile_activity()
+                if pa is not None and self.plugin._is_public_major_profile_activity(pa):
+                    self.plugin._refresh_profile_activity_views_light(pa, force=True)
+            except:
+                pass
+        except Exception as e:
+            _log(f"PublicMajorUserInfoCellHook(after) error: {e}")
 
 class MajorProfileNameDrawableHook(MethodHook):
     def __init__(self, plugin, mode):

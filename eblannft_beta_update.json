@@ -1,6 +1,6 @@
 {
-  "version": "1.0.91",
-  "notes": "v1.0.91 - stable developer badge. The visible foreign ProfileActivity is now scanned for hidden User/UserFull fields and repatched after early profile notifications, so the badge and developer text survive profile rebinds instead of only existing in MessagesController cache.",
+  "version": "1.0.92",
+  "notes": "v1.0.92 - AyuGram profile badge stability fix. Hooks UserInfoCell.set from fcmweb-ayuGram-full-universal-20260329 so the developer badge footer is rebuilt immediately even when UserFull arrives late, and keeps public-major cache stamping active even when local self-overrides are disabled.",
   "files": [
     "eblannft_beta.plugin",
     "eblannft_beta_runtime/__init__.py",
