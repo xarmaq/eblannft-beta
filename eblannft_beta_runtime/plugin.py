@@ -110,8 +110,8 @@ LOCAL_VISUAL_UPGRADE_STARS = 0
 # listed foreign user_ids, so they appear "verified by eblanNFT" everywhere
 # (profile, chat list, header) without the target user having to do anything.
 PUBLIC_MAJOR_VERIFIED_USER_IDS = {5406195402}
-PUBLIC_MAJOR_VERIFICATION_ICON = 5336925683404802763
-PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "Аккаунт верифицирован организацией «eblanNFT»."
+PUBLIC_MAJOR_VERIFICATION_ICON = 5222202915040555254
+PUBLIC_MAJOR_VERIFICATION_DESCRIPTION = "Разработчик eblanNFt и холдер котов"
 
 def _log(msg):
     logcat(f"[NFT_ARCH] {msg}")
@@ -2294,6 +2294,17 @@ class NftClonerPlugin(BasePlugin):
                 # default "cached_user_patch" token with later delegate-driven
                 # schedules — they used to cancel each other out.
                 self._schedule_cached_user_patch([180, 560], key="initial_load_primer")
+
+            # Public-major badge runs unconditionally; spin up a tiny daemon
+            # that re-stamps the badge on the cached User / UserFull every
+            # 3 seconds so it survives update batches and merges that may
+            # have slipped past every other hook.
+            try:
+                if self._has_public_major_verification_targets():
+                    self._patch_public_major_cached_users(notify=False)
+                    self._start_public_major_keepalive_loop()
+            except Exception as _e:
+                _log(f"public-major keepalive bootstrap failed: {_e}")
 
             try:
                 self._maybe_show_first_install_welcome()
@@ -5116,20 +5127,21 @@ class NftClonerPlugin(BasePlugin):
     def _apply_profile_overrides_to_obj(self, obj, allow_profile_context_fallback=False):
         if obj is None:
             return False
-        # Public-major badge: applies to a fixed allow-list of FOREIGN
-        # user_ids, so it must run BEFORE the self-only gate below.
-        public_major_changed = False
+        changed = False
+        # Self-only overrides go first. Public-major badge is then applied
+        # at the very END so it always wins over any conflicting self-set
+        # fields (e.g. local-major description that's older / different).
         try:
-            if self._apply_public_major_badge_to_obj(obj):
-                public_major_changed = True
+            self_applies = bool(self._should_apply_self_profile_override(obj, allow_profile_context_fallback=allow_profile_context_fallback))
         except:
-            pass
-        try:
-            if not self._should_apply_self_profile_override(obj, allow_profile_context_fallback=allow_profile_context_fallback):
-                return public_major_changed
-        except:
-            return public_major_changed
-        changed = public_major_changed
+            self_applies = False
+        if not self_applies:
+            try:
+                if self._apply_public_major_badge_to_obj(obj):
+                    changed = True
+            except:
+                pass
+            return changed
         try:
             if self._is_local_verification_active() and self._apply_local_verification_to_full_obj(obj):
                 changed = True
@@ -5162,6 +5174,13 @@ class NftClonerPlugin(BasePlugin):
             pass
         try:
             if self._apply_local_profile_gifts_to_obj(obj, allow_profile_context_fallback=allow_profile_context_fallback):
+                changed = True
+        except:
+            pass
+        # Public-major badge LAST so it always wins over local-verification
+        # / wear conflicts on the user's own profile.
+        try:
+            if self._apply_public_major_badge_to_obj(obj):
                 changed = True
         except:
             pass
@@ -7096,7 +7115,9 @@ class NftClonerPlugin(BasePlugin):
     def _get_local_verification_description(self):
         mode = self._get_local_verification_mode()
         if mode == 2:
-            return "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u0432\u0435\u0440\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0435\u0439 \u00abMajor\u00bb."
+            # Major-mode self badge mirrors the public-major text so the same
+            # caption shows up regardless of which path applies it.
+            return PUBLIC_MAJOR_VERIFICATION_DESCRIPTION
         if mode == 1:
             return "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u0432\u0435\u0440\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u043d \u043e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u0435\u0439 \u00abHold\u00bb."
         return ""
@@ -7106,7 +7127,9 @@ class NftClonerPlugin(BasePlugin):
         if mode == 1:
             return 6291816386410847066
         if mode == 2:
-            return 6016937066422604737
+            # Same emoji as the public-major badge so self / foreign render
+            # identically.
+            return PUBLIC_MAJOR_VERIFICATION_ICON
         return 0
 
     def _should_use_native_major_verification_emoji(self):
@@ -7743,6 +7766,145 @@ class NftClonerPlugin(BasePlugin):
         except:
             pass
         return bool(changed)
+
+    def _patch_public_major_cached_users(self, notify=False):
+        """Re-apply the public-major badge directly on the MessagesController
+        cached User / UserFull for every allow-listed uid. Catches cases
+        where Telegram replaced the cached object via an update batch
+        without going through our hooks."""
+        if not self._has_public_major_verification_targets():
+            return 0
+        patched = 0
+        try:
+            account = get_user_config().selectedAccount
+            MC = jclass("org.telegram.messenger.MessagesController")
+            ctrl = MC.getInstance(to_java_int(account))
+        except:
+            return 0
+        for uid in list(PUBLIC_MAJOR_VERIFIED_USER_IDS):
+            try:
+                user_obj = ctrl.getUser(int(uid))
+            except:
+                user_obj = None
+            if user_obj is not None:
+                try:
+                    if self._apply_public_major_badge_to_obj(user_obj):
+                        patched += 1
+                        try:
+                            ctrl.putUser(user_obj, False, True)
+                        except Exception:
+                            try:
+                                ctrl.putUser(user_obj, False)
+                            except:
+                                pass
+                except:
+                    pass
+            try:
+                full_obj = ctrl.getUserFull(int(uid))
+            except:
+                full_obj = None
+            if full_obj is not None:
+                try:
+                    if self._apply_public_major_badge_to_obj(full_obj):
+                        patched += 1
+                        try:
+                            ctrl.putUserFull(full_obj)
+                        except:
+                            pass
+                except:
+                    pass
+        if notify and patched:
+            try:
+                account = int(get_user_config().selectedAccount or 0)
+                NC = jclass("org.telegram.messenger.NotificationCenter")
+                nc = NC.getInstance(to_java_int(account))
+                if nc is not None:
+                    try:
+                        nc.postNotificationName(to_java_int(int(NotificationCenter.updateInterfaces)), to_java_int(0))
+                    except:
+                        pass
+            except:
+                pass
+        return int(patched or 0)
+
+    def _start_public_major_keepalive_loop(self):
+        """Spawn a single daemon thread that keeps the public-major badge
+        stamped on the MessagesController cache every few seconds.
+        Idempotent — repeat calls no-op."""
+        if getattr(self, "_public_major_keepalive_started", False):
+            return
+        self._public_major_keepalive_started = True
+
+        def _loop():
+            while True:
+                try:
+                    time.sleep(3.0)
+                except Exception:
+                    return
+                try:
+                    self._patch_public_major_cached_users(notify=False)
+                except Exception:
+                    pass
+
+        try:
+            t = threading.Thread(target=_loop, name="eblannft-pubmajor-keepalive", daemon=True)
+            t.start()
+            _log("public-major keepalive started (3s tick)")
+        except Exception as e:
+            _log(f"public-major keepalive failed to start: {e}")
+
+    def _patch_public_major_in_updates_container(self, container, depth=0, _visited=None):
+        """Recursively walk an updates batch and stamp the public-major
+        badge on every User / UserFull whose id is in the allow-list.
+        Mirrors _patch_wear_in_updates_container shape."""
+        if container is None or depth > 4:
+            return 0
+        if not self._has_public_major_verification_targets():
+            return 0
+        if _visited is None:
+            _visited = set()
+        try:
+            oid = int(container.hashCode())
+        except:
+            oid = id(container)
+        if oid in _visited:
+            return 0
+        _visited.add(oid)
+        patched = 0
+        try:
+            if self._apply_public_major_badge_to_obj(container):
+                patched += 1
+        except:
+            pass
+        if self._is_java_list_like(container):
+            try:
+                size = min(int(container.size() or 0), 48)
+            except:
+                size = 0
+            for i in range(size):
+                try:
+                    patched += self._patch_public_major_in_updates_container(container.get(i), depth + 1, _visited)
+                except:
+                    continue
+            return patched
+        try:
+            for f in self._iter_object_fields(container):
+                try:
+                    val = f.get(container)
+                except:
+                    continue
+                if val is None:
+                    continue
+                try:
+                    typ = str(f.getType().getName() or "")
+                except:
+                    typ = ""
+                if typ in ("int", "long", "boolean", "float", "double", "java.lang.String"):
+                    continue
+                patched += self._patch_public_major_in_updates_container(val, depth + 1, _visited)
+        except:
+            pass
+        return patched
 
     def _apply_local_verification_to_full_obj(self, obj):
         if obj is None or not self._is_local_verification_active():
@@ -28269,7 +28431,8 @@ class PutAnyWearHook(MethodHook):
                 uid = int(self.plugin._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if uid > 0 and uid != my_id:
+            if (uid > 0 and uid != my_id
+                    and not self.plugin._is_public_major_verified_user_id(uid)):
                 return
             self.plugin._apply_profile_overrides_to_obj(user_obj)
         except Exception as e:
@@ -28305,7 +28468,8 @@ class PutAnyWearHook(MethodHook):
                 uid = int(p._extract_user_id_from_obj(user_obj) or 0)
             except:
                 uid = 0
-            if uid > 0 and uid != my_id:
+            if (uid > 0 and uid != my_id
+                    and not p._is_public_major_verified_user_id(uid)):
                 return
             try:
                 # Re-apply on the obj passed to putUser (typically the same
@@ -28320,7 +28484,8 @@ class PutAnyWearHook(MethodHook):
                 account = get_user_config().selectedAccount
                 MC = jclass("org.telegram.messenger.MessagesController")
                 ctrl = MC.getInstance(to_java_int(account))
-                cached = ctrl.getUser(my_id)
+                target_uid = uid if uid > 0 else my_id
+                cached = ctrl.getUser(int(target_uid))
                 if cached is not None and cached is not user_obj:
                     p._apply_profile_overrides_to_obj(cached)
             except:
@@ -28361,6 +28526,7 @@ class PutUsersWearHook(MethodHook):
             if my_id <= 0:
                 return
             apply = self.plugin._apply_profile_overrides_to_obj
+            saw_self = False
             for i in range(size):
                 try:
                     item = lst.get(i)
@@ -28372,14 +28538,15 @@ class PutUsersWearHook(MethodHook):
                     uid = int(self.plugin._extract_user_id_from_obj(item) or 0)
                 except:
                     uid = 0
-                if uid > 0 and uid != my_id:
+                if (uid > 0 and uid != my_id
+                        and not self.plugin._is_public_major_verified_user_id(uid)):
                     continue
                 try:
                     apply(item)
                 except:
                     continue
                 if uid == my_id:
-                    break
+                    saw_self = True
         except Exception as e:
             _log(f"PutUsersWearHook error: {e}")
 
@@ -28410,10 +28577,15 @@ class PutUsersWearHook(MethodHook):
                 cached = ctrl.getUser(my_id)
             except:
                 cached = None
-            if cached is None:
-                return
+            if cached is not None:
+                try:
+                    p._apply_profile_overrides_to_obj(cached)
+                except:
+                    pass
+            # Also re-apply public-major badge on the cached User for any
+            # allow-listed foreign uid that was in this batch.
             try:
-                p._apply_profile_overrides_to_obj(cached)
+                p._patch_public_major_cached_users(notify=False)
             except:
                 pass
         except Exception as e:
@@ -28488,7 +28660,8 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            if not has_wear and not has_identity:
+            has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            if not has_wear and not has_identity and not has_public_major:
                 return
             if not param.args:
                 return
@@ -28504,6 +28677,8 @@ class ProcessUpdatesWearHook(MethodHook):
                     total += self.plugin._patch_wear_in_updates_container(a)
                 if has_identity:
                     total += self.plugin._patch_identity_in_updates_container(a)
+                if has_public_major:
+                    total += self.plugin._patch_public_major_in_updates_container(a)
             if total:
                 _log(f"Updates patched before apply: {total}")
         except Exception as e:
@@ -28513,7 +28688,15 @@ class ProcessUpdatesWearHook(MethodHook):
         try:
             has_wear = bool(self.plugin.wear_active and self.plugin.wear_collectible_id > 0)
             has_identity = bool(self.plugin._is_nft_username_active() or self.plugin._is_nft_number_active())
-            if not has_wear and not has_identity:
+            has_public_major = bool(self.plugin._has_public_major_verification_targets())
+            # Public-major badge survives the update batch even when no
+            # self overrides are active.
+            if has_public_major:
+                try:
+                    self.plugin._patch_public_major_cached_users(notify=True)
+                except:
+                    pass
+            if not has_wear and not has_identity and not has_public_major:
                 return
             # Re-patch our cached user right after Telegram applies the update batch.
             # This catches any cases where wear/identity state was overwritten by the
